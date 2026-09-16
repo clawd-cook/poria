@@ -1,7 +1,10 @@
 {
   "name": "poria",
-  "private": true,
   "version": "1.0.1-beta.4",
+  "private": true,
+  "keywords": [],
+  "license": "ISC",
+  "author": "",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,9 +12,6 @@
     "typecheck": "tsc -b",
     "tauri": "tauri"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-notification": "2.4.0",
