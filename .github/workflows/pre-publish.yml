@@ -65,15 +65,20 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
+      - name: Setup Node.js + pnpm via corepack
+        run: |
+          export COREPACK_ENABLE_STRICT=0
+          corepack enable
+          corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+          echo "node: $(node -v)"
+          echo "pnpm: $(pnpm -v)"
+        env:
+          COREPACK_ENABLE_AUTO_PIN: "0"
+
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
+          cache: pnpm
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
