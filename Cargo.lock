@@ -2957,8 +2957,12 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "dirs",
+ "poria-channels",
+ "poria-commands",
  "poria-core",
- "rusqlite",
+ "poria-infrastructure",
+ "poria-resources",
+ "poria-skills",
  "serde",
  "serde_json",
  "tauri",
