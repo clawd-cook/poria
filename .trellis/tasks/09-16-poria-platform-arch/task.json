@@ -24,7 +24,8 @@
     "09-16-channel-migration",
     "09-16-resource-layer",
     "09-16-pipeline-orchestrator",
-    "09-16-cli-commands"
+    "09-16-cli-commands",
+    "09-16-poria-desktop-app"
   ],
   "parent": null,
   "relatedFiles": [],

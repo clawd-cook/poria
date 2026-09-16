@@ -1,13 +1,13 @@
 {
-  "id": "cli-commands",
-  "name": "cli-commands",
-  "title": "CLI Commands: pipeline/auth/workspace/project 命令",
-  "description": "pipeline submit/status/list/resume/cancel/rollback, auth login/logout, workspace enter/exit, project create/list",
-  "status": "cancelled",
+  "id": "poria-desktop-app",
+  "name": "poria-desktop-app",
+  "title": "Poria Desktop App (Tauri v2)",
+  "description": "",
+  "status": "planning",
   "dev_type": null,
   "scope": null,
   "package": null,
-  "priority": "P1",
+  "priority": "P2",
   "creator": "heyongqi10",
   "assignee": "heyongqi10",
   "createdAt": "2026-09-16",
@@ -21,6 +21,6 @@
   "children": [],
   "parent": "09-16-poria-platform-arch",
   "relatedFiles": [],
-  "notes": "用户决定用 Tauri v2 桌面应用替代 CLI 命令层",
+  "notes": "",
   "meta": {}
 }
