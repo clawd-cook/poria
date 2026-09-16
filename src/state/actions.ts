@@ -4,6 +4,9 @@ import type {
   PipelineEvent,
   AuthStatus,
   AppConfig,
+  SkillInfo,
+  ChannelInfo,
+  ViewType,
 } from "../lib/types";
 
 export type Action =
@@ -30,4 +33,7 @@ export type Action =
   | { type: "sidecarStatus"; running: boolean; error?: string }
   | { type: "configLoaded"; config: AppConfig }
   | { type: "filterChanged"; filter: string | null }
-  | { type: "settingsToggled"; open: boolean };
+  | { type: "settingsToggled"; open: boolean }
+  | { type: "skillsLoaded"; skills: SkillInfo[] }
+  | { type: "channelsLoaded"; channels: ChannelInfo[] }
+  | { type: "viewChanged"; view: ViewType };

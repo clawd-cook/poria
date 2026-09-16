@@ -73,7 +73,10 @@ where
     }
 
     async fn consume_queue(&self) {
-        while !self.stopped {
+        if self.stopped {
+            return;
+        }
+        loop {
             if let Some(pipeline_id) = self.deps.queue.dequeue() {
                 let _ = self.deps.executor.run(&pipeline_id).await;
             } else {
@@ -83,7 +86,10 @@ where
     }
 
     async fn poll_merge_requests(&self) {
-        while !self.stopped {
+        if self.stopped {
+            return;
+        }
+        loop {
             tokio::time::sleep(MR_POLL_INTERVAL).await;
             if self.stopped {
                 break;

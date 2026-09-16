@@ -14,13 +14,17 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 poria-core = { path = "../crates/poria-core" }
+poria-infrastructure = { path = "../crates/poria-infrastructure" }
+poria-commands = { path = "../crates/poria-commands" }
+poria-resources = { path = "../crates/poria-resources" }
+poria-skills = { path = "../crates/poria-skills" }
+poria-channels = { path = "../crates/poria-channels" }
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
-rusqlite = { workspace = true }
 dirs = { workspace = true }
 chrono = { workspace = true }
 tokio = { version = "1", features = ["sync"] }

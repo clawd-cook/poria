@@ -1,10 +1,11 @@
+use std::sync::Arc;
 use tauri::Manager;
 
 mod commands;
-mod db;
 
 pub struct AppState {
-    pub db: std::sync::Mutex<db::Database>,
+    pub store: Arc<poria_infrastructure::store::SqlitePipelineStore>,
+    pub event_store: Arc<poria_infrastructure::store::EventStore>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,10 +28,20 @@ pub fn run() {
                 db_path
             };
 
-            let database = db::Database::open(&db_path).expect("Failed to open database");
+            // Open database in RW mode via poria-infrastructure
+            let conn = poria_infrastructure::store::init_database(&db_path)
+                .expect("Failed to open database");
+
+            // Open a second connection for the event store (each store owns its connection)
+            let event_conn = poria_infrastructure::store::init_database(&db_path)
+                .expect("Failed to open event database connection");
+
+            let store = Arc::new(poria_infrastructure::store::SqlitePipelineStore::new(conn));
+            let event_store = Arc::new(poria_infrastructure::store::EventStore::new(event_conn));
 
             app.manage(AppState {
-                db: std::sync::Mutex::new(database),
+                store,
+                event_store,
             });
 
             Ok(())
@@ -45,6 +56,8 @@ pub fn run() {
             commands::auth::get_auth_status,
             commands::config::get_config,
             commands::config::update_config,
+            commands::skills::list_skills,
+            commands::channels::list_channels,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

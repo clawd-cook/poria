@@ -209,7 +209,7 @@ impl PipelineRollback {
             tracing::warn!("Rollback command {:?} failed: {}", cmd.command_type, e);
             events.push(PipelineEvent::rollback_executed(
                 pipeline_id,
-                &format!("{:?}_failed", cmd.command_type),
+                format!("{:?}_failed", cmd.command_type),
                 e.to_string(),
             ));
         }
@@ -288,7 +288,7 @@ impl PipelineRollback {
             _ => {
                 events.push(PipelineEvent::rollback_executed(
                     pipeline_id,
-                    &format!("{:?}", cmd.command_type),
+                    format!("{:?}", cmd.command_type),
                     "Unknown command type",
                 ));
             }

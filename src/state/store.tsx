@@ -13,6 +13,9 @@ import type {
   PipelineEvent,
   AuthStatus,
   AppConfig,
+  SkillInfo,
+  ChannelInfo,
+  ViewType,
 } from "../lib/types";
 import { listPipelines, getAuthStatus, getConfig } from "../lib/tauri";
 import type { Action } from "./actions";
@@ -31,7 +34,9 @@ export interface AppState {
   auth: AuthStatus;
   config: AppConfig | null;
   sidecar: { running: boolean; error?: string };
-  ui: { filter: string | null; settingsOpen: boolean };
+  skills: SkillInfo[];
+  channels: ChannelInfo[];
+  ui: { filter: string | null; settingsOpen: boolean; view: ViewType };
 }
 
 const initialState: AppState = {
@@ -43,7 +48,9 @@ const initialState: AppState = {
   auth: { logged_in: false, username: null, cookie_valid: false },
   config: null,
   sidecar: { running: false },
-  ui: { filter: null, settingsOpen: false },
+  skills: [],
+  channels: [],
+  ui: { filter: null, settingsOpen: false, view: "pipeline" },
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -123,6 +130,15 @@ function reducer(state: AppState, action: Action): AppState {
 
     case "settingsToggled":
       return { ...state, ui: { ...state.ui, settingsOpen: action.open } };
+
+    case "skillsLoaded":
+      return { ...state, skills: action.skills };
+
+    case "channelsLoaded":
+      return { ...state, channels: action.channels };
+
+    case "viewChanged":
+      return { ...state, ui: { ...state.ui, view: action.view } };
 
     default:
       return state;

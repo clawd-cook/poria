@@ -4,6 +4,8 @@ import type {
   PipelineDetail,
   AuthStatus,
   AppConfig,
+  SkillInfo,
+  ChannelInfo,
 } from "./types";
 
 export async function listPipelines(): Promise<PipelineSummary[]> {
@@ -39,4 +41,12 @@ export async function getConfig(): Promise<AppConfig> {
 
 export async function updateConfig(config: AppConfig): Promise<void> {
   return invoke<void>("update_config", { config });
+}
+
+export async function listSkills(): Promise<SkillInfo[]> {
+  return invoke<SkillInfo[]>("list_skills");
+}
+
+export async function listChannels(): Promise<ChannelInfo[]> {
+  return invoke<ChannelInfo[]>("list_channels");
 }

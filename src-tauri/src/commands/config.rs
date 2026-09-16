@@ -1,5 +1,7 @@
+use poria_infrastructure::config::{load_config, PoriaConfig};
 use serde::{Deserialize, Serialize};
 
+/// Frontend-facing config view that matches the full PoriaConfig structure.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
     /// CR score threshold, e.g. "B+"
@@ -16,39 +18,23 @@ pub struct AppConfig {
     pub db_path: String,
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            cr_score_threshold: "B+".to_string(),
-            test_coverage_threshold: 80.0,
-            max_diff_lines: 500,
-            agent_timeout_ms: 1_800_000,
-            max_retries: 3,
-            db_path: dirs::home_dir()
-                .unwrap_or_default()
-                .join(".poria/db")
-                .to_string_lossy()
-                .to_string(),
-        }
+/// Convert a full PoriaConfig to the frontend AppConfig view.
+fn poria_config_to_app_config(c: &PoriaConfig) -> AppConfig {
+    AppConfig {
+        cr_score_threshold: c.gates.cr_score_threshold.clone(),
+        test_coverage_threshold: c.gates.test_coverage_threshold,
+        max_diff_lines: c.gates.diff_size_threshold,
+        agent_timeout_ms: c.timeouts.agent,
+        max_retries: c.retry.max_stage_retries,
+        db_path: c.paths.db_path.clone(),
     }
 }
 
-/// Read configuration from ~/.poria/config.json, falling back to defaults.
+/// Read configuration using poria-infrastructure, falling back to defaults.
 #[tauri::command]
 pub async fn get_config() -> Result<AppConfig, String> {
-    let config_path = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".poria/config.json");
-
-    if !config_path.exists() {
-        return Ok(AppConfig::default());
-    }
-
-    let content = std::fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-    let config: AppConfig =
-        serde_json::from_str(&content).map_err(|e| e.to_string())?;
-
-    Ok(config)
+    let config = load_config(None);
+    Ok(poria_config_to_app_config(&config))
 }
 
 /// Persist configuration to ~/.poria/config.json.
@@ -62,7 +48,29 @@ pub async fn update_config(config: AppConfig) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    // Build a full PoriaConfig from the frontend values + defaults for the rest
+    let base = load_config(None);
+    let full = PoriaConfig {
+        gates: poria_infrastructure::config::GateConfig {
+            cr_score_threshold: config.cr_score_threshold,
+            test_coverage_threshold: config.test_coverage_threshold,
+            diff_size_threshold: config.max_diff_lines,
+        },
+        timeouts: poria_infrastructure::config::TimeoutConfig {
+            agent: config.agent_timeout_ms,
+            ..base.timeouts
+        },
+        retry: poria_infrastructure::config::RetryConfig {
+            max_stage_retries: config.max_retries,
+            ..base.retry
+        },
+        paths: poria_infrastructure::config::PathConfig {
+            db_path: config.db_path,
+            ..base.paths
+        },
+    };
+
+    let json = serde_json::to_string_pretty(&full).map_err(|e| e.to_string())?;
     std::fs::write(&config_path, json).map_err(|e| e.to_string())?;
 
     Ok(())

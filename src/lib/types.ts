@@ -100,3 +100,19 @@ export interface AppConfig {
   max_retries: number;
   db_path: string;
 }
+
+export interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+}
+
+export interface ChannelInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+}
+
+export type ViewType = "pipeline" | "skills" | "channels";
