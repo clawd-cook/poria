@@ -223,7 +223,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@20.19.43)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
 
   packages/channels/defect:
     dependencies:
@@ -252,7 +252,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@20.19.43)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
 
   packages/channels/joyspace:
     dependencies:
@@ -268,7 +268,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@20.19.43)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
 
   packages/channels/xingyun:
     dependencies:
@@ -284,7 +284,20 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@20.19.43)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+
+  packages/commands:
+    dependencies:
+      '@poria/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.3
+        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
 
   packages/core:
     dependencies:
@@ -330,6 +343,19 @@ importers:
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.2
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.3
+        version: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+
+  packages/skills:
+    dependencies:
+      '@poria/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -2665,6 +2691,11 @@ packages:
     engines: {node: '>=12.13.0'}
     hasBin: true
 
+  chromium-bidi@14.0.0:
+    resolution: {integrity: sha1-FaEqsIOuUZpJpyTpSZTKCpztnI4=, tarball: http://registry.m.jd.com/chromium-bidi/download/chromium-bidi-14.0.0.tgz}
+    peerDependencies:
+      devtools-protocol: '*'
+
   chromium-edge-launcher@0.3.0:
     resolution: {integrity: sha1-NNXKgUL8BZ6itEgr3LGEOTo5n/4=, tarball: http://registry.m.jd.com/chromium-edge-launcher/download/chromium-edge-launcher-0.3.0.tgz}
 
@@ -2929,6 +2960,9 @@ packages:
     resolution: {integrity: sha1-aJxdzcGQDvVYOky59te0c3QgdK0=, tarball: http://registry.m.jd.com/detect-libc/download/detect-libc-2.1.2.tgz}
     engines: {node: '>=8'}
 
+  devtools-protocol@0.0.1608973:
+    resolution: {integrity: sha1-VuCiqZmwbUFu6SjKBq66laWIBRU=, tarball: http://registry.m.jd.com/devtools-protocol/download/devtools-protocol-0.0.1608973.tgz}
+
   doctrine@2.1.0:
     resolution: {integrity: sha1-XNAfwQFiG0LEzX9dGmYkNxbT850=, tarball: http://registry.m.jd.com/doctrine/download/doctrine-2.1.0.tgz}
     engines: {node: '>=0.10.0'}
@@ -3103,9 +3137,6 @@ packages:
     peerDependencies:
       eslint: '>=9.0.0'
       typescript: '>=3.3.1'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
 
   eslint-import-context@0.1.9:
     resolution: {integrity: sha1-lnsLLwqQ70tokSXgiPeQ8Ld1bb4=, tarball: http://registry.m.jd.com/eslint-import-context/download/eslint-import-context-0.1.9.tgz}
@@ -4684,6 +4715,10 @@ packages:
     resolution: {integrity: sha1-AnQi4vrsCyXhVJw+G9gwm5EztuU=, tarball: http://registry.m.jd.com/punycode/download/punycode-2.3.1.tgz}
     engines: {node: '>=6'}
 
+  puppeteer-core@24.43.1:
+    resolution: {integrity: sha1-wQpdOYtpkRwyTgTIXuKyNrnslA4=, tarball: http://registry.m.jd.com/puppeteer-core/download/puppeteer-core-24.43.1.tgz}
+    engines: {node: '>=18'}
+
   qs@6.16.0:
     resolution: {integrity: sha1-wixyOiipIPOqzc6Cifq9Q+zLef0=, tarball: http://registry.m.jd.com/qs/download/qs-6.16.0.tgz}
     engines: {node: '>=0.6'}
@@ -5506,6 +5541,9 @@ packages:
     resolution: {integrity: sha1-C3Dpgsnp2v4t721kWP9LPy0rbXA=, tarball: http://registry.m.jd.com/typed-array-length/download/typed-array-length-1.0.8.tgz}
     engines: {node: '>= 0.4'}
 
+  typed-query-selector@2.12.2:
+    resolution: {integrity: sha1-ZeJGKsawrs+uG/rBpPMCcHDbq6o=, tarball: http://registry.m.jd.com/typed-query-selector/download/typed-query-selector-2.12.2.tgz}
+
   typescript-eslint@8.70.0:
     resolution: {integrity: sha1-bJDFMgeRMrp9Sjhr8IgsVtgv5a8=, tarball: http://registry.m.jd.com/typescript-eslint/download/typescript-eslint-8.70.0.tgz}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -5651,6 +5689,9 @@ packages:
   wcwidth@1.0.1:
     resolution: {integrity: sha1-8LDc+RW8X/FSivrbLA4XtTLaL+g=, tarball: http://registry.m.jd.com/wcwidth/download/wcwidth-1.0.1.tgz}
 
+  webdriver-bidi-protocol@0.4.1:
+    resolution: {integrity: sha1-1BHnuOFYQI2DuxZrC08QVPo/B34=, tarball: http://registry.m.jd.com/webdriver-bidi-protocol/download/webdriver-bidi-protocol-0.4.1.tgz}
+
   webdriver@9.31.9:
     resolution: {integrity: sha1-yJggr4bkiOxEbxzKlgtrOzOG7r4=, tarball: http://registry.m.jd.com/webdriver/download/webdriver-9.31.9.tgz}
     engines: {node: '>=18.20.0'}
@@ -5660,9 +5701,6 @@ packages:
     engines: {node: '>=18.20.0'}
     peerDependencies:
       puppeteer-core: '>=22.x <=24.x'
-    peerDependenciesMeta:
-      puppeteer-core:
-        optional: true
 
   webidl-conversions@8.0.1:
     resolution: {integrity: sha1-Blflcf5vBvyxXKUO0f28tJXNFoY=, tarball: http://registry.m.jd.com/webidl-conversions/download/webidl-conversions-8.0.1.tgz}
@@ -5836,6 +5874,9 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
+
+  zod@3.25.76:
+    resolution: {integrity: sha1-JoQcP2/SKmonYOfMtxkXl2hHHjQ=, tarball: http://registry.m.jd.com/zod/download/zod-3.25.76.tgz}
 
   zod@4.6.5:
     resolution: {integrity: sha1-468+29wmAjnFL3PKrQXbv/5ugs0=, tarball: http://registry.m.jd.com/zod/download/zod-4.6.5.tgz}
@@ -6620,14 +6661,14 @@ snapshots:
     dependencies:
       '@jest/fake-timers': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       jest-mock: 29.7.0
 
   '@jest/fake-timers@29.7.0':
     dependencies:
       '@jest/types': 29.6.3
       '@sinonjs/fake-timers': 10.3.0
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       jest-message-util: 29.7.0
       jest-mock: 29.7.0
       jest-util: 29.7.0
@@ -6659,7 +6700,7 @@ snapshots:
       '@jest/schemas': 29.6.3
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.4
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
@@ -7397,7 +7438,7 @@ snapshots:
 
   '@types/graceful-fs@4.1.9':
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
 
   '@types/istanbul-lib-coverage@2.0.6': {}
 
@@ -7444,7 +7485,7 @@ snapshots:
 
   '@types/set-cookie-parser@2.4.10':
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
 
   '@types/sinonjs__fake-timers@8.1.5': {}
 
@@ -7458,7 +7499,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -7468,7 +7509,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
     optional: true
 
   '@typescript-eslint/eslint-plugin@8.70.0(@typescript-eslint/parser@8.70.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)':
@@ -7630,26 +7671,7 @@ snapshots:
       react-refresh: 0.17.0
       vite: 5.4.21(@types/node@20.19.43)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
 
-  '@vitest/browser@3.2.7(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(playwright@1.63.0)(utf-8-validate@6.0.6)(vite@5.4.21(@types/node@20.19.43)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))(vitest@3.2.7)(webdriverio@9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6))':
-    dependencies:
-      '@testing-library/dom': 10.4.2
-      '@testing-library/user-event': 14.6.7(@testing-library/dom@10.4.2)
-      '@vitest/mocker': 3.2.7(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(vite@5.4.21(@types/node@20.19.43)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))
-      '@vitest/utils': 3.2.7
-      magic-string: 0.30.21
-      playwright: 1.63.0
-      sirv: 3.0.2
-      tinyrainbow: 2.0.0
-      vitest: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@20.19.43)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
-      webdriverio: 9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6)
-      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-    transitivePeerDependencies:
-      - bufferutil
-      - msw
-      - utf-8-validate
-      - vite
-
-  '@vitest/browser@3.2.7(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(playwright@1.63.0)(utf-8-validate@6.0.6)(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))(vitest@3.2.7)(webdriverio@9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6))':
+  '@vitest/browser@3.2.7(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(playwright@1.63.0)(utf-8-validate@6.0.6)(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))(vitest@3.2.7)(webdriverio@9.31.9(5631ebb82e85282ad5db7014866a41fe))':
     dependencies:
       '@testing-library/dom': 10.4.2
       '@testing-library/user-event': 14.6.7(@testing-library/dom@10.4.2)
@@ -7659,8 +7681,8 @@ snapshots:
       playwright: 1.63.0
       sirv: 3.0.2
       tinyrainbow: 2.0.0
-      vitest: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@20.19.43)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
-      webdriverio: 9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6)
+      vitest: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+      webdriverio: 9.31.9(5631ebb82e85282ad5db7014866a41fe)
       ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
@@ -7675,14 +7697,6 @@ snapshots:
       '@vitest/utils': 3.2.7
       chai: 5.3.3
       tinyrainbow: 2.0.0
-
-  '@vitest/mocker@3.2.7(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(vite@5.4.21(@types/node@20.19.43)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))':
-    dependencies:
-      '@vitest/spy': 3.2.7
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-      msw: 2.15.0(@types/node@22.20.2)(typescript@5.9.3)
-      vite: 5.4.21(@types/node@20.19.43)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
 
   '@vitest/mocker@3.2.7(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))':
     dependencies:
@@ -7721,7 +7735,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.17
       tinyrainbow: 2.0.0
-      vitest: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@20.19.43)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
+      vitest: 3.2.7(@edge-runtime/vm@5.0.0)(@types/debug@4.1.13)(@types/node@22.20.2)(@vitest/browser@3.2.7)(@vitest/ui@3.2.7)(happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@30.0.1(@noble/hashes@2.4.0)(canvas@3.2.3))(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2)
 
   '@vitest/utils@3.2.7':
     dependencies:
@@ -8181,7 +8195,7 @@ snapshots:
 
   buffer-image-size@0.6.4:
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
 
   buffer@5.7.1:
     dependencies:
@@ -8279,16 +8293,22 @@ snapshots:
 
   chrome-launcher@0.15.2(supports-color@8.1.1):
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       escape-string-regexp: 4.0.0
       is-wsl: 2.2.0
       lighthouse-logger: 1.4.2(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
+  chromium-bidi@14.0.0(devtools-protocol@0.0.1608973):
+    dependencies:
+      devtools-protocol: 0.0.1608973
+      mitt: 3.0.1
+      zod: 3.25.76
+
   chromium-edge-launcher@0.3.0(supports-color@8.1.1):
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       escape-string-regexp: 4.0.0
       is-wsl: 2.2.0
       lighthouse-logger: 1.4.2(supports-color@8.1.1)
@@ -8540,6 +8560,8 @@ snapshots:
   destroy@1.2.0: {}
 
   detect-libc@2.1.2: {}
+
+  devtools-protocol@0.0.1608973: {}
 
   doctrine@2.1.0:
     dependencies:
@@ -8810,9 +8832,8 @@ snapshots:
       eslint-plugin-react: 7.37.5(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react-hooks: 7.1.1(eslint@9.39.5(jiti@2.7.0))
       globals: 16.4.0
-      typescript-eslint: 8.70.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
-    optionalDependencies:
       typescript: 5.9.3
+      typescript-eslint: 8.70.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
     transitivePeerDependencies:
       - '@typescript-eslint/parser'
       - eslint-import-resolver-webpack
@@ -9318,7 +9339,7 @@ snapshots:
 
   happy-dom@20.14.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.1
       buffer-image-size: 0.6.4
@@ -9648,7 +9669,7 @@ snapshots:
       '@jest/environment': 29.7.0
       '@jest/fake-timers': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       jest-mock: 29.7.0
       jest-util: 29.7.0
 
@@ -9658,7 +9679,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       '@types/graceful-fs': 4.1.9
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       anymatch: 3.1.3
       fb-watchman: 2.0.2
       graceful-fs: 4.2.11
@@ -9685,7 +9706,7 @@ snapshots:
   jest-mock@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       jest-util: 29.7.0
 
   jest-regex-util@29.6.3: {}
@@ -9693,7 +9714,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -9710,7 +9731,7 @@ snapshots:
 
   jest-worker@29.7.0:
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.2
       jest-util: 29.7.0
       merge-stream: 2.0.0
       supports-color: 8.1.1
@@ -10633,6 +10654,22 @@ snapshots:
       once: 1.4.0
 
   punycode@2.3.1: {}
+
+  puppeteer-core@24.43.1(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6):
+    dependencies:
+      '@puppeteer/browsers': 2.13.2(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))
+      chromium-bidi: 14.0.0(devtools-protocol@0.0.1608973)
+      debug: 4.4.3
+      devtools-protocol: 0.0.1608973
+      typed-query-selector: 2.12.2
+      webdriver-bidi-protocol: 0.4.1
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - react-native-b4a
+      - utf-8-validate
 
   qs@6.16.0:
     dependencies:
@@ -11611,6 +11648,8 @@ snapshots:
       possible-typed-array-names: 1.1.0
       reflect.getprototypeof: 1.0.10
 
+  typed-query-selector@2.12.2: {}
+
   typescript-eslint@8.70.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3):
     dependencies:
       '@typescript-eslint/eslint-plugin': 8.70.0(@typescript-eslint/parser@8.70.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
@@ -11779,9 +11818,9 @@ snapshots:
       '@types/chai': 5.2.3
       '@types/debug': 4.1.13
       '@types/node': 20.19.43
-      '@vitest/browser': 3.2.7(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(playwright@1.63.0)(utf-8-validate@6.0.6)(vite@5.4.21(@types/node@20.19.43)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))(vitest@3.2.7)(webdriverio@9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6))
+      '@vitest/browser': 3.2.7(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(playwright@1.63.0)(utf-8-validate@6.0.6)(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))(vitest@3.2.7)(webdriverio@9.31.9(5631ebb82e85282ad5db7014866a41fe))
       '@vitest/expect': 3.2.7
-      '@vitest/mocker': 3.2.7(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(vite@5.4.21(@types/node@20.19.43)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))
+      '@vitest/mocker': 3.2.7(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))
       '@vitest/pretty-format': 3.2.7
       '@vitest/runner': 3.2.7
       '@vitest/snapshot': 3.2.7
@@ -11821,7 +11860,7 @@ snapshots:
       '@types/chai': 5.2.3
       '@types/debug': 4.1.13
       '@types/node': 22.20.2
-      '@vitest/browser': 3.2.7(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(playwright@1.63.0)(utf-8-validate@6.0.6)(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))(vitest@3.2.7)(webdriverio@9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6))
+      '@vitest/browser': 3.2.7(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(playwright@1.63.0)(utf-8-validate@6.0.6)(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))(vitest@3.2.7)(webdriverio@9.31.9(5631ebb82e85282ad5db7014866a41fe))
       '@vitest/expect': 3.2.7
       '@vitest/mocker': 3.2.7(msw@2.15.0(@types/node@22.20.2)(typescript@5.9.3))(vite@5.4.21(@types/node@22.20.2)(less@4.9.1(supports-color@8.1.1))(lightningcss@1.32.0)(sass-embedded@1.103.1)(sass@1.104.1)(stylus@0.64.0)(sugarss@5.0.1(postcss@8.5.28))(terser@5.51.2))
       '@vitest/pretty-format': 3.2.7
@@ -11877,6 +11916,8 @@ snapshots:
     dependencies:
       defaults: 1.0.4
 
+  webdriver-bidi-protocol@0.4.1: {}
+
   webdriver@9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6):
     dependencies:
       '@types/node': 20.19.43
@@ -11897,7 +11938,7 @@ snapshots:
       - react-native-b4a
       - utf-8-validate
 
-  webdriverio@9.31.9(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6):
+  webdriverio@9.31.9(5631ebb82e85282ad5db7014866a41fe):
     dependencies:
       '@types/node': 20.19.43
       '@types/sinonjs__fake-timers': 8.1.5
@@ -11918,6 +11959,7 @@ snapshots:
       jszip: 3.10.2
       lodash.clonedeep: 4.5.0
       lodash.zip: 4.2.0
+      puppeteer-core: 24.43.1(bare-abort-controller@1.1.2)(bare-buffer@3.7.0)(bufferutil@4.1.0)(react-native-b4a@0.1.0(react-native@0.86.2(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(bufferutil@4.1.0)(supports-color@8.1.1)(typescript@5.9.3)(utf-8-validate@6.0.6))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.2(@babel/core@7.29.7)(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.2.4)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.2.4))(utf-8-validate@6.0.6)
       query-selector-shadow-dom: 1.0.1
       resq: 1.11.0
       rgb2hex: 0.2.5
@@ -12122,5 +12164,7 @@ snapshots:
   zod-validation-error@4.0.2(zod@4.6.5):
     dependencies:
       zod: 4.6.5
+
+  zod@3.25.76: {}
 
   zod@4.6.5: {}

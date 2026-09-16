@@ -3,7 +3,7 @@
   "name": "pipeline-orchestrator",
   "title": "Pipeline Orchestrator: Executor + Worker + 多仓编排 + 人工回路",
   "description": "PipelineExecutor 主循环、PipelineWorker 队列消费 + MR 轮询、MultiRepo 编排、7-skill 骨架、human-loop 协调",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
