@@ -31,26 +31,22 @@ export function GateResults({ stages }: { stages: StageDetail[] }) {
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="border-b border-slate-700 text-slate-500">
-            <th className="pb-1 pr-4">阶段</th>
-            <th className="pb-1 pr-4">门禁</th>
-            <th className="pb-1 pr-4">结果</th>
-            <th className="pb-1 pr-4">实际值</th>
+            <th className="pr-4 pb-1">阶段</th>
+            <th className="pr-4 pb-1">门禁</th>
+            <th className="pr-4 pb-1">结果</th>
+            <th className="pr-4 pb-1">实际值</th>
             <th className="pb-1">阈值</th>
           </tr>
         </thead>
         <tbody>
           {allGates.map((g, i) => (
             <tr key={i} className="border-b border-slate-700/50">
-              <td className="py-1 pr-4 text-slate-400">
-                {STAGE_LABELS[g.stage]}
-              </td>
+              <td className="py-1 pr-4 text-slate-400">{STAGE_LABELS[g.stage]}</td>
               <td className="py-1 pr-4 text-slate-300">{g.gate}</td>
               <td className="py-1 pr-4">
                 <span
                   className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                    g.passed
-                      ? "bg-emerald-600/30 text-emerald-300"
-                      : "bg-red-600/30 text-red-300"
+                    g.passed ? "bg-emerald-600/30 text-emerald-300" : "bg-red-600/30 text-red-300"
                   }`}
                 >
                   {g.passed ? "通过" : "未通过"}

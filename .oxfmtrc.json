@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": [],
+  "ignorePatterns": [".claude", ".trellis", "submodules"],
   "sortImports": true,
   "sortKeys": true,
-  "sortTailwindcss": true,
+  "sortTailwindcss": true
 }

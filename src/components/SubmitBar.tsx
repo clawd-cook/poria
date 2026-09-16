@@ -1,7 +1,8 @@
-import { useState } from "react";
 import { Send } from "lucide-react";
-import { useStore } from "../state/store";
+import { useState } from "react";
+
 import { submitPipeline } from "../lib/tauri";
+import { useStore } from "../state/store";
 
 export function SubmitBar() {
   const { dispatch } = useStore();

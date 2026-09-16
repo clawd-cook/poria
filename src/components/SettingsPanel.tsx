@@ -1,8 +1,9 @@
-import { useState } from "react";
 import { X, Save } from "lucide-react";
-import { useStore } from "../state/store";
+import { useState } from "react";
+
 import { updateConfig } from "../lib/tauri";
 import type { AppConfig } from "../lib/types";
+import { useStore } from "../state/store";
 
 export function SettingsPanel() {
   const { state, dispatch } = useStore();
@@ -57,9 +58,7 @@ export function SettingsPanel() {
             label="测试覆盖率 (%)"
             value={String(config.test_coverage_threshold)}
             type="number"
-            onChange={(v) =>
-              handleChange("test_coverage_threshold", Number(v))
-            }
+            onChange={(v) => handleChange("test_coverage_threshold", Number(v))}
           />
           <SettingField
             label="最大变更行数"

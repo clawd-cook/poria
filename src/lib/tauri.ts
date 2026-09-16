@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+
 import type {
   PipelineSummary,
   PipelineDetail,
@@ -24,10 +25,7 @@ export async function cancelPipeline(id: string): Promise<void> {
   return invoke<void>("cancel_pipeline", { id });
 }
 
-export async function humanLoopRespond(
-  pipelineId: string,
-  action: string,
-): Promise<void> {
+export async function humanLoopRespond(pipelineId: string, action: string): Promise<void> {
   return invoke<void>("human_loop_respond", { pipelineId, action });
 }
 

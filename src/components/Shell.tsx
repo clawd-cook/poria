@@ -1,13 +1,14 @@
 import { Settings, GitBranch, Puzzle, Radio } from "lucide-react";
+
+import type { ViewType } from "../lib/types";
 import { useStore } from "../state/store";
-import { SubmitBar } from "./SubmitBar";
-import { PipelineSidebar } from "./PipelineSidebar";
-import { PipelineDetail } from "./PipelineDetail";
 import { AuthStatus } from "./AuthStatus";
+import { ChannelsPage } from "./ChannelsPage";
+import { PipelineDetail } from "./PipelineDetail";
+import { PipelineSidebar } from "./PipelineSidebar";
 import { SettingsPanel } from "./SettingsPanel";
 import { SkillsPage } from "./SkillsPage";
-import { ChannelsPage } from "./ChannelsPage";
-import type { ViewType } from "../lib/types";
+import { SubmitBar } from "./SubmitBar";
 
 const NAV_ITEMS: { key: ViewType; label: string; icon: typeof GitBranch }[] = [
   { key: "pipeline", label: "Pipeline", icon: GitBranch },
@@ -29,9 +30,7 @@ export function Shell() {
             return (
               <button
                 key={item.key}
-                onClick={() =>
-                  dispatch({ type: "viewChanged", view: item.key })
-                }
+                onClick={() => dispatch({ type: "viewChanged", view: item.key })}
                 className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm transition-colors ${
                   active
                     ? "bg-slate-700 text-slate-200"
@@ -62,9 +61,7 @@ export function Shell() {
                 <AuthStatus />
                 <div className="flex items-center gap-1 pr-2">
                   <button
-                    onClick={() =>
-                      dispatch({ type: "settingsToggled", open: true })
-                    }
+                    onClick={() => dispatch({ type: "settingsToggled", open: true })}
                     className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
                   >
                     <Settings className="h-4 w-4" />

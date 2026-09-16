@@ -1,11 +1,5 @@
-import {
-  Check,
-  X,
-  Loader2,
-  AlertTriangle,
-  Circle,
-  Minus,
-} from "lucide-react";
+import { Check, X, Loader2, AlertTriangle, Circle, Minus } from "lucide-react";
+
 import type { StageDetail, StageStatus } from "../lib/types";
 import { STAGE_ORDER, STAGE_LABELS } from "../lib/types";
 
@@ -30,13 +24,7 @@ const STATUS_CONFIG: Record<
   skipped: { icon: Minus, bg: "bg-slate-600", ring: "ring-slate-600/30" },
 };
 
-function StageNode({
-  stage,
-  isLast,
-}: {
-  stage: StageDetail;
-  isLast: boolean;
-}) {
+function StageNode({ stage, isLast }: { stage: StageDetail; isLast: boolean }) {
   const config = STATUS_CONFIG[stage.status];
   const Icon = config.icon;
 
@@ -46,9 +34,7 @@ function StageNode({
         <div
           className={`flex h-8 w-8 items-center justify-center rounded-full ring-2 ${config.bg} ${config.ring}`}
         >
-          <Icon
-            className={`h-4 w-4 text-white ${config.animate ? "animate-spin" : ""}`}
-          />
+          <Icon className={`h-4 w-4 text-white ${config.animate ? "animate-spin" : ""}`} />
         </div>
         <span
           className={`text-xs ${
@@ -97,11 +83,7 @@ export function StageProgress({ stages }: { stages?: StageDetail[] }) {
   return (
     <div className="flex items-start justify-center gap-0 py-4">
       {orderedStages.map((stage, i) => (
-        <StageNode
-          key={stage.name}
-          stage={stage}
-          isLast={i === orderedStages.length - 1}
-        />
+        <StageNode key={stage.name} stage={stage} isLast={i === orderedStages.length - 1} />
       ))}
     </div>
   );

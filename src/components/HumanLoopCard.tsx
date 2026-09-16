@@ -1,5 +1,6 @@
-import { useState } from "react";
 import { AlertTriangle, RotateCcw, SkipForward, XCircle } from "lucide-react";
+import { useState } from "react";
+
 import { humanLoopRespond } from "../lib/tauri";
 import { useStore } from "../state/store";
 
@@ -10,12 +11,7 @@ interface HumanLoopCardProps {
   detail: string;
 }
 
-export function HumanLoopCard({
-  pipelineId,
-  stage,
-  issueClass,
-  detail,
-}: HumanLoopCardProps) {
+export function HumanLoopCard({ pipelineId, stage, issueClass, detail }: HumanLoopCardProps) {
   const { dispatch } = useStore();
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -47,9 +43,7 @@ export function HumanLoopCard({
           <span className="text-slate-500">阶段:</span>
           <span className="text-slate-300">{stage}</span>
         </div>
-        <div className="mt-2 rounded bg-slate-800 p-2 text-xs text-slate-400">
-          {detail}
-        </div>
+        <div className="mt-2 rounded bg-slate-800 p-2 text-xs text-slate-400">{detail}</div>
       </div>
 
       <div className="flex gap-2">

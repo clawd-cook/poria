@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { useStore } from "../state/store";
+
 import { getPipeline } from "../lib/tauri";
+import { useStore } from "../state/store";
 
 export function usePipeline() {
   const { state, dispatch } = useStore();

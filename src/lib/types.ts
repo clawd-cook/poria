@@ -17,22 +17,9 @@ export type PipelineStatus =
   | "failed"
   | "cancelled";
 
-export type StageStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
-  | "blocked"
-  | "skipped";
+export type StageStatus = "pending" | "running" | "completed" | "failed" | "blocked" | "skipped";
 
-export type StageEnum =
-  | "init"
-  | "review_prd"
-  | "design"
-  | "workspace"
-  | "dev"
-  | "cr"
-  | "deploy";
+export type StageEnum = "init" | "review_prd" | "design" | "workspace" | "dev" | "cr" | "deploy";
 
 export const STAGE_ORDER: StageEnum[] = [
   "init",

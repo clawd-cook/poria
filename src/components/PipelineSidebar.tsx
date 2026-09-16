@@ -1,8 +1,9 @@
-import { useMemo } from "react";
 import { Filter } from "lucide-react";
+import { useMemo } from "react";
+
+import type { PipelineStatus, PipelineSummary } from "../lib/types";
 import { useStore } from "../state/store";
 import { StatusBadge } from "./StatusBadge";
-import type { PipelineStatus, PipelineSummary } from "../lib/types";
 
 const STATUS_GROUPS: { label: string; statuses: PipelineStatus[] }[] = [
   { label: "运行中", statuses: ["running"] },
@@ -48,16 +49,12 @@ function PipelineItem({
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="truncate text-sm font-medium text-slate-200">
-          {pipeline.demand_name}
-        </span>
+        <span className="truncate text-sm font-medium text-slate-200">{pipeline.demand_name}</span>
         <StatusBadge status={pipeline.status} />
       </div>
       <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
         {pipeline.current_stage && (
-          <span className="rounded bg-slate-700 px-1.5 py-0.5">
-            {pipeline.current_stage}
-          </span>
+          <span className="rounded bg-slate-700 px-1.5 py-0.5">{pipeline.current_stage}</span>
         )}
         <span>{timeAgo(pipeline.created_at)}</span>
       </div>
@@ -77,9 +74,7 @@ export function PipelineSidebar() {
   const grouped = useMemo(() => {
     return STATUS_GROUPS.map((group) => ({
       ...group,
-      items: filtered.filter((p) =>
-        group.statuses.includes(p.status),
-      ),
+      items: filtered.filter((p) => group.statuses.includes(p.status)),
     })).filter((g) => g.items.length > 0);
   }, [filtered]);
 
@@ -104,9 +99,7 @@ export function PipelineSidebar() {
 
       <div className="flex-1 overflow-y-auto">
         {grouped.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-500">
-            暂无 Pipeline
-          </div>
+          <div className="px-4 py-8 text-center text-sm text-slate-500">暂无 Pipeline</div>
         )}
         {grouped.map((group) => (
           <div key={group.label}>
@@ -118,9 +111,7 @@ export function PipelineSidebar() {
                 key={p.id}
                 pipeline={p}
                 selected={p.id === selectedPipelineId}
-                onSelect={() =>
-                  dispatch({ type: "pipelineSelected", id: p.id })
-                }
+                onSelect={() => dispatch({ type: "pipelineSelected", id: p.id })}
               />
             ))}
           </div>

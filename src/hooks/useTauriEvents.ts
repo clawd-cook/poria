@@ -1,8 +1,9 @@
-import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { useStore } from "../state/store";
+import { useEffect } from "react";
+
 import { listPipelines } from "../lib/tauri";
 import type { PipelineEvent, AuthStatus } from "../lib/types";
+import { useStore } from "../state/store";
 
 export function useTauriEvents() {
   const { dispatch } = useStore();
@@ -14,12 +15,9 @@ export function useTauriEvents() {
           .then((pipelines) => dispatch({ type: "hydrate", pipelines }))
           .catch(() => {});
       }),
-      listen<{ id: string; status: string; currentStage: string }>(
-        "pipeline:updated",
-        (e) => {
-          dispatch({ type: "pipelineUpdated", ...e.payload });
-        },
-      ),
+      listen<{ id: string; status: string; currentStage: string }>("pipeline:updated", (e) => {
+        dispatch({ type: "pipelineUpdated", ...e.payload });
+      }),
       listen<PipelineEvent>("stage:progress", (e) => {
         dispatch({ type: "eventReceived", event: e.payload });
       }),

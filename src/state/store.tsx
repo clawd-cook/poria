@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import {
   createContext,
   useContext,
@@ -6,7 +7,8 @@ import {
   type ReactNode,
   type Dispatch,
 } from "react";
-import { listen } from "@tauri-apps/api/event";
+
+import { listPipelines, getAuthStatus, getConfig } from "../lib/tauri";
 import type {
   PipelineSummary,
   PipelineDetail,
@@ -17,7 +19,6 @@ import type {
   ChannelInfo,
   ViewType,
 } from "../lib/types";
-import { listPipelines, getAuthStatus, getConfig } from "../lib/tauri";
 import type { Action } from "./actions";
 
 export interface AppState {
@@ -108,9 +109,7 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         humanRequest:
-          state.humanRequest?.pipelineId === action.pipelineId
-            ? null
-            : state.humanRequest,
+          state.humanRequest?.pipelineId === action.pipelineId ? null : state.humanRequest,
       };
 
     case "authChanged":
@@ -172,12 +171,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .then((pipelines) => dispatch({ type: "hydrate", pipelines }))
           .catch(() => {});
       }),
-      listen<{ id: string; status: string; currentStage: string }>(
-        "pipeline:updated",
-        (e) => {
-          dispatch({ type: "pipelineUpdated", ...e.payload });
-        },
-      ),
+      listen<{ id: string; status: string; currentStage: string }>("pipeline:updated", (e) => {
+        dispatch({ type: "pipelineUpdated", ...e.payload });
+      }),
       listen<PipelineEvent>("stage:progress", (e) => {
         dispatch({ type: "eventReceived", event: e.payload });
       }),
@@ -202,11 +198,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return (
-    <StoreContext.Provider value={{ state, dispatch }}>
-      {children}
-    </StoreContext.Provider>
-  );
+  return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;
 }
 
 export function useStore() {
