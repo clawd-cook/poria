@@ -1,1 +1,5 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/prd.md", "reason": "Parent PRD — 完整需求定义，所有 child task 的需求来源"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/design.md", "reason": "Parent Design — 技术设计全文，child task 的设计参考"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/implement.md", "reason": "Parent 实施计划 — 任务树、依赖顺序、跨 child 验收标准"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层思考指南 — Pipeline 横跨 core/infra/channels/resources 多层"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "代码复用指南 — channel/resource 迁移时避免重复模式"}

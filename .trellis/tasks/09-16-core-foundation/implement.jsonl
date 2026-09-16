@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/09-16-poria-platform-arch/prd.md", "reason": "Parent PRD — R1-R8 需求定义，类型字段参照"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/design.md", "reason": "Parent Design — 状态机状态图/门禁规则/事件清单/类型定义的权威来源"}
+{"file": ".trellis/tasks/09-16-core-foundation/prd.md", "reason": "本任务 PRD — 验收标准"}
+{"file": ".trellis/tasks/09-16-core-foundation/implement.md", "reason": "本任务实施计划"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层思考 — core 包的类型设计影响所有上层"}

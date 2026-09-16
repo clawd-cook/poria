@@ -18,7 +18,14 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "09-16-core-foundation",
+    "09-16-infra-persistence",
+    "09-16-channel-migration",
+    "09-16-resource-layer",
+    "09-16-pipeline-orchestrator",
+    "09-16-cli-commands"
+  ],
   "parent": null,
   "relatedFiles": [],
   "notes": "",

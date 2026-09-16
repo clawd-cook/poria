@@ -3,6 +3,12 @@ packages:
   - "packages/*"
 allowBuilds:
   '@parcel/watcher': true
+  bufferutil: false
+  canvas: false
+  edgedriver: false
   esbuild: true
+  geckodriver: false
+  msw: false
   sharp: true
   unrs-resolver: true
+  utf-8-validate: false

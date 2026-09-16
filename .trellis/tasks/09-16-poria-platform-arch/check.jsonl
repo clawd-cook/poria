@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/prd.md", "reason": "验收标准来源 — 10 项 acceptance criteria"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/design.md", "reason": "技术设计 — 状态机/门禁/事件/安全/审计的正确性参考"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/implement.md", "reason": "跨 child 验收标准 — 集成测试要求"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层一致性检查"}
