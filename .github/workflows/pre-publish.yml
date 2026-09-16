@@ -25,7 +25,10 @@ jobs:
       version: ${{ steps.extract.outputs.version }}
       tag: ${{ steps.extract.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
 
       - name: Extract and validate version
         id: extract
@@ -33,23 +36,21 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-          # Strip leading 'v'
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Validate format: X.Y.Z-beta.N
           if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
             echo "::error::Invalid beta tag format: $TAG (expected vX.Y.Z-beta.N)"
             exit 1
           fi
 
-          echo "✅ Valid beta tag: $TAG (version: $VERSION)"
+          echo "Valid beta tag: $TAG (version: $VERSION)"
 
   build-macos:
     name: Build macOS (${{ matrix.arch }})
     needs: validate
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -59,10 +60,13 @@ jobs:
           - arch: x64
             target: x86_64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -96,26 +100,23 @@ jobs:
         run: |
           cd apps/desktop
 
-          # Update tauri.conf.json
           node -e "
             const fs = require('fs');
             const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-            conf.version = '$VERSION';
+            conf.version = process.env.VERSION;
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
           "
 
-          # Update Cargo.toml version
           sed -i '' "s/^version = \".*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
 
-          # Update package.json version
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.version = '$VERSION';
+            pkg.version = process.env.VERSION;
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-          echo "✅ Version synced to $VERSION"
+          echo "Version synced to $VERSION"
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -125,7 +126,7 @@ jobs:
         run: npx tsc -b --noEmit
 
       - name: Setup macOS signing
-        if: env.SKIP_SIGNING != 'true' && env.APPLE_CERTIFICATE != ''
+        if: env.APPLE_CERTIFICATE != ''
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -143,8 +144,6 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
 
-          echo "✅ macOS signing keychain configured"
-
       - name: Build Tauri app
         working-directory: apps/desktop
         env:
@@ -152,47 +151,47 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          CI: true
         run: |
           cargo tauri build --target ${{ matrix.target }}
 
-      - name: Ad-hoc sign app bundle (when no Apple certificate)
-        if: secrets.APPLE_CERTIFICATE == ''
+      - name: Ad-hoc sign and repackage DMG
         env:
           TARGET: ${{ matrix.target }}
-        run: |
-          APP_PATH=$(find "apps/desktop/src-tauri/target/$TARGET/release/bundle/macos" -name "*.app" -type d | head -1)
-          if [ -n "$APP_PATH" ]; then
-            echo "Ad-hoc signing: $APP_PATH"
-            codesign --force --deep -s - "$APP_PATH"
-            codesign --verify --verbose "$APP_PATH" && echo "✅ Ad-hoc signature verified"
-          fi
-
-      - name: Rename artifacts
-        env:
           VERSION: ${{ needs.validate.outputs.version }}
           ARCH: ${{ matrix.arch }}
-          TARGET: ${{ matrix.target }}
+          HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
         run: |
           BUNDLE_DIR="apps/desktop/src-tauri/target/$TARGET/release/bundle"
           OUTPUT_DIR="$RUNNER_TEMP/artifacts"
           mkdir -p "$OUTPUT_DIR"
 
-          # Find and rename .dmg
-          DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" -type f | head -1)
-          if [ -n "$DMG" ]; then
-            cp "$DMG" "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg"
-            echo "✅ DMG: Poria-${VERSION}-${ARCH}.dmg ($(du -h "$DMG" | cut -f1))"
+          APP_PATH=$(find "$BUNDLE_DIR/macos" -name "*.app" -type d | head -1)
+
+          if [ "$HAS_CERT" != "true" ] && [ -n "$APP_PATH" ]; then
+            echo "No Apple certificate — applying ad-hoc signature"
+            codesign --force --deep -s - "$APP_PATH"
+            codesign --verify --verbose "$APP_PATH"
+
+            DMG_OUT="$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg"
+            hdiutil create -volname "Poria" -srcfolder "$APP_PATH" \
+              -ov -format UDZO "$DMG_OUT"
+            echo "Re-created DMG with ad-hoc signed app"
           else
-            echo "::error::No .dmg found in $BUNDLE_DIR/dmg/"
-            exit 1
+            DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" -type f | head -1)
+            if [ -z "$DMG" ]; then
+              echo "::error::No .dmg found in $BUNDLE_DIR/dmg/"
+              exit 1
+            fi
+            cp "$DMG" "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg"
           fi
 
-          # Verify artifact is not empty/corrupt
-          DMG_SIZE=$(stat -f%z "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg")
+          DMG_SIZE=$(stat -f%z "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg" 2>/dev/null || stat --printf='%s' "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg")
           if [ "$DMG_SIZE" -lt 1048576 ]; then
             echo "::error::DMG is suspiciously small (${DMG_SIZE} bytes)"
             exit 1
           fi
+          echo "DMG: Poria-${VERSION}-${ARCH}.dmg ($(du -h "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg" | cut -f1))"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -207,9 +206,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          ref: ${{ github.ref }}
+          fetch-depth: 1
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -219,51 +219,45 @@ jobs:
 
       - name: List artifacts
         run: |
-          echo "📦 Release artifacts:"
+          echo "Release artifacts:"
           ls -lh artifacts/
           echo ""
-          echo "Checksums:"
           shasum -a 256 artifacts/*.dmg
 
       - name: Generate release notes
-        id: notes
         env:
           VERSION: ${{ needs.validate.outputs.version }}
-          TAG: ${{ needs.validate.outputs.tag }}
         run: |
-          cat > release-notes.md << 'NOTES'
-          ## Poria Desktop ${{ needs.validate.outputs.version }} (Beta)
+          cat > release-notes.md << EOF
+          ## Poria Desktop ${VERSION} (Beta)
 
-          > ⚠️ 这是预发布版本，仅供测试。
+          > 这是预发布版本，仅供测试。
 
           ### 下载
 
           | 平台 | 架构 | 文件 |
           |------|------|------|
-          | macOS | Apple Silicon (M1/M2/M3) | `Poria-${{ needs.validate.outputs.version }}-aarch64.dmg` |
-          | macOS | Intel | `Poria-${{ needs.validate.outputs.version }}-x64.dmg` |
+          | macOS | Apple Silicon (M1/M2/M3/M4) | \`Poria-${VERSION}-aarch64.dmg\` |
+          | macOS | Intel | \`Poria-${VERSION}-x64.dmg\` |
 
           ### 安装
 
-          1. 下载对应架构的 `.dmg` 文件
+          1. 下载对应架构的 \`.dmg\` 文件
           2. 双击打开，将 Poria 拖入 Applications 文件夹
-          3. **首次打开前**，在终端执行以下命令移除隔离标记：
-             ```bash
+          3. **首次打开前**，在终端执行：
+             \`\`\`bash
              xattr -cr /Applications/Poria.app
-             ```
+             \`\`\`
           4. 双击打开 Poria
 
-          > ⚠️ Beta 版本未经 Apple 公证，macOS 会提示"已损坏"。
-          > 执行上面的 `xattr -cr` 命令即可正常打开。
-          > 正式版本将包含完整签名和公证。
+          > Beta 版本未经 Apple 公证，macOS 可能提示"已损坏"。
+          > 执行 \`xattr -cr\` 即可正常使用。正式版将包含完整签名。
 
-          ### SHA-256 校验
-          ```
-          NOTES
-
-          shasum -a 256 artifacts/*.dmg >> release-notes.md
-
-          echo '```' >> release-notes.md
+          ### SHA-256
+          \`\`\`
+          $(shasum -a 256 artifacts/*.dmg)
+          \`\`\`
+          EOF
 
       - name: Create release
         env:
@@ -277,4 +271,4 @@ jobs:
             --prerelease \
             artifacts/*.dmg
 
-          echo "✅ Release created: $(gh release view "$TAG" --json url -q .url)"
+          echo "Release created: $(gh release view "$TAG" --json url -q .url)"
