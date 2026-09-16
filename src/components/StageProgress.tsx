@@ -1,7 +1,10 @@
-import { Check, X, Loader2, AlertTriangle, Circle, Minus } from "lucide-react";
+import { AlertTriangle, Check, Circle, Loader2, Minus, Play, SkipForward, X } from "lucide-react";
 
 import type { StageDetail, StageStatus } from "../lib/types";
-import { STAGE_ORDER, STAGE_LABELS } from "../lib/types";
+import { STAGE_LABELS, STAGE_ORDER } from "../lib/types";
+import { executeStage, skipStage } from "../lib/tauri";
+import { useStore } from "../state/store";
+import { StreamOutput } from "./StreamOutput";
 
 const STATUS_CONFIG: Record<
   StageStatus,
@@ -24,7 +27,17 @@ const STATUS_CONFIG: Record<
   skipped: { icon: Minus, bg: "bg-slate-600", ring: "ring-slate-600/30" },
 };
 
-function StageNode({ stage, isLast }: { stage: StageDetail; isLast: boolean }) {
+function StageNode({
+  stage,
+  isLast,
+  pipelineId,
+  isNextPending,
+}: {
+  stage: StageDetail;
+  isLast: boolean;
+  pipelineId: string | null;
+  isNextPending: boolean;
+}) {
   const config = STATUS_CONFIG[stage.status];
   const Icon = config.icon;
 
@@ -51,6 +64,24 @@ function StageNode({ stage, isLast }: { stage: StageDetail; isLast: boolean }) {
         >
           {STAGE_LABELS[stage.name]}
         </span>
+        {stage.status === "pending" && isNextPending && pipelineId && (
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => executeStage(pipelineId)}
+              className="flex items-center gap-0.5 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] text-white hover:bg-blue-500"
+            >
+              <Play className="h-2.5 w-2.5" /> 执行
+            </button>
+            <button
+              type="button"
+              onClick={() => skipStage(pipelineId, stage.name)}
+              className="flex items-center gap-0.5 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-500"
+            >
+              <SkipForward className="h-2.5 w-2.5" /> 跳过
+            </button>
+          </div>
+        )}
       </div>
       {!isLast && (
         <div
@@ -63,7 +94,14 @@ function StageNode({ stage, isLast }: { stage: StageDetail; isLast: boolean }) {
   );
 }
 
-export function StageProgress({ stages }: { stages?: StageDetail[] }) {
+export function StageProgress({
+  stages,
+  pipelineId,
+}: {
+  stages?: StageDetail[];
+  pipelineId?: string | null;
+}) {
+  const { state } = useStore();
   const stageMap = new Map(stages?.map((s) => [s.name, s]));
 
   const orderedStages: StageDetail[] = STAGE_ORDER.map(
@@ -80,11 +118,31 @@ export function StageProgress({ stages }: { stages?: StageDetail[] }) {
       },
   );
 
+  const firstPendingIdx = orderedStages.findIndex((s) => s.status === "pending");
+  const runningStage = orderedStages.find((s) => s.status === "running");
+  const pid = pipelineId ?? state.selectedPipelineId;
+
   return (
-    <div className="flex items-start justify-center gap-0 py-4">
-      {orderedStages.map((stage, i) => (
-        <StageNode key={stage.name} stage={stage} isLast={i === orderedStages.length - 1} />
-      ))}
+    <div>
+      <div className="flex items-start justify-center gap-0 py-4">
+        {orderedStages.map((stage, i) => (
+          <StageNode
+            key={stage.name}
+            stage={stage}
+            isLast={i === orderedStages.length - 1}
+            pipelineId={pid}
+            isNextPending={i === firstPendingIdx}
+          />
+        ))}
+      </div>
+      {runningStage && pid && (
+        <div className="mt-2 rounded-lg bg-slate-800/60 p-3">
+          <div className="mb-1 text-xs font-medium text-blue-400">
+            {STAGE_LABELS[runningStage.name]} - Claude 输出
+          </div>
+          <StreamOutput pipelineId={pid} />
+        </div>
+      )}
     </div>
   );
 }

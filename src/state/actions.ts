@@ -6,6 +6,7 @@ import type {
   AppConfig,
   SkillInfo,
   ChannelInfo,
+  StreamChunk,
   ViewType,
 } from "../lib/types";
 
@@ -36,4 +37,7 @@ export type Action =
   | { type: "settingsToggled"; open: boolean }
   | { type: "skillsLoaded"; skills: SkillInfo[] }
   | { type: "channelsLoaded"; channels: ChannelInfo[] }
-  | { type: "viewChanged"; view: ViewType };
+  | { type: "viewChanged"; view: ViewType }
+  | { type: "streamChunkReceived"; pipelineId: string; chunk: StreamChunk }
+  | { type: "streamCleared"; pipelineId: string }
+  | { type: "stageExecuteRequested"; pipelineId: string; stage: string };

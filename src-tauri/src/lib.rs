@@ -6,6 +6,8 @@ mod commands;
 pub struct AppState {
     pub store: Arc<poria_infrastructure::store::SqlitePipelineStore>,
     pub event_store: Arc<poria_infrastructure::store::EventStore>,
+    pub agent_pool: Arc<poria_resources::ClaudeAgentPool>,
+    pub session_tracker: Arc<poria_resources::SessionTracker>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,10 +40,14 @@ pub fn run() {
 
             let store = Arc::new(poria_infrastructure::store::SqlitePipelineStore::new(conn));
             let event_store = Arc::new(poria_infrastructure::store::EventStore::new(event_conn));
+            let agent_pool = Arc::new(poria_resources::ClaudeAgentPool::new_with_cli(3, None));
+            let session_tracker = Arc::new(poria_resources::SessionTracker::new());
 
             app.manage(AppState {
                 store,
                 event_store,
+                agent_pool,
+                session_tracker,
             });
 
             Ok(())
@@ -53,6 +59,8 @@ pub fn run() {
             commands::pipeline::cancel_pipeline,
             commands::pipeline::human_loop_respond,
             commands::pipeline::get_pipeline_events,
+            commands::pipeline::execute_stage,
+            commands::pipeline::skip_stage,
             commands::auth::get_auth_status,
             commands::config::get_config,
             commands::config::update_config,

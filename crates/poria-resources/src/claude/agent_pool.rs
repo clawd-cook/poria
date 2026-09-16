@@ -133,6 +133,15 @@ impl ClaudeAgentPool {
         }
     }
 
+    /// Create a new agent pool pre-initialized with the real Claude CLI SDK.
+    pub fn new_with_cli(max_concurrent: usize, claude_path: Option<String>) -> Self {
+        let sdk: Arc<dyn AgentSdk> = Arc::new(super::cli_sdk::ClaudeCliSdk::new(claude_path));
+        Self {
+            sdk: Arc::new(Mutex::new(Some(sdk))),
+            concurrency_semaphore: Arc::new(Semaphore::new(max_concurrent)),
+        }
+    }
+
     /// Initialize the agent pool with an SDK implementation.
     pub async fn initialize(&self, sdk: Arc<dyn AgentSdk>) {
         let mut guard = self.sdk.lock().await;

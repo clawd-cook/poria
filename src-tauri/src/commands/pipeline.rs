@@ -340,3 +340,83 @@ pub async fn human_loop_respond(
 
     Ok(())
 }
+
+/// Request execution of the next pending stage in a pipeline.
+#[tauri::command]
+pub async fn execute_stage(
+    pipeline_id: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pipeline = state
+        .store
+        .load(&pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {}", pipeline_id))?;
+
+    let current = pipeline
+        .stages
+        .iter()
+        .find(|s| s.status == StageStatus::Pending)
+        .ok_or("No pending stages")?;
+
+    let stage_name = serde_json::to_string(&current.name)
+        .unwrap_or_default()
+        .trim_matches('"')
+        .to_string();
+
+    app.emit(
+        "stage:execute-requested",
+        serde_json::json!({
+            "pipeline_id": pipeline_id,
+            "stage": stage_name,
+        }),
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Skip a pending stage in a pipeline.
+#[tauri::command]
+pub async fn skip_stage(
+    pipeline_id: String,
+    stage_name: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut pipeline = state
+        .store
+        .load(&pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {}", pipeline_id))?;
+
+    if let Some(stage) = pipeline.stages.iter_mut().find(|s| {
+        let name = serde_json::to_string(&s.name)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string();
+        name == stage_name && s.status == StageStatus::Pending
+    }) {
+        stage.status = StageStatus::Skipped;
+        pipeline.updated_at = Utc::now();
+        state
+            .store
+            .save_stage_tx(None, &pipeline, &[])
+            .map_err(|e| e.to_string())?;
+
+        app.emit(
+            "stage:skipped",
+            serde_json::json!({
+                "pipeline_id": pipeline_id,
+                "stage": stage_name,
+            }),
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        return Err(format!(
+            "Stage '{}' not found or not pending",
+            stage_name
+        ));
+    }
+
+    Ok(())
+}

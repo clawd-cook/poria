@@ -1,6 +1,7 @@
 mod error;
 mod fixture;
 mod human_loop;
+pub mod prompt_templates;
 mod stage_skill_map;
 
 mod code_review;

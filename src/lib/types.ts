@@ -103,3 +103,10 @@ export interface ChannelInfo {
 }
 
 export type ViewType = "pipeline" | "skills" | "channels";
+
+export interface StreamChunk {
+  type: "text" | "tool_use" | "tool_result" | "result";
+  content: string;
+  timestamp: string;
+  tool_name?: string;
+}

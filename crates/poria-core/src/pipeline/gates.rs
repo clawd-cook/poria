@@ -41,6 +41,12 @@ pub struct StageResult {
     pub diff_lines: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_conflict: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prd_review_p0_done: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trd_exists: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_changes_exist: Option<bool>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -52,6 +58,9 @@ pub static DEFAULT_GATES: Lazy<Vec<GateRule>> = Lazy::new(|| vec![
     GateRule { id: "diff_size".into(), name: "变更量".into(), enabled: true, threshold: serde_json::json!(500), on_fail: GateOnFail::Warn, gate_phase: GatePhase::Deploy, regress_to: None },
     GateRule { id: "merge_conflict".into(), name: "合并冲突".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::Deploy, regress_to: None },
     GateRule { id: "cr_score".into(), name: "CR 评分".into(), enabled: true, threshold: serde_json::json!("B+"), on_fail: GateOnFail::Regress, gate_phase: GatePhase::StageExit, regress_to: Some(StageEnum::Dev) },
+    GateRule { id: "prd_review_p0".into(), name: "PRD 澄清 P0 完成".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::StageEntry, regress_to: None },
+    GateRule { id: "trd_exists".into(), name: "TRD 文档存在".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::StageEntry, regress_to: None },
+    GateRule { id: "code_changes_exist".into(), name: "代码变更存在".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::StageEntry, regress_to: None },
 ]);
 
 fn evaluate_one(rule: &GateRule, result: &StageResult) -> GateResult {
@@ -74,6 +83,9 @@ fn evaluate_one(rule: &GateRule, result: &StageResult) -> GateResult {
             let actual = result.cr_score.as_deref().unwrap_or("");
             gate_result(rule, cr_score_meets_threshold(actual, threshold), &serde_json::json!(result.cr_score))
         }
+        "prd_review_p0" => gate_result(rule, result.prd_review_p0_done == Some(true), &serde_json::json!(result.prd_review_p0_done)),
+        "trd_exists" => gate_result(rule, result.trd_exists == Some(true), &serde_json::json!(result.trd_exists)),
+        "code_changes_exist" => gate_result(rule, result.code_changes_exist == Some(true), &serde_json::json!(result.code_changes_exist)),
         _ => gate_result(rule, true, &serde_json::Value::Null),
     }
 }
@@ -188,5 +200,107 @@ mod tests {
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageExit);
         assert!(!eval.all_pass);
         assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "cr_score"));
+    }
+
+    #[test]
+    fn test_prd_review_p0_gate_pass() {
+        let result = StageResult {
+            prd_review_p0_done: Some(true),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        let p0_result = eval.details.iter().find(|r| r.rule_id == "prd_review_p0");
+        assert!(p0_result.is_some());
+        assert!(p0_result.unwrap().pass);
+    }
+
+    #[test]
+    fn test_prd_review_p0_gate_fail() {
+        let result = StageResult {
+            prd_review_p0_done: Some(false),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(!eval.all_pass);
+        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "prd_review_p0"));
+    }
+
+    #[test]
+    fn test_prd_review_p0_gate_missing() {
+        let result = StageResult::default();
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(!eval.all_pass);
+        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "prd_review_p0"));
+    }
+
+    #[test]
+    fn test_trd_exists_gate_pass() {
+        let result = StageResult {
+            trd_exists: Some(true),
+            prd_review_p0_done: Some(true),
+            code_changes_exist: Some(true),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(eval.all_pass);
+    }
+
+    #[test]
+    fn test_trd_exists_gate_fail() {
+        let result = StageResult {
+            trd_exists: Some(false),
+            prd_review_p0_done: Some(true),
+            code_changes_exist: Some(true),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(!eval.all_pass);
+        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "trd_exists"));
+    }
+
+    #[test]
+    fn test_code_changes_exist_gate_pass() {
+        let result = StageResult {
+            code_changes_exist: Some(true),
+            prd_review_p0_done: Some(true),
+            trd_exists: Some(true),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(eval.all_pass);
+    }
+
+    #[test]
+    fn test_code_changes_exist_gate_fail() {
+        let result = StageResult {
+            code_changes_exist: Some(false),
+            prd_review_p0_done: Some(true),
+            trd_exists: Some(true),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(!eval.all_pass);
+        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "code_changes_exist"));
+    }
+
+    #[test]
+    fn test_stage_entry_all_pass() {
+        let result = StageResult {
+            prd_review_p0_done: Some(true),
+            trd_exists: Some(true),
+            code_changes_exist: Some(true),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(eval.all_pass);
+        assert!(eval.blocking_failures.is_empty());
+        assert_eq!(eval.details.len(), 3);
+    }
+
+    #[test]
+    fn test_default_gates_count() {
+        assert_eq!(DEFAULT_GATES.len(), 9);
+        let entry_gates: Vec<_> = DEFAULT_GATES.iter().filter(|g| g.gate_phase == GatePhase::StageEntry).collect();
+        assert_eq!(entry_gates.len(), 3);
     }
 }

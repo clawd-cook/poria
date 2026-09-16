@@ -46,7 +46,7 @@ export function PipelineDetail() {
         </div>
       </div>
 
-      <StageProgress stages={detail.stages} />
+      <StageProgress stages={detail.stages} pipelineId={detail.id} />
 
       {humanRequest && humanRequest.pipelineId === detail.id && (
         <div className="my-4">

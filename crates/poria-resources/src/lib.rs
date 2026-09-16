@@ -22,6 +22,7 @@ pub use claude::agent_pool::{
     ClaudeAgentPool, StageAgentConfig, AgentSdk, AgentQueryOptions, SdkMessage,
     stage_agent_config,
 };
+pub use claude::cli_sdk::ClaudeCliSdk;
 pub use claude::output_guard::{
     OutputGuard, OutputGuardConfig, AgentOutput, GuardResult,
     Violation, ViolationSeverity, ViolationType, DependencyEntry,

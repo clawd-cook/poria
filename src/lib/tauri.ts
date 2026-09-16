@@ -48,3 +48,11 @@ export async function listSkills(): Promise<SkillInfo[]> {
 export async function listChannels(): Promise<ChannelInfo[]> {
   return invoke<ChannelInfo[]>("list_channels");
 }
+
+export async function executeStage(pipelineId: string): Promise<void> {
+  return invoke<void>("execute_stage", { pipelineId });
+}
+
+export async function skipStage(pipelineId: string, stageName: string): Promise<void> {
+  return invoke<void>("skip_stage", { pipelineId, stageName });
+}

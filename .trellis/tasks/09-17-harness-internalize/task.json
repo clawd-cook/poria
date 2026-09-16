@@ -1,0 +1,31 @@
+{
+  "id": "harness-internalize",
+  "name": "harness-internalize",
+  "title": "Internalize harness-o2o-fe capabilities into Poria app with local Claude + SKILL orchestration",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "heyongqi10",
+  "assignee": "heyongqi10",
+  "createdAt": "2026-09-17",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-17-cli-invoker",
+    "09-17-feature-pipeline",
+    "09-17-skill-impls",
+    "09-17-workflow-ui"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -17,6 +17,7 @@ import type {
   AppConfig,
   SkillInfo,
   ChannelInfo,
+  StreamChunk,
   ViewType,
 } from "../lib/types";
 import type { Action } from "./actions";
@@ -37,6 +38,7 @@ export interface AppState {
   sidecar: { running: boolean; error?: string };
   skills: SkillInfo[];
   channels: ChannelInfo[];
+  streamOutput: Record<string, StreamChunk[]>;
   ui: { filter: string | null; settingsOpen: boolean; view: ViewType };
 }
 
@@ -51,6 +53,7 @@ const initialState: AppState = {
   sidecar: { running: false },
   skills: [],
   channels: [],
+  streamOutput: {},
   ui: { filter: null, settingsOpen: false, view: "pipeline" },
 };
 
@@ -139,6 +142,25 @@ function reducer(state: AppState, action: Action): AppState {
     case "viewChanged":
       return { ...state, ui: { ...state.ui, view: action.view } };
 
+    case "streamChunkReceived": {
+      const prev = state.streamOutput[action.pipelineId] ?? [];
+      return {
+        ...state,
+        streamOutput: {
+          ...state.streamOutput,
+          [action.pipelineId]: [...prev, action.chunk],
+        },
+      };
+    }
+
+    case "streamCleared": {
+      const { [action.pipelineId]: _, ...rest } = state.streamOutput;
+      return { ...state, streamOutput: rest };
+    }
+
+    case "stageExecuteRequested":
+      return state;
+
     default:
       return state;
   }
@@ -191,6 +213,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       listen<AuthStatus>("auth:status-changed", (e) => {
         dispatch({ type: "authChanged", auth: e.payload });
       }),
+      listen<{ pipeline_id: string; chunk_type: string; content: string; tool_name?: string }>(
+        "agent:stream",
+        (e) => {
+          dispatch({
+            type: "streamChunkReceived",
+            pipelineId: e.payload.pipeline_id,
+            chunk: {
+              type: e.payload.chunk_type as StreamChunk["type"],
+              content: e.payload.content,
+              timestamp: new Date().toISOString(),
+              tool_name: e.payload.tool_name,
+            },
+          });
+        },
+      ),
     ]);
 
     return () => {
