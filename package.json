@@ -1,14 +1,35 @@
 {
   "name": "poria",
+  "private": true,
   "version": "1.0.1-beta.4",
-  "description": "",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "tauri": "tauri"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-shell": "^2",
+    "@tauri-apps/plugin-notification": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "lucide-react": "^0.511.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "@tailwindcss/vite": "^4.1.10",
+    "tailwindcss": "^4.1.10"
+  },
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
@@ -16,6 +37,5 @@
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@11.23.0",
-  "type": "module"
+  "packageManager": "pnpm@11.23.0"
 }

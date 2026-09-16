@@ -205,9 +205,7 @@ settings:
 
 importers:
 
-  .: {}
-
-  apps/desktop:
+  .:
     dependencies:
       '@tauri-apps/api':
         specifier: ^2
