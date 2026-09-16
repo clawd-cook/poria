@@ -91,7 +91,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
+            target
           key: rust-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             rust-${{ matrix.target }}-
@@ -163,7 +163,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
           HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
         run: |
-          BUNDLE_DIR="src-tauri/target/$TARGET/release/bundle"
+          BUNDLE_DIR="target/$TARGET/release/bundle"
           OUTPUT_DIR="$RUNNER_TEMP/artifacts"
           mkdir -p "$OUTPUT_DIR"
 
