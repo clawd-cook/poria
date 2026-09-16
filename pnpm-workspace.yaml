@@ -1,8 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "packages/channels/*"
 allowBuilds:
   '@parcel/watcher': true
+  better-sqlite3: true
   bufferutil: false
   canvas: false
   edgedriver: false

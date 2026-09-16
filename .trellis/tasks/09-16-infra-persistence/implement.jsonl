@@ -1,1 +1,5 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/design.md", "reason": "Parent Design §4.2 断点续跑、§4.3 队列、§7 SQLite Schema、A3 CredentialGuard、§7.2 归档、§9 监控指标"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/prd.md", "reason": "Parent PRD R4 状态持久化、R7 安全与审计"}
+{"file": ".trellis/tasks/09-16-infra-persistence/prd.md", "reason": "本任务 PRD — R1-R13 需求 + 验收标准"}
+{"file": ".trellis/tasks/09-16-infra-persistence/implement.md", "reason": "本任务实施计划 — Step 0-12"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层思考 — store 层与上层 executor/channels 的接口边界"}

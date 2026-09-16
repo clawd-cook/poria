@@ -1,1 +1,17 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/design.md", "reason": "Parent Design — A9 JoyClaw 桥接/A10 需求状态/A11 CodingChannel 扩展/F-03 幂等 MR"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/prd.md", "reason": "Parent PRD — C2 复用优先迁移映射表，R1 入口协议"}
+{"file": ".trellis/tasks/09-16-channel-migration/prd.md", "reason": "本任务 PRD — M1-M5 迁移清单 + 验收标准"}
+{"file": ".trellis/tasks/09-16-channel-migration/implement.md", "reason": "本任务实施计划 — Step 0-7"}
+{"file": "submodules/poria/packages/channel-xingyun/src/index.ts", "reason": "迁移来源 — xingyun 模块入口和导出结构"}
+{"file": "submodules/poria/packages/channel-xingyun/src/demandUrl.ts", "reason": "迁移来源 — 链接解析核心逻辑"}
+{"file": "submodules/poria/packages/channel-xingyun/src/jacp/client.ts", "reason": "迁移来源 — JACP HTTP 客户端（cookie 注入/错误处理）"}
+{"file": "submodules/poria/packages/channel-xingyun/src/jacp/demands.ts", "reason": "迁移来源 — getDemandById API"}
+{"file": "submodules/poria/packages/channel-xingyun/src/jacp/cards.ts", "reason": "迁移来源 — listCardAttachments API"}
+{"file": "submodules/poria/packages/channel-xingyun/src/prd.ts", "reason": "迁移来源 — PRD 解析策略"}
+{"file": "submodules/poria/packages/channel-xingyun/src/fixture.ts", "reason": "迁移来源 — fixture mock 数据模式"}
+{"file": "submodules/poria/packages/channel-joyspace/src/export.ts", "reason": "迁移来源 — exportToMarkdown 核心逻辑"}
+{"file": "submodules/poria/packages/channel-joyspace/src/index.ts", "reason": "迁移来源 — joyspace 模块入口"}
+{"file": "submodules/poria/packages/channel-coding/src/mergeRequest.ts", "reason": "迁移来源 — createMergeRequest + projectIdFromGitUrl"}
+{"file": "submodules/poria/packages/channel-coding/src/easyci.ts", "reason": "迁移来源 — EasyCI HTTP 客户端"}
+{"file": "submodules/poria/packages/channel-coding/src/index.ts", "reason": "迁移来源 — coding 模块入口"}
+{"file": "packages/core/src/contracts/channel.ts", "reason": "IChannel 契约接口定义 — 迁移目标接口"}

@@ -1,1 +1,5 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-16-channel-migration/prd.md", "reason": "验收标准对照 — 8 项 AC"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/design.md", "reason": "检查 A9/A10/A11/F-03 的实现正确性"}
+{"file": "packages/core/src/contracts/channel.ts", "reason": "检查 IChannel 契约一致性"}
+{"file": "submodules/poria/packages/channel-xingyun/src/demandUrl.ts", "reason": "对比迁移后链接解析逻辑是否一致"}
+{"file": "submodules/poria/packages/channel-coding/src/mergeRequest.ts", "reason": "对比迁移后 MR 逻辑 + 检查新增 getMrStatus/findMr"}

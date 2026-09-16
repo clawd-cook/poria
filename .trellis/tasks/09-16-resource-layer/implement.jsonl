@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/design.md", "reason": "Parent Design — A4 超时档位、A7 Agent SDK 调度、§6.1 OutputGuard、F-08 空闲超时、§4.2 F7 worktree recovery"}
+{"file": ".trellis/tasks/09-16-poria-platform-arch/prd.md", "reason": "Parent PRD — R6 异常处理中 Agent 超时/输出拦截需求"}
+{"file": ".trellis/tasks/09-16-resource-layer/prd.md", "reason": "本任务 PRD — 验收标准"}
+{"file": ".trellis/tasks/09-16-resource-layer/implement.md", "reason": "本任务实施计划"}
+{"file": "submodules/poria/packages/resource-terminal/src/index.ts", "reason": "Terminal 迁移源 — spawn + timeout 实现参考"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "代码复用指南 — 迁移时避免重复模式"}
