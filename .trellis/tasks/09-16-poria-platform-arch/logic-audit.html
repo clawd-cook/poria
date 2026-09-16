@@ -1,0 +1,666 @@
+<title>Poria 架构逻辑审计</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
+:root {
+  --ground: #faf8f4;
+  --surface: #fff;
+  --surface-dim: #f0ede7;
+  --ink: #1e2330;
+  --ink-secondary: #4a4f5e;
+  --ink-tertiary: #7a7f8e;
+  --border: #d8d4cc;
+  --border-subtle: #e8e4dc;
+  --accent: #4a5899;
+  --accent-dim: #e8eaf4;
+  --severity-high: #c44040;
+  --severity-high-bg: #fdf0f0;
+  --severity-high-stripe: #c44040;
+  --severity-medium: #a67c20;
+  --severity-medium-bg: #fdf8ee;
+  --severity-medium-stripe: #c9963a;
+  --severity-low: #4a7a62;
+  --severity-low-bg: #f0f6f3;
+  --severity-low-stripe: #6b9080;
+  --tag-bg: #edeae4;
+  --tag-text: #4a4f5e;
+  --code-bg: #f4f1eb;
+  --code-text: #3d3028;
+  --verdict-confirmed: #c44040;
+  --verdict-probable: #a67c20;
+  --font-display: 'DM Serif Display', Georgia, 'Times New Roman', serif;
+  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #14161c;
+    --surface: #1c1f28;
+    --surface-dim: #22252f;
+    --ink: #dfe1e8;
+    --ink-secondary: #a0a4b2;
+    --ink-tertiary: #6e7385;
+    --border: #2e3240;
+    --border-subtle: #262a36;
+    --accent: #8090d0;
+    --accent-dim: #252840;
+    --severity-high: #e06060;
+    --severity-high-bg: #2a1a1a;
+    --severity-high-stripe: #c44040;
+    --severity-medium: #d4a840;
+    --severity-medium-bg: #2a2418;
+    --severity-medium-stripe: #c9963a;
+    --severity-low: #70a890;
+    --severity-low-bg: #1a2620;
+    --severity-low-stripe: #6b9080;
+    --tag-bg: #2a2d38;
+    --tag-text: #a0a4b2;
+    --code-bg: #1e2028;
+    --code-text: #c8c0b4;
+    --verdict-confirmed: #e06060;
+    --verdict-probable: #d4a840;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #14161c;
+  --surface: #1c1f28;
+  --surface-dim: #22252f;
+  --ink: #dfe1e8;
+  --ink-secondary: #a0a4b2;
+  --ink-tertiary: #6e7385;
+  --border: #2e3240;
+  --border-subtle: #262a36;
+  --accent: #8090d0;
+  --accent-dim: #252840;
+  --severity-high: #e06060;
+  --severity-high-bg: #2a1a1a;
+  --severity-high-stripe: #c44040;
+  --severity-medium: #d4a840;
+  --severity-medium-bg: #2a2418;
+  --severity-medium-stripe: #c9963a;
+  --severity-low: #70a890;
+  --severity-low-bg: #1a2620;
+  --severity-low-stripe: #6b9080;
+  --tag-bg: #2a2d38;
+  --tag-text: #a0a4b2;
+  --code-bg: #1e2028;
+  --code-text: #c8c0b4;
+  --verdict-confirmed: #e06060;
+  --verdict-probable: #d4a840;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  padding-inline: 24px;
+  padding-block: 32px 64px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+/* --- Typography --- */
+h1 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.2;
+  margin: 0 0 6px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.report-meta {
+  font-size: 13px;
+  color: var(--ink-tertiary);
+  margin-bottom: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.report-meta span + span::before {
+  content: "·";
+  margin-inline: 8px;
+}
+
+h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 400;
+  margin: 36px 0 16px;
+  color: var(--ink);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+h3 {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-tertiary);
+  margin: 0 0 8px;
+}
+
+/* --- Verdict Banner --- */
+.verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--severity-medium-bg);
+  border: 1px solid var(--severity-medium-stripe);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 28px;
+}
+.verdict-label {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--severity-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.verdict-text {
+  font-size: 14px;
+  color: var(--ink-secondary);
+}
+
+/* --- Summary Counts --- */
+.counts {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+.count-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.count-chip .n {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+.count-chip.high { background: var(--severity-high-bg); color: var(--severity-high); }
+.count-chip.medium { background: var(--severity-medium-bg); color: var(--severity-medium); }
+.count-chip.low { background: var(--severity-low-bg); color: var(--severity-low); }
+
+/* --- Source Set --- */
+.source-set {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 32px;
+}
+.source-set table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.source-set td {
+  padding: 4px 0;
+  vertical-align: top;
+}
+.source-set td:first-child {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  width: 40px;
+  padding-right: 12px;
+  white-space: nowrap;
+}
+.source-set td:nth-child(2) {
+  font-weight: 500;
+  padding-right: 12px;
+  white-space: nowrap;
+}
+.source-set td:last-child {
+  color: var(--ink-secondary);
+}
+
+/* --- Finding --- */
+.finding {
+  border-left: 3px solid var(--border);
+  margin-bottom: 24px;
+  padding: 0;
+}
+.finding.high { border-left-color: var(--severity-high-stripe); }
+.finding.medium { border-left-color: var(--severity-medium-stripe); }
+.finding.low { border-left-color: var(--severity-low-stripe); }
+
+.finding-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 16px 6px;
+  flex-wrap: wrap;
+}
+.finding-id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-tertiary);
+  white-space: nowrap;
+}
+.finding-title {
+  font-weight: 600;
+  font-size: 15px;
+  flex: 1 1 200px;
+}
+.tag {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.tag.high { background: var(--severity-high-bg); color: var(--severity-high); }
+.tag.medium { background: var(--severity-medium-bg); color: var(--severity-medium); }
+.tag.low { background: var(--severity-low-bg); color: var(--severity-low); }
+.tag.confirmed { background: var(--severity-high-bg); color: var(--verdict-confirmed); }
+.tag.probable { background: var(--severity-medium-bg); color: var(--verdict-probable); }
+.tag.type-tag { background: var(--tag-bg); color: var(--tag-text); }
+
+.finding-body {
+  padding: 0 16px 14px;
+  font-size: 14px;
+  color: var(--ink-secondary);
+  line-height: 1.65;
+}
+.finding-body p { margin: 0 0 10px; }
+.finding-body p:last-child { margin-bottom: 0; }
+
+.evidence {
+  background: var(--surface-dim);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.evidence-label {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-tertiary);
+  margin-bottom: 4px;
+}
+
+.ref {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.repair {
+  border-top: 1px dashed var(--border);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.repair-label {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-tertiary);
+  margin-bottom: 4px;
+}
+
+/* --- Unresolved --- */
+.unresolved-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.unresolved-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+  color: var(--ink-secondary);
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.unresolved-list li:last-child { border-bottom: none; }
+
+/* --- Responsive --- */
+@media (max-width: 500px) {
+  body { padding-inline: 16px; }
+  h1 { font-size: 24px; }
+  .finding-header { gap: 6px; }
+  .counts { gap: 8px; }
+  .count-chip { padding: 6px 10px; font-size: 12px; }
+  .count-chip .n { font-size: 16px; }
+}
+</style>
+
+<h1>Poria 平台化架构 — 逻辑审计</h1>
+<div class="report-meta">
+  <span>as_of 2026-09-16</span>
+  <span>PRD v4.2 + Design v4.2</span>
+  <span>bounded set: task directory only</span>
+</div>
+
+<div class="verdict-banner">
+  <span class="verdict-label">Partial</span>
+  <span class="verdict-text">5 项 HIGH 未解决：Design v4.2 的"回溯合并"未覆盖全部内部矛盾，存在断链依赖和签名不一致。无 CRITICAL——无数据丢失或安全缺口，但实现前必须修复 HIGH 项。</span>
+</div>
+
+<div class="counts">
+  <div class="count-chip high"><span class="n">5</span> High</div>
+  <div class="count-chip medium"><span class="n">4</span> Medium</div>
+  <div class="count-chip low"><span class="n">1</span> Low</div>
+</div>
+
+<h2>Source Set</h2>
+<div class="source-set">
+  <table>
+    <tr><td>S1</td><td>prd.md</td><td>PRD v4.2 — requirements authority</td></tr>
+    <tr><td>S2</td><td>design.md</td><td>Design v4.2 — technical authority</td></tr>
+    <tr><td>S3</td><td>task.json</td><td>Task metadata (status: planning)</td></tr>
+    <tr><td>S4</td><td>implement.jsonl</td><td>Placeholder — no entries</td></tr>
+    <tr><td>S5</td><td>check.jsonl</td><td>Placeholder — no entries</td></tr>
+  </table>
+</div>
+
+<h2>Finding Ledger</h2>
+
+<!-- F-01 -->
+<div class="finding high">
+  <div class="finding-header">
+    <span class="finding-id">F-01</span>
+    <span class="finding-title">Recovery 代码使用已废弃的 eventStore API</span>
+    <span class="tag high">high</span>
+    <span class="tag confirmed">confirmed</span>
+    <span class="tag type-tag">contradiction</span>
+  </div>
+  <div class="finding-body">
+    <p>Design §15 F-06 明确废弃 <code>eventStore.appendTx()</code> 和 <code>store.saveStage()</code>，要求<strong>全部写入通过 <code>saveStageTx()</code></strong> 单一路径。但 §4.2 Recovery 模块未同步：</p>
+    <div class="evidence">
+      <div class="evidence-label">冲突定位</div>
+      <span class="ref">S2 §4.2:391</span> <code>this.eventStore.append(pipeline.id, [WorktreeCleanedEvent(...)])</code> — 使用已废弃 API<br>
+      <span class="ref">S2 §4.2:398</span> <code>this.store.saveStage(interrupted)</code> — 使用非事务方法<br>
+      <span class="ref">S2 §15 F-06</span> "删除 eventStore.appendTx()，统一使用 store.saveStageTx()" — 废弃声明
+    </div>
+    <p>后果：Recovery 写入不在事务内，若进程在 saveStage 和 append 之间崩溃，事件日志与 Stage 状态不一致。后续事件回放将丢失 WorktreeCleanedEvent，导致回放重建的状态与实际不符。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>将 §4.2 的 <code>eventStore.append()</code> + <code>store.saveStage()</code> 替换为单次 <code>store.saveStageTx(interrupted, pipeline, [WorktreeCleanedEvent(...)])</code>。无副作用——saveStageTx 的 stage 参数已支持非 null。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-02 -->
+<div class="finding high">
+  <div class="finding-header">
+    <span class="finding-id">F-02</span>
+    <span class="finding-title">GateEngine.evaluate() 签名与调用不一致</span>
+    <span class="tag high">high</span>
+    <span class="tag confirmed">confirmed</span>
+    <span class="tag type-tag">contradiction</span>
+  </div>
+  <div class="finding-body">
+    <p>§14 F3 引入 <code>gatePhase</code> 字段区分阶段出口门禁和 deploy 门禁，§4.1 Executor 传入 phase 字符串过滤——但 §5 的 GateEngine 定义从未更新：</p>
+    <div class="evidence">
+      <div class="evidence-label">签名定义</div>
+      <span class="ref">S2 §5:506</span> <code>static evaluate(deployResult: DeployResult, rules: GateRule[]): GateEvaluation</code> — 2 参数
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">调用现场（3 参数）</div>
+      <span class="ref">S2 §4.1:239</span> <code>GateEngine.evaluate(result, pipeline.config.gates, "stage_exit")</code><br>
+      <span class="ref">S2 §4.1:263</span> <code>GateEngine.evaluate(result, pipeline.config.gates, "deploy")</code>
+    </div>
+    <p>后果：TypeScript 编译期即报错。更隐蔽的是——即使手动绕过，当前 evaluate 实现不按 gatePhase 过滤，<strong>所有门禁在每个调用点全部执行</strong>，CR 阶段会误跑 ci_build / merge_conflict 等 deploy-only 门禁。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>更新 §5 签名为 <code>evaluate(result, rules, phase: "stage_exit" | "deploy")</code>，内部 <code>rules.filter(r => r.gatePhase === phase)</code>。同步更新 §14 F3 中的 DEFAULT_GATES 声明以确保每条规则有 gatePhase。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-03 -->
+<div class="finding high">
+  <div class="finding-header">
+    <span class="finding-id">F-03</span>
+    <span class="finding-title">Deploy 完成状态矛盾：A8 说 BLOCKED，F1 说 WAITING_MERGE</span>
+    <span class="tag high">high</span>
+    <span class="tag confirmed">confirmed</span>
+    <span class="tag type-tag">contradiction</span>
+  </div>
+  <div class="finding-body">
+    <p>Design v4.2 头部声称"回溯合并所有补丁到源头 sections，消除 L-01~L-08 内部矛盾"。但同一场景——deploy 完成后等待人工合并 MR——在两处给出不同状态：</p>
+    <div class="evidence">
+      <div class="evidence-label">矛盾 A</div>
+      <span class="ref">S2 §13 A8:1399</span> "Pipeline 进入 <strong>BLOCKED</strong> 状态，等待 reviewer 手动 approve + merge"
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">矛盾 B（修正版，权威更高）</div>
+      <span class="ref">S2 §14 F1:1552</span> deploy 完成后 <code>pipeline.status = "waiting_merge"</code>，释放 Worker<br>
+      <span class="ref">S2 §14 F1 状态机</span> <code>RUNNING → WAITING_MERGE (deploy MR created)</code>
+    </div>
+    <p>F1 是后续终审修正且含完整状态机，应为权威。但 A8 是实施者首先阅读的"分支保护与 MR 审批"章节，保留 BLOCKED 会导致实现偏差。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>将 §13 A8 第 9 步改为"Pipeline 进入 <strong>WAITING_MERGE</strong> 状态，释放 Worker（不阻塞队列）"。删除"进入 BLOCKED 状态"措辞。保留其余 A8 内容不变。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-04 -->
+<div class="finding high">
+  <div class="finding-header">
+    <span class="finding-id">F-04</span>
+    <span class="finding-title">trdScope 生产路径未定义——OutputGuard 依赖空链</span>
+    <span class="tag high">high</span>
+    <span class="tag probable">probable</span>
+    <span class="tag type-tag">missing chain</span>
+  </div>
+  <div class="finding-body">
+    <p>OutputGuard 是安全需求 R7 的核心执行者，但它依赖的 <code>trdScope</code>（允许修改的文件路径模式）没有生产者：</p>
+    <div class="evidence">
+      <div class="evidence-label">消费端</div>
+      <span class="ref">S2 §4.1:320</span> <code>guard.check(result, pipeline.config.trdScope)</code><br>
+      <span class="ref">S2 §6.1:567</span> <code>allowedPaths: string[]</code> — TRD 定义的目标文件路径模式
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">声称的生产端（仅注释，无实现）</div>
+      <span class="ref">S2 §7:713</span> SQL 注释 "trdScope: design stage 从 TRD.md 提取的允许修改文件路径模式，由 skill:gen-trd 产出，写入 config.trdScope"
+    </div>
+    <p>无任何位置描述 gen-trd skill 如何从 TRD.md 提取文件路径模式、其格式（glob? regex?）、提取失败时的处理。若 trdScope 为空或未写入，OutputGuard 的 <code>allowedPaths.some(p => minimatch(file, p))</code> 对所有文件返回 false——<strong>全部变更被判为 out_of_scope，Pipeline 必定失败</strong>。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>在 Design 的 gen-trd skill 或 design stage 描述中补充：(1) TRD.md 中如何声明 scope（建议 frontmatter 的 <code>files:</code> 字段，glob 语法）；(2) gen-trd 提取逻辑并写入 <code>pipeline.config.trdScope</code>；(3) trdScope 为空时的 fallback（block all 还是 allow all + warn）。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-05 -->
+<div class="finding high">
+  <div class="finding-header">
+    <span class="finding-id">F-05</span>
+    <span class="finding-title">security_scan 门禁无数据源——评估永远无输入</span>
+    <span class="tag high">high</span>
+    <span class="tag confirmed">confirmed</span>
+    <span class="tag type-tag">missing chain</span>
+  </div>
+  <div class="finding-body">
+    <p>security_scan 被注册为 deploy 阶段门禁，但安全扫描在 CR 阶段执行，deploy 阶段的结果对象中不含扫描数据：</p>
+    <div class="evidence">
+      <div class="evidence-label">门禁注册</div>
+      <span class="ref">S2 §14 F3</span> <code>{ id: "security_scan", gatePhase: "deploy", onFail: "block" }</code>
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">扫描执行者</div>
+      <span class="ref">S2 §3:153</span> "security-scan/ — 不是独立 Stage，由 code-review 内部调用"
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">Deploy skill 产出</div>
+      <span class="ref">S2 §15 F-02:1939</span> <code>{ mrUrl, mrIid, repo }</code> — 无安全扫描字段
+    </div>
+    <p>GateEngine.evaluate 在 deploy 阶段收到的 result 来自 deploy skill（build → push → createMr），不含安全扫描结果。该门禁要么始终 pass（无数据默认通过）要么始终 fail（无数据默认不通过），两者都违反 PRD R3 "无高危/严重漏洞"的要求。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复（二选一）</div>
+      <p><strong>方案 A</strong>：将 security_scan 改为 <code>gatePhase: "stage_exit"</code>，在 CR 阶段出口检查扫描结果（CR skill 已调用 security-scan，结果在 CR output 中）。<br>
+      <strong>方案 B</strong>：保持 deploy 门禁，但在 deploy 门禁评估时从 CR stage output 读取缓存的扫描结果（需修改 evaluate 入参为 pipeline 或 stageOutputs map）。方案 A 更简单，建议采用。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-06 -->
+<div class="finding medium">
+  <div class="finding-header">
+    <span class="finding-id">F-06</span>
+    <span class="finding-title">单仓/多仓 deploy 产出不同 output shape</span>
+    <span class="tag medium">medium</span>
+    <span class="tag confirmed">confirmed</span>
+    <span class="tag type-tag">inconsistency</span>
+  </div>
+  <div class="finding-body">
+    <p>deploy stage 通过两条路径执行，产出不同的输出结构：</p>
+    <div class="evidence">
+      <div class="evidence-label">单仓路径</div>
+      <span class="ref">S2 §4.1:313</span> executeSingleRepo → deploy skill → <code>{ mrUrl: string }</code>（单值）
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">多仓路径</div>
+      <span class="ref">S2 §15 F-02:1946</span> mergeRepoOutputs → <code>{ mrUrls: string[] }</code>（数组）
+    </div>
+    <p>§14 F1 的 pollMergeRequests 用 <code>deployOutput?.mrUrls ?? [deployOutput?.mrUrl].filter(Boolean)</code> 做降级处理，但这是 runtime 补丁而非类型契约。Stage output 的类型无法统一定义，下游消费者必须同时处理两种 shape。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>统一 deploy stage output 为 <code>{ mrUrls: string[], perRepo: PerRepoResult[] }</code>。单仓时 mrUrls 为单元素数组。executeSingleRepo 完成后做 shape 归一化。删除 pollMergeRequests 中的 fallback 分支。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-07 -->
+<div class="finding medium">
+  <div class="finding-header">
+    <span class="finding-id">F-07</span>
+    <span class="finding-title">PRD 要求双角色通知，Design 只通知单角色</span>
+    <span class="tag medium">medium</span>
+    <span class="tag confirmed">confirmed</span>
+    <span class="tag type-tag">requirement weakening</span>
+  </div>
+  <div class="finding-body">
+    <div class="evidence">
+      <div class="evidence-label">PRD（权威）</div>
+      <span class="ref">S1 R3:45</span> 安全扫描不通过 → "通知<strong>开发者 + 安全团队</strong>"
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">Design</div>
+      <span class="ref">S2 §8.1:887</span> <code>security_violation: { notifyRole: "security" }</code> — 仅安全团队
+    </div>
+    <p>PRD 明确要求两个角色同时收到通知。Design 的 IssuePolicy 只支持单个 notifyRole 字段，结构上无法表达多角色。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>将 IssuePolicy 的 <code>notifyRole</code> 改为 <code>notifyRoles: string[]</code>。security_violation 设为 <code>["developer", "security"]</code>。HumanLoop 遍历 roles 逐一发送京ME。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-08 -->
+<div class="finding medium">
+  <div class="finding-header">
+    <span class="finding-id">F-08</span>
+    <span class="finding-title">Agent 空闲超时 setInterval 无清理</span>
+    <span class="tag medium">medium</span>
+    <span class="tag probable">probable</span>
+    <span class="tag type-tag">resource leak</span>
+  </div>
+  <div class="finding-body">
+    <div class="evidence">
+      <div class="evidence-label">定位</div>
+      <span class="ref">S2 §14 F-08:2057</span> <code>const idleChecker = setInterval(() => { ... }, 30_000);</code> — 创建定时器<br>
+      无对应 <code>clearInterval(idleChecker)</code>
+    </div>
+    <p>Agent 正常完成后 for-await 循环退出，但 idleChecker 继续运行。下次 dispatch 调用会创建第二个 interval。多次 dispatch 后多个 interval 并行检查各自过期的 lastMessageAt，可能 abort 不相关的 controller。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>在 dispatch() 的 finally 块（已有 clearTimeout(timer)）追加 <code>clearInterval(idleChecker)</code>。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-09 -->
+<div class="finding medium">
+  <div class="finding-header">
+    <span class="finding-id">F-09</span>
+    <span class="finding-title">handleStageError 未定义——异常路由不可达</span>
+    <span class="tag medium">medium</span>
+    <span class="tag confirmed">confirmed</span>
+    <span class="tag type-tag">missing chain</span>
+  </div>
+  <div class="finding-body">
+    <div class="evidence">
+      <div class="evidence-label">引用</div>
+      <span class="ref">S2 §4.1:291</span> <code>await this.handleStageError(pipeline, stage, error)</code>
+    </div>
+    <p>该方法是 Executor 异常处理的唯一入口，负责将具体 Error 类型映射到 IssueClass（PRD R6 的 10 种异常场景）。Design 定义了完整的 IssueClass 枚举和 ISSUE_POLICIES，但从 Error → IssueClass 的分类逻辑和从 IssueClass → humanLoop/retry 的路由逻辑均未展开。</p>
+    <p>缺此方法，PRD R6 的全部异常处理策略无实现锚点。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>在 §4.1 PipelineExecutor 中补充 handleStageError 伪代码：error instanceof 分支 → IssueClass 分类 → ISSUE_POLICIES[issueClass] 查询 → autoRetry > 0 且 retryCount < autoRetry 则 retry，否则 humanLoop.notify()。</p>
+    </div>
+  </div>
+</div>
+
+<!-- F-10 -->
+<div class="finding low">
+  <div class="finding-header">
+    <span class="finding-id">F-10</span>
+    <span class="finding-title">FAILED → CANCELLED 双重回滚风险</span>
+    <span class="tag low">low</span>
+    <span class="tag probable">probable</span>
+    <span class="tag type-tag">edge case</span>
+  </div>
+  <div class="finding-body">
+    <div class="evidence">
+      <div class="evidence-label">状态机</div>
+      <span class="ref">S2 §14 F1</span> "FAILED → CANCELLED (manual cancel)" — 转换合法
+    </div>
+    <div class="evidence">
+      <div class="evidence-label">Cancel 执行</div>
+      <span class="ref">S2 §14 F11:1899</span> cancel command 调用 <code>this.rollback.execute(pipelineId)</code>
+    </div>
+    <p>Pipeline 进入 FAILED 时，失败处理路径可能已执行部分 rollback（如 worktree 清理）。用户随后手动 cancel 会再次执行完整 rollback 序列，尝试删除已不存在的分支或关闭已关闭的 MR。</p>
+    <p>影响有限——git 操作幂等（delete 不存在的分支报错但不损坏），但会产生 audit_log 噪声和用户可见的错误输出。</p>
+    <div class="repair">
+      <div class="repair-label">最小修复</div>
+      <p>rollback.execute 每条 command 用 try/catch 包裹，"资源已不存在"类错误记录为 info 而非 error。或：cancel command 对 FAILED pipeline 跳过 rollback，仅做状态更新 + stage 标 skipped。</p>
+    </div>
+  </div>
+</div>
+
+<h2>Unresolved Items</h2>
+<ul class="unresolved-list">
+  <li><span class="ref">F-04</span> trdScope 的具体提取逻辑需作者决策（glob 格式 / frontmatter 位置 / 空值策略），审计无法代决</li>
+  <li><span class="ref">F-05</span> security_scan 归属阶段需作者决策（stage_exit vs deploy with cross-stage read），两方案均可行</li>
+  <li><span class="ref">S4/S5</span> implement.jsonl 和 check.jsonl 仍为 placeholder，无法审计实施计划与检查清单</li>
+</ul>
+
+<h2>Capability Ledger</h2>
+<div class="source-set">
+  <table>
+    <tr><td></td><td>File Read</td><td style="color:var(--severity-low)">USED — 5 source files read in full</td></tr>
+    <tr><td></td><td>Web Search</td><td style="color:var(--ink-tertiary)">NOT_APPLICABLE — all claims are internal architecture, no external verification needed</td></tr>
+    <tr><td></td><td>Web Fetch</td><td style="color:var(--ink-tertiary)">NOT_APPLICABLE — no URLs to verify (xingyun/GitLab are internal APIs)</td></tr>
+  </table>
+</div>
