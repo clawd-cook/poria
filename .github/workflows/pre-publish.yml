@@ -91,8 +91,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            apps/desktop/src-tauri/target
-          key: rust-${{ matrix.target }}-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+            src-tauri/target
+          key: rust-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             rust-${{ matrix.target }}-
 
@@ -103,8 +103,6 @@ jobs:
         env:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          cd apps/desktop
-
           node -e "
             const fs = require('fs');
             const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
@@ -127,8 +125,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck frontend
-        working-directory: apps/desktop
-        run: npx tsc -b --noEmit
+        run: pnpm exec tsc --noEmit
 
       - name: Setup macOS signing
         if: env.APPLE_CERTIFICATE != ''
@@ -150,7 +147,6 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH"
 
       - name: Build Tauri app
-        working-directory: apps/desktop
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -167,7 +163,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
           HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
         run: |
-          BUNDLE_DIR="apps/desktop/src-tauri/target/$TARGET/release/bundle"
+          BUNDLE_DIR="src-tauri/target/$TARGET/release/bundle"
           OUTPUT_DIR="$RUNNER_TEMP/artifacts"
           mkdir -p "$OUTPUT_DIR"
 
