@@ -7,6 +7,12 @@
       "skillPath": "plugins/backend-development/skills/architecture-patterns/SKILL.md",
       "computedHash": "a66aaa5aa49b75bec12b6270dcde8794b1f0cc75fbb9ecb999e43f8b723b461f"
     },
+    "logic-audit": {
+      "source": "srinitude/skills",
+      "sourceType": "github",
+      "skillPath": "skills/logic-audit/SKILL.md",
+      "computedHash": "a9341da0cc193308f46450c57ed76a562d26c25eb16fce69567e6348d9bbbe34"
+    },
     "next-best-practices": {
       "source": "vercel-labs/openreview",
       "sourceType": "github",
