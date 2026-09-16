@@ -31,6 +31,12 @@
       "skillPath": ".claude/skills/tauri-v2/SKILL.md",
       "computedHash": "377c61c46cf48c35b942042bc8abb9a039049a47f37d7f12b4f491d012777490"
     },
+    "technical-writing": {
+      "source": "vercel/eve",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/technical-writing/SKILL.md",
+      "computedHash": "99be8fec19ea801cc708abea5d3a1ffa1fecc76c52cff90c1dfc45e39271a092"
+    },
     "vercel-react-best-practices": {
       "source": "vercel-labs/openreview",
       "sourceType": "github",
