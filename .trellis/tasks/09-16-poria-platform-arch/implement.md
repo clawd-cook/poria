@@ -40,6 +40,7 @@ infra-persistence ←─── channel-migration ←─── resource-layer
 **包路径**: `packages/core/`
 
 **交付物**:
+
 - `core/types/` — 共享类型定义（Pipeline, Stage, RepoConfig, DemandMetadata, IssueClass, IssuePolicy）
 - `core/contracts/` — IChannel, IResource, ICommand, ISkill 四种能力契约接口
 - `core/pipeline/state-machine.ts` — Pipeline/Stage 状态流转
@@ -56,6 +57,7 @@ infra-persistence ←─── channel-migration ←─── resource-layer
 **包路径**: `packages/infrastructure/`
 
 **交付物**:
+
 - `store/schema.ts` — SQLite 建表（Design §7）+ migration
 - `store/pipeline-repo.ts` — Pipeline CRUD + saveStageTx 事务写入（Design §14 F10）
 - `store/event-store.ts` — 事件追加/查询
@@ -75,6 +77,7 @@ infra-persistence ←─── channel-migration ←─── resource-layer
 **包路径**: `packages/channels/`
 
 **交付物**:
+
 - `xingyun/` — 迁移自 `@dj-lib/poria-channel-xingyun`（JACP 客户端 + 链接解析 + 分支绑定）
 - `joyspace/` — 迁移自 `@dj-lib/poria-channel-joyspace`（JoySpace → Markdown 导出）
 - `coding/` — 迁移自 `@dj-lib/poria-channel-coding`（EasyCI 仓库/分支/MR）+ 新增 getMrStatus、findMr（Design A11）
@@ -88,6 +91,7 @@ infra-persistence ←─── channel-migration ←─── resource-layer
 **包路径**: `packages/resources/`
 
 **交付物**:
+
 - `claude/agent-pool.ts` — Agent SDK startup() + query() 调度（Design A7）
 - `claude/output-guard.ts` — 文件范围/diff 量/依赖安全检查（Design §6.1）
 - `claude/session-tracker.ts` — session_id 管理
@@ -101,6 +105,7 @@ infra-persistence ←─── channel-migration ←─── resource-layer
 **包路径**: `packages/commands/pipeline/` + `packages/skills/`
 
 **交付物**:
+
 - `commands/pipeline/executor.ts` — PipelineExecutor 主循环（Design §4.1 最终版）
 - `commands/pipeline/worker.ts` — PipelineWorker 队列消费 + MR 轮询（Design §14 F1）
 - `commands/pipeline/rollback.ts` — 回滚机制（Design §6.3 + F-10 幂等保护）
@@ -114,6 +119,7 @@ infra-persistence ←─── channel-migration ←─── resource-layer
 **包路径**: `packages/commands/`
 
 **交付物**:
+
 - `pipeline/` — submit, status, list, resume, cancel, rollback, replay 命令
 - `auth/` — login, logout, status 命令
 - `workspace/` — enter, exit, status 命令

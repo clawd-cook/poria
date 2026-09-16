@@ -23,28 +23,28 @@
 
 Pipeline 阶段复用 poria-mvp 已验证的 7-step 模型，改为**自动执行**：
 
-| 阶段 | 输入 | 输出 | 自动化程度 |
-|------|------|------|-----------|
-| init | 行云卡片链接 | 项目目录 + PRD.md | 全自动 |
-| review-prd | PRD.md | PRD_REVIEW.md (P0/P1/P2) | 全自动，P0 未答 → 京ME 通知产品 |
-| design | PRD + PRD_REVIEW | TRD.md | 全自动 |
-| workspace | 项目配置 | Git worktree + 分支 | 全自动 |
-| dev | TRD.md | 代码变更 | AI Agent 静默执行 |
-| cr | 代码 diff | CR_REPORT.md + 门禁评分 | AI Agent 执行 + 门禁检查 |
-| deploy | 门禁通过 | Build + Push + MR + 标记可合并 | 全自动，**人工一键确认合并** |
+| 阶段       | 输入             | 输出                           | 自动化程度                      |
+| ---------- | ---------------- | ------------------------------ | ------------------------------- |
+| init       | 行云卡片链接     | 项目目录 + PRD.md              | 全自动                          |
+| review-prd | PRD.md           | PRD_REVIEW.md (P0/P1/P2)       | 全自动，P0 未答 → 京ME 通知产品 |
+| design     | PRD + PRD_REVIEW | TRD.md                         | 全自动                          |
+| workspace  | 项目配置         | Git worktree + 分支            | 全自动                          |
+| dev        | TRD.md           | 代码变更                       | AI Agent 静默执行               |
+| cr         | 代码 diff        | CR_REPORT.md + 门禁评分        | AI Agent 执行 + 门禁检查        |
+| deploy     | 门禁通过         | Build + Push + MR + 标记可合并 | 全自动，**人工一键确认合并**    |
 
 ### R3: MR 合并准入门禁
 
 **deploy 阶段不直接合并**，而是通过门禁检查后自动标记 MR 可合并，通知人工一键确认：
 
-| 门禁项 | 条件 | 不通过处理 |
-|--------|------|-----------|
-| CI 构建 | build 成功 + 无编译错误 | 重试 → 通知开发者 |
-| 单测覆盖 | 新增代码测试覆盖率 ≥ 阈值（可配置，默认 80%） | 通知开发者 |
-| CR 评分 | AI CR 评分 ≥ 阈值（可配置，默认 B+） | 重跑 CR → 通知开发者 |
-| 安全扫描 | 无高危/严重漏洞 | 通知开发者 + 安全团队 |
-| 变更量检查 | diff 行数 ≤ 阈值（可配置，默认 500 行） | 标记需人工 review |
-| 合并冲突 | 无冲突 | 通知开发者 |
+| 门禁项     | 条件                                          | 不通过处理            |
+| ---------- | --------------------------------------------- | --------------------- |
+| CI 构建    | build 成功 + 无编译错误                       | 重试 → 通知开发者     |
+| 单测覆盖   | 新增代码测试覆盖率 ≥ 阈值（可配置，默认 80%） | 通知开发者            |
+| CR 评分    | AI CR 评分 ≥ 阈值（可配置，默认 B+）          | 重跑 CR → 通知开发者  |
+| 安全扫描   | 无高危/严重漏洞                               | 通知开发者 + 安全团队 |
+| 变更量检查 | diff 行数 ≤ 阈值（可配置，默认 500 行）       | 标记需人工 review     |
+| 合并冲突   | 无冲突                                        | 通知开发者            |
 
 门禁全部通过 → 自动创建 MR → 标记为"门禁通过，可合并" → 京ME 通知 MR reviewer 一键确认合并。
 
@@ -125,17 +125,17 @@ Pipeline 阶段复用 poria-mvp 已验证的 7-step 模型，改为**自动执�
 
 已有包 `@dj-lib/poria-*` 存在于 `submodules/poria/packages/` 中（已发布到 registry.m.jd.com），设计意图是将其**吸收迁移**到主仓 `packages/` 中并重命名为能力导向的包结构。具体映射：
 
-| 来源包（submodules/poria/） | 迁移目标（packages/） | 复用内容 |
-|---|---|---|
-| `@dj-lib/poria-plugin-sdk` | `core/contracts/` | Channel/Resource 接口定义，直接复制并重构为四种能力契约 |
-| `@dj-lib/poria-core` (channel) | `core/pipeline/` + `infrastructure/store/` | 事件模型和 append/read/watch 原语，适配为 Pipeline 事件 |
-| `@dj-lib/poria-core` (task) | `core/types/` | TrellisTaskRecord schema 的字段参考 |
-| `@dj-lib/poria-core` (mem) | `infrastructure/` (后续) | 跨会话记忆，P1 不迁移 |
-| `@dj-lib/poria-channel-coding` | `channels/coding/` | EasyCI HTTP 客户端代码，直接迁移 |
-| `@dj-lib/poria-channel-joyspace` | `channels/joyspace/` | JoySpace export 逻辑，直接迁移 |
-| `@dj-lib/poria-channel-xingyun` | `channels/xingyun/` | JACP 客户端代码，直接迁移，增加链接解析 |
-| `@dj-lib/poria-resource-terminal` | `resources/terminal/` | Shell exec 实现，直接迁移 |
-| `@dj-lib/poria-auth` | `infrastructure/auth/` | SSO cookie 提取，直接迁移 |
+| 来源包（submodules/poria/）       | 迁移目标（packages/）                      | 复用内容                                                |
+| --------------------------------- | ------------------------------------------ | ------------------------------------------------------- |
+| `@dj-lib/poria-plugin-sdk`        | `core/contracts/`                          | Channel/Resource 接口定义，直接复制并重构为四种能力契约 |
+| `@dj-lib/poria-core` (channel)    | `core/pipeline/` + `infrastructure/store/` | 事件模型和 append/read/watch 原语，适配为 Pipeline 事件 |
+| `@dj-lib/poria-core` (task)       | `core/types/`                              | TrellisTaskRecord schema 的字段参考                     |
+| `@dj-lib/poria-core` (mem)        | `infrastructure/` (后续)                   | 跨会话记忆，P1 不迁移                                   |
+| `@dj-lib/poria-channel-coding`    | `channels/coding/`                         | EasyCI HTTP 客户端代码，直接迁移                        |
+| `@dj-lib/poria-channel-joyspace`  | `channels/joyspace/`                       | JoySpace export 逻辑，直接迁移                          |
+| `@dj-lib/poria-channel-xingyun`   | `channels/xingyun/`                        | JACP 客户端代码，直接迁移，增加链接解析                 |
+| `@dj-lib/poria-resource-terminal` | `resources/terminal/`                      | Shell exec 实现，直接迁移                               |
+| `@dj-lib/poria-auth`              | `infrastructure/auth/`                     | SSO cookie 提取，直接迁移                               |
 
 - 迁移方式：源码复制 + 重构（非 npm install），迁移后主仓不再依赖 `@dj-lib/` 外部包
 - submodules/poria/ 作为只读参考，不作为运行时依赖

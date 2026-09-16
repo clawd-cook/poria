@@ -7,6 +7,7 @@
 **Exports:** `initDatabase(dbPath: string): Database.Database`
 
 **Logic:**
+
 1. Opens SQLite at `dbPath` with `better-sqlite3`
 2. Enables WAL mode: `PRAGMA journal_mode = WAL`
 3. Enables foreign keys: `PRAGMA foreign_keys = ON`
@@ -15,6 +16,7 @@
 6. Current schema version = 1 (initial tables, no further migrations yet)
 
 **SQL DDL (exact):**
+
 ```sql
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL,
@@ -83,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_pipeline ON audit_log(pipeline_id);
 ```
 
 **Migration logic:**
+
 ```
 SELECT MAX(version) as version FROM schema_version
 -- If currentVersion < 1:
@@ -99,10 +102,12 @@ INSERT INTO schema_version (version, applied_at) VALUES (1, <now ISO>)
 **Exports:** `class SqlitePipelineStore`
 
 **Row types (internal):**
+
 - `PipelineRow`: `{ id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at }`
 - `StageRow`: `{ id, pipeline_id, name, status, skill_id, retry_count, max_retries, input, output, gate_results, issue, rollback, agent_session_id, started_at, completed_at }`
 
 **Helpers:**
+
 - `toJson(value)` → `JSON.stringify` or `null`
 - `fromJson<T>(value)` → `JSON.parse` or `undefined`
 - `toIso(date)` → ISO string or `null`
@@ -112,16 +117,16 @@ INSERT INTO schema_version (version, applied_at) VALUES (1, <now ISO>)
 
 **Prepared Statements (all set up in constructor):**
 
-| Statement | SQL |
-|---|---|
-| `insertPipeline` | `INSERT INTO pipelines (id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at) VALUES (...)` |
-| `insertStage` | `INSERT INTO stages (pipeline_id, name, status, skill_id, retry_count, max_retries, input, output, gate_results, issue, rollback, agent_session_id, started_at, completed_at) VALUES (...)` |
-| `selectPipeline` | `SELECT * FROM pipelines WHERE id = ?` |
-| `selectStages` | `SELECT * FROM stages WHERE pipeline_id = ? ORDER BY id ASC` |
-| `selectByStatus` | `SELECT * FROM pipelines WHERE status = ?` |
-| `updatePipelineStmt` | `UPDATE pipelines SET status=@status, has_regressed=@has_regressed, config=@config, demand_name=@demand_name, updated_at=@updated_at WHERE id=@id` |
-| `updateStageStmt` | `UPDATE stages SET status=@status, skill_id=@skill_id, retry_count=@retry_count, max_retries=@max_retries, input=@input, output=@output, gate_results=@gate_results, issue=@issue, rollback=@rollback, agent_session_id=@agent_session_id, started_at=@started_at, completed_at=@completed_at WHERE id=@id` |
-| `insertEvent` | `INSERT INTO events (pipeline_id, kind, payload, created_at) VALUES (...)` |
+| Statement            | SQL                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `insertPipeline`     | `INSERT INTO pipelines (id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at) VALUES (...)`                                                                                                                                                   |
+| `insertStage`        | `INSERT INTO stages (pipeline_id, name, status, skill_id, retry_count, max_retries, input, output, gate_results, issue, rollback, agent_session_id, started_at, completed_at) VALUES (...)`                                                                                                                 |
+| `selectPipeline`     | `SELECT * FROM pipelines WHERE id = ?`                                                                                                                                                                                                                                                                      |
+| `selectStages`       | `SELECT * FROM stages WHERE pipeline_id = ? ORDER BY id ASC`                                                                                                                                                                                                                                                |
+| `selectByStatus`     | `SELECT * FROM pipelines WHERE status = ?`                                                                                                                                                                                                                                                                  |
+| `updatePipelineStmt` | `UPDATE pipelines SET status=@status, has_regressed=@has_regressed, config=@config, demand_name=@demand_name, updated_at=@updated_at WHERE id=@id`                                                                                                                                                          |
+| `updateStageStmt`    | `UPDATE stages SET status=@status, skill_id=@skill_id, retry_count=@retry_count, max_retries=@max_retries, input=@input, output=@output, gate_results=@gate_results, issue=@issue, rollback=@rollback, agent_session_id=@agent_session_id, started_at=@started_at, completed_at=@completed_at WHERE id=@id` |
+| `insertEvent`        | `INSERT INTO events (pipeline_id, kind, payload, created_at) VALUES (...)`                                                                                                                                                                                                                                  |
 
 **Methods:**
 
@@ -149,10 +154,12 @@ INSERT INTO schema_version (version, applied_at) VALUES (1, <now ISO>)
 **Exports:** `class EventStore`
 
 **SQL:**
+
 - `SELECT * FROM events WHERE pipeline_id = ? ORDER BY seq ASC`
 - `SELECT * FROM events WHERE pipeline_id = ? AND kind = ? ORDER BY seq ASC`
 
 **Methods:**
+
 1. `queryByPipeline(pipelineId)` → `PipelineEvent[]`
 2. `queryByKind(pipelineId, kind)` → `PipelineEvent[]`
 
@@ -165,14 +172,17 @@ Both deserialize `payload` JSON → PipelineEvent, restoring `timestamp` from IS
 **Exports:** `class AuditStore`, `type AuditAction`, `interface AuditEntry`
 
 **Types:**
+
 - `AuditAction = "git_commit" | "git_push" | "mr_create" | "mr_merge" | "branch_delete"`
 - `AuditEntry = { pipelineId, stage?, action: AuditAction, operator, detail: Record<string, unknown> }`
 
 **SQL:**
+
 - INSERT: `INSERT INTO audit_log (pipeline_id, stage, action, operator, detail, created_at) VALUES (...)`
 - SELECT: `SELECT * FROM audit_log WHERE pipeline_id = ? ORDER BY created_at ASC`
 
 **Methods:**
+
 1. `record(entry)` — INSERT with detail as JSON string
 2. `queryByPipeline(pipelineId)` → `(AuditEntry & { id, createdAt })[]`
 
@@ -185,12 +195,14 @@ Both deserialize `payload` JSON → PipelineEvent, restoring `timestamp` from IS
 #### PipelineQueue
 
 **SQL:**
+
 - Enqueue: `INSERT OR IGNORE INTO queue (pipeline_id, priority, enqueued_at) VALUES (?, ?, datetime('now'))`
 - Dequeue select: `SELECT pipeline_id FROM queue ORDER BY priority DESC, enqueued_at ASC LIMIT 1`
 - Dequeue delete: `DELETE FROM queue WHERE pipeline_id = ?`
 - Size: `SELECT COUNT(*) as count FROM queue`
 
 **Methods:**
+
 1. `enqueue(pipelineId, priority=0)` — Idempotent via `INSERT OR IGNORE`
 2. `dequeue()` → `string | null` — Atomic SELECT + DELETE in transaction
 3. `size()` → `number`
@@ -202,6 +214,7 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Dependencies:** `fs`, `path`, `process.pid`, `process.kill(pid, 0)` for liveness check
 
 **Methods:**
+
 1. `acquireLock()` → `bool` — Read PID from file, check `kill(pid, 0)`, write own PID if dead/absent
 2. `releaseLock()` — Delete lock file
 3. `isLocked()` → `bool` — Check if file exists with live PID
@@ -215,10 +228,12 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports:** `class PipelineRecovery`, `interface IWorktreeCleaner`, `interface IHumanLoopNotifier`, `interface RecoveryResult`
 
 **Injected deps (DI interfaces):**
+
 - `IWorktreeCleaner { cleanDirtyState(repoName, pipelineId): Promise<void> }`
 - `IHumanLoopNotifier { renotify(pipeline, stage): Promise<void> }`
 
 **Method: `async recoverAll(): Promise<RecoveryResult>`**
+
 1. Find all RUNNING pipelines via `store.findByStatus("running")`
 2. For each: find interrupted stage (status=running), clean worktree for dev/cr stages, mark as failed, increment retryCount, save with events
 3. Find all BLOCKED pipelines, re-notify via humanLoop if has blocked stage with issue
@@ -233,6 +248,7 @@ File-based PID lock at `<lockDir>/worker.lock`.
 #### EventArchiver
 
 **Method: `async archive(retentionDays=30): Promise<ArchiveResult>`**
+
 - SELECT terminal pipelines past retention: `SELECT id, created_at FROM pipelines WHERE status IN ('completed','cancelled','failed') AND updated_at < ?`
 - For each: SELECT events → write to `<archiveDir>/<YYYY-MM>/events-<pipelineId>.jsonl` (one JSON line per event)
 - Bulk DELETE: `DELETE FROM events WHERE pipeline_id IN (SELECT id FROM pipelines WHERE status IN (...) AND updated_at < ?)`
@@ -242,6 +258,7 @@ File-based PID lock at `<lockDir>/worker.lock`.
 #### EventReplayService
 
 **Method: `async replayAll(pipelineId): Promise<PipelineEvent[]>`**
+
 - Check live SQLite events first
 - Fall back to scanning `<archiveDir>/*/events-<pipelineId>.jsonl`
 - Read JSONL via `readline.createInterface(fs.createReadStream(...))`
@@ -253,6 +270,7 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports:** `class DatabaseBackup`
 
 **Methods:**
+
 1. `async backup(dbPath, backupDir): Promise<string>` — Uses `better-sqlite3`'s `db.backup()` API, writes to `poria-YYYYMMDD.db`
 2. `cleanup(backupDir, retainDays=7): number` — Parse dates from `poria-YYYYMMDD.db` filenames, delete old ones
 
@@ -267,16 +285,19 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports (all functions, no class):**
 
 **Types:**
+
 - `JacpCredentials = { username: string, cookie: string }`
 - `AuthStatus = { loggedIn: boolean, username?: string }`
 - `StoredAuth` (internal) = JacpCredentials + `updatedAt: string`
 
 **Constants:**
+
 - `USER_DIR_NAME = ".poria"`
 - `AUTH_FILE_NAME = "auth.json"`
 - `ERP_COOKIE_NAME = "erp_erp"`
 
 **Functions:**
+
 1. `getUserRoot(home?)` → `path.join(home || homedir(), ".poria")`
 2. `getAuthFilePath(userRoot?)` → `path.join(userRoot, "auth.json")`
 3. `redactCookie(cookie)` → `"xxxx...yyyy (N chars)"`
@@ -299,10 +320,12 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports:** `readBrowserCookies(domains?, browser?)`, `type BrowserCookie`, `DEFAULT_COOKIE_DOMAINS`
 
 **Types:**
+
 - `BrowserCookie = { name?, value?, domain?, path?, secure?, expires? }`
 - `DEFAULT_COOKIE_DOMAINS = ["jd.com", "coding.jd.com"]`
 
 **Logic:**
+
 1. Dynamic import of `@rookie-rs/api` (optional dep — itself a Rust crate via napi)
 2. Calls `rookie.chrome(domains)` or `rookie.load(domains)` etc.
 3. Filters cookies by domain matching, deduplicates by name (keeping most specific domain)
@@ -317,9 +340,11 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports:** `class CredentialGuard`, `class AuthExpiredDuringPipelineError`, `type ApiProbe`
 
 **Types:**
+
 - `ApiProbe = (credentials: JacpCredentials) => Promise<void>` (DI for testability)
 
 **Class: `CredentialGuard`**
+
 - Constructor takes `probe: ApiProbe` and optional `userRoot`
 - Method: `async ensureValid(credentials): Promise<JacpCredentials>`
   1. Call `probe(credentials)` — if succeeds, return credentials
@@ -341,6 +366,7 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports:** `loadConfig(overrides?): PoriaConfig`, `interface PoriaConfig`
 
 **PoriaConfig structure:**
+
 ```ts
 {
   gates: { crScoreThreshold: string, testCoverageThreshold: number, diffSizeThreshold: number },
@@ -351,12 +377,14 @@ File-based PID lock at `<lockDir>/worker.lock`.
 ```
 
 **Default values:**
+
 - gates: `"B+"`, 80, 500
 - timeouts: 30k, 120k, 300k, 600k, 1800k, 300k ms
 - retry: 3, 5000, 60000, 86400000 ms
 - paths: `workspace/db/poria.db`, `workspace/archive`, `workspace/db/backup`, `workspace/logs`
 
 **Logic:**
+
 1. Try loading `poria.config.json` from CWD
 2. Read env vars: `PORIA_CR_SCORE_THRESHOLD`, `PORIA_TEST_COVERAGE_THRESHOLD`, `PORIA_DIFF_SIZE_THRESHOLD`
 3. Deep merge: defaults → file → env → programmatic overrides
@@ -372,11 +400,13 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports:** `createLogger(options?): ILogger`, `class JsonLogger`, `interface ILogger`, `type LogLevel`, `interface LogContext`
 
 **Types:**
+
 - `LogLevel = "debug" | "info" | "warn" | "error"`
 - `LogContext = { pipelineId?, stageName?, [key]: unknown }`
 - `ILogger` — `debug/info/warn/error(msg, ctx?)` + `child(defaultCtx): ILogger`
 
 **JsonLogger:**
+
 - Outputs one JSON line per log entry to `process.stderr` (default writer)
 - Format: `{ timestamp, level, message, ...defaultContext, ...context }`
 - Respects min level filtering
@@ -393,6 +423,7 @@ File-based PID lock at `<lockDir>/worker.lock`.
 **Exports:** `class InMemoryMetricsCollector`, interfaces `IMetricsCollector`, `MetricEntry`, `MetricsSnapshot`
 
 **IMetricsCollector interface (26 methods):**
+
 - Generic: `incrementCounter(name, labels?)`, `recordHistogram(name, value, labels?)`
 - Pipeline: `recordPipelineCreated/Completed/Failed`
 - Stage: `recordStageComplete/Retry/Failure`
@@ -403,6 +434,7 @@ File-based PID lock at `<lockDir>/worker.lock`.
 - Snapshot: `snapshot(): MetricsSnapshot`
 
 **Internal state:**
+
 - `counters: Map<string, number>` — key is `name{label="val",...}`
 - `histograms: Map<string, number[]>` — same key format, stores all observations
 
@@ -431,6 +463,7 @@ Appends JSON snapshot line to file. Creates directory if needed.
 **Exports:** `class PluginLoader`, `interface IPluginLoader`
 
 **Simple in-memory registry (Map<string, unknown>):**
+
 - `register(id, instance)` — store by ID like `"channel:xingyun"`
 - `load<T>(id)` → retrieve or throw
 - `has(id)` → boolean
@@ -443,25 +476,25 @@ No filesystem scanning, no dynamic imports. Pure MVP manual registration.
 
 ## Summary: Dependencies for Rust Migration
 
-| Node.js API | Rust Equivalent |
-|---|---|
-| `better-sqlite3` | `rusqlite` (already in workspace) |
-| `fs.readFileSync/writeFileSync` | `std::fs::read_to_string/write` |
-| `fs.mkdirSync(recursive)` | `std::fs::create_dir_all` |
-| `fs.renameSync` | `std::fs::rename` |
-| `fs.chmodSync` | `std::os::unix::fs::PermissionsExt` |
-| `fs.unlinkSync` | `std::fs::remove_file` |
-| `os.homedir()` | `dirs::home_dir()` |
-| `path.join/resolve/dirname/basename` | `std::path::PathBuf` methods |
-| `process.pid` | `std::process::id()` |
-| `process.kill(pid, 0)` | `libc::kill(pid, 0)` / `nix::sys::signal::kill` |
-| `process.env` | `std::env::var()` |
-| `process.stderr.write` | `eprintln!` / `tracing` |
-| `readline.createInterface` | `std::io::BufRead::lines()` |
-| `JSON.stringify/parse` | `serde_json::to_string/from_str` |
-| `structuredClone` | `.clone()` on `#[derive(Clone)]` |
-| `@rookie-rs/api` | `rookie` crate (same Rust library) |
-| `better-sqlite3 db.backup()` | `rusqlite::backup::Backup` |
+| Node.js API                          | Rust Equivalent                                 |
+| ------------------------------------ | ----------------------------------------------- |
+| `better-sqlite3`                     | `rusqlite` (already in workspace)               |
+| `fs.readFileSync/writeFileSync`      | `std::fs::read_to_string/write`                 |
+| `fs.mkdirSync(recursive)`            | `std::fs::create_dir_all`                       |
+| `fs.renameSync`                      | `std::fs::rename`                               |
+| `fs.chmodSync`                       | `std::os::unix::fs::PermissionsExt`             |
+| `fs.unlinkSync`                      | `std::fs::remove_file`                          |
+| `os.homedir()`                       | `dirs::home_dir()`                              |
+| `path.join/resolve/dirname/basename` | `std::path::PathBuf` methods                    |
+| `process.pid`                        | `std::process::id()`                            |
+| `process.kill(pid, 0)`               | `libc::kill(pid, 0)` / `nix::sys::signal::kill` |
+| `process.env`                        | `std::env::var()`                               |
+| `process.stderr.write`               | `eprintln!` / `tracing`                         |
+| `readline.createInterface`           | `std::io::BufRead::lines()`                     |
+| `JSON.stringify/parse`               | `serde_json::to_string/from_str`                |
+| `structuredClone`                    | `.clone()` on `#[derive(Clone)]`                |
+| `@rookie-rs/api`                     | `rookie` crate (same Rust library)              |
+| `better-sqlite3 db.backup()`         | `rusqlite::backup::Backup`                      |
 
 ## Key State/Singleton Patterns
 

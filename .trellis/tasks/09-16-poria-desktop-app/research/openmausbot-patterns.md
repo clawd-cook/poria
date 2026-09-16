@@ -22,14 +22,14 @@ OpenMausBot uses a **Node.js harness server** (`server/`) that React talks to vi
 
 ## 3. Key UI Components
 
-| OpenMausBot | Poria Equivalent |
-|---|---|
-| **ChatView** — scrollable message list, branching, streaming deltas | **PipelineTimeline** — stage progress with event log |
-| **ApprovalCard** — tool permission ask with Allow/Deny/Always | **HumanLoopCard** — pipeline needs human input (fix/skip/cancel) |
-| **ActivityRun** — tool call chip (name, ok/fail, summary) | **StageActivity** — skill execution chip (stage name, status) |
-| **Sidebar** — bot list, sections, unread badges | **PipelineSidebar** — pipeline list, status badges |
-| **SettingsModal** — API keys, model config, approval mode | **SettingsPanel** — gate thresholds, timeout config, auth |
-| **BotSettingsDialog** — per-bot name/model/approval/tools | **PipelineDetail** — per-pipeline config, demand metadata |
+| OpenMausBot                                                         | Poria Equivalent                                                 |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **ChatView** — scrollable message list, branching, streaming deltas | **PipelineTimeline** — stage progress with event log             |
+| **ApprovalCard** — tool permission ask with Allow/Deny/Always       | **HumanLoopCard** — pipeline needs human input (fix/skip/cancel) |
+| **ActivityRun** — tool call chip (name, ok/fail, summary)           | **StageActivity** — skill execution chip (stage name, status)    |
+| **Sidebar** — bot list, sections, unread badges                     | **PipelineSidebar** — pipeline list, status badges               |
+| **SettingsModal** — API keys, model config, approval mode           | **SettingsPanel** — gate thresholds, timeout config, auth        |
+| **BotSettingsDialog** — per-bot name/model/approval/tools           | **PipelineDetail** — per-pipeline config, demand metadata        |
 
 Notable patterns: Card-based interaction (OptionCardData with `answered`/`dismissed` state), lucide-react icons, Tailwind CSS classes, i18n via `t()` function.
 

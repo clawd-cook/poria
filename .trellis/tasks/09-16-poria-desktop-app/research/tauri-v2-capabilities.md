@@ -4,25 +4,25 @@
 
 Three primitives, each maps to a Poria use case:
 
-| Primitive | Direction | Use in Poria |
-|-----------|-----------|-------------|
-| **Commands** (`invoke`) | Frontend→Rust→Frontend | Pipeline CRUD, auth login, config read/write |
+| Primitive                    | Direction                      | Use in Poria                                               |
+| ---------------------------- | ------------------------------ | ---------------------------------------------------------- |
+| **Commands** (`invoke`)      | Frontend→Rust→Frontend         | Pipeline CRUD, auth login, config read/write               |
 | **Events** (`emit`/`listen`) | Bidirectional, fire-and-forget | Pipeline state changes broadcast, human-loop notifications |
-| **Channels** (`Channel<T>`) | Rust→Frontend streaming | Real-time 7-stage progress, event log streaming |
+| **Channels** (`Channel<T>`)  | Rust→Frontend streaming        | Real-time 7-stage progress, event log streaming            |
 
 **Key for Poria**: Pipeline execution progress is the perfect Channel use case — `Channel<PipelineEvent>` with a tagged union (`#[serde(tag="event", content="data")]`) maps directly to the existing `PipelineEvent` types in `@poria/core`.
 
 ## Plugin Ecosystem (Actionable for MVP)
 
-| Plugin | Poria Use | Priority |
-|--------|-----------|----------|
-| `tauri-plugin-shell` | Sidecar (Node.js worker) + git operations | P0 |
-| `tauri-plugin-notification` | Pipeline completion / human-loop alerts | P0 |
-| `tauri-plugin-store` | User preferences, gate thresholds | P1 |
-| `tauri-plugin-dialog` | File picker for project paths | P1 |
-| `tauri-plugin-opener` | Open MR URLs, worktree paths | P1 |
-| `tauri-plugin-updater` | Auto-update desktop app | P2 |
-| `tauri-plugin-deep-link` | `poria://submit?link=...` from browser | P2 |
+| Plugin                      | Poria Use                                 | Priority |
+| --------------------------- | ----------------------------------------- | -------- |
+| `tauri-plugin-shell`        | Sidecar (Node.js worker) + git operations | P0       |
+| `tauri-plugin-notification` | Pipeline completion / human-loop alerts   | P0       |
+| `tauri-plugin-store`        | User preferences, gate thresholds         | P1       |
+| `tauri-plugin-dialog`       | File picker for project paths             | P1       |
+| `tauri-plugin-opener`       | Open MR URLs, worktree paths              | P1       |
+| `tauri-plugin-updater`      | Auto-update desktop app                   | P2       |
+| `tauri-plugin-deep-link`    | `poria://submit?link=...` from browser    | P2       |
 
 **No tauri-plugin-sql needed** — our SQLite lives in the Node.js sidecar (better-sqlite3 via `@poria/infrastructure`). Rust side only needs to read pipeline status via IPC to the sidecar.
 

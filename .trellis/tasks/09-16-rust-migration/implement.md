@@ -126,7 +126,7 @@ cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace -- -D warnings
 
-# Phase 8+ 
+# Phase 8+
 pnpm tauri dev
 ```
 

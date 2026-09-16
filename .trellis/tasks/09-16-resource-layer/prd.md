@@ -29,12 +29,12 @@
 - **Session 持久化**：dispatch 返回 `sessionId`，用于断点续跑
 - **各 Stage 调度参数**：
 
-| Stage | allowedTools | maxBudgetUsd | maxTurns | timeoutMs |
-|-------|-------------|-------------|----------|-----------|
-| review_prd | Read, Grep | $1 | 10 | 5min |
-| design | Read, Edit, Grep | $3 | 20 | 10min |
-| dev | Read, Edit, Bash, Glob, Grep | $10 | 100 | 30min |
-| cr | Read, Bash, Grep | $5 | 30 | 15min |
+| Stage      | allowedTools                 | maxBudgetUsd | maxTurns | timeoutMs |
+| ---------- | ---------------------------- | ------------ | -------- | --------- |
+| review_prd | Read, Grep                   | $1           | 10       | 5min      |
+| design     | Read, Edit, Grep             | $3           | 20       | 10min     |
+| dev        | Read, Edit, Bash, Glob, Grep | $10          | 100      | 30min     |
+| cr         | Read, Bash, Grep             | $5           | 30       | 15min     |
 
 ### R2: Agent 输出拦截（output-guard.ts）
 
@@ -64,13 +64,13 @@
 - **Shell exec**：spawn 子进程执行命令，捕获 stdout/stderr
 - **超时档位**（Design A4）：
 
-| 档位 | 超时 | 用途 |
-|------|------|------|
-| GIT_SHORT | 30,000ms | git status, git branch |
-| GIT_MEDIUM | 120,000ms | git push, git revert, git merge |
-| GIT_LONG | 300,000ms | git clone, 大仓 git push |
-| BUILD | 600,000ms | npm run build |
-| AGENT | 1,800,000ms | Claude Code agent 执行 |
+| 档位       | 超时        | 用途                            |
+| ---------- | ----------- | ------------------------------- |
+| GIT_SHORT  | 30,000ms    | git status, git branch          |
+| GIT_MEDIUM | 120,000ms   | git push, git revert, git merge |
+| GIT_LONG   | 300,000ms   | git clone, 大仓 git push        |
+| BUILD      | 600,000ms   | npm run build                   |
+| AGENT      | 1,800,000ms | Claude Code agent 执行          |
 
 - **超时处理**：超时后 kill 子进程 + 抛出 `TimeoutError`
 - **cwd 支持**：每次 exec 可指定工作目录

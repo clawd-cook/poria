@@ -4,13 +4,13 @@
 
 ## 1. 设计原则
 
-| # | 原则 | 含义 |
-|---|------|------|
-| P1 | **能力即包** | 每个 channel/resource/command/skill 独立发包、独立测试、独立安装 |
-| P2 | **自举安装** | Poria 通过 init 装载自身产出的能力 + 第三方能力 |
-| P3 | **门禁前置** | 每个阶段有明确的准入/准出条件，不满足不推进 |
-| P4 | **可恢复** | SQLite 持久化 + 断点续跑，任何中断都能恢复 |
-| P5 | **可审计** | 全部 git 操作留痕，Agent 输出受限，一键回滚 |
+| #   | 原则         | 含义                                                             |
+| --- | ------------ | ---------------------------------------------------------------- |
+| P1  | **能力即包** | 每个 channel/resource/command/skill 独立发包、独立测试、独立安装 |
+| P2  | **自举安装** | Poria 通过 init 装载自身产出的能力 + 第三方能力                  |
+| P3  | **门禁前置** | 每个阶段有明确的准入/准出条件，不满足不推进                      |
+| P4  | **可恢复**   | SQLite 持久化 + 断点续跑，任何中断都能恢复                       |
+| P5  | **可审计**   | 全部 git 操作留痕，Agent 输出受限，一键回滚                      |
 
 ---
 
@@ -24,6 +24,7 @@
 ```
 
 已有实现 `parseXingyunDemandUrl()` (channel-xingyun/src/demandUrl.ts) 可直接复用：
+
 - 白名单域名：`*.xingyun.jd.com`
 - 从 query param `demandId` 或 `id` 提取 `demandId: number`
 - 从路径 `/demands/view/{code}` 提取 `demandCode: string`
@@ -74,17 +75,17 @@ import { parseXingyunDemandUrl } from "./demandUrl.js";
 ```typescript
 // 基于真实 JACP API 响应字段
 interface DemandMetadata {
-  demandId: number;             // URL query param
-  demandCode: string;           // URL path (如 "JL3R4IV4")
-  name: string;                 // 需求名称
-  status?: number;              // 需求状态码
-  projectId?: number;           // 所属项目
-  processor?: UserVO;           // 处理人 { erp, name, orgId, orgName }
-  proposer?: UserVO;            // 提出人（MR reviewer 候选）
-  receiver?: UserVO;            // 接收人
-  prdUrl: string;               // 从卡片附件解析出的 JoySpace PRD 链接
-  attachments: CardAttachment[];// 全部卡片附件 { tagName, name, url }
-  rawLink: string;              // 原始链接，用于审计
+  demandId: number; // URL query param
+  demandCode: string; // URL path (如 "JL3R4IV4")
+  name: string; // 需求名称
+  status?: number; // 需求状态码
+  projectId?: number; // 所属项目
+  processor?: UserVO; // 处理人 { erp, name, orgId, orgName }
+  proposer?: UserVO; // 提出人（MR reviewer 候选）
+  receiver?: UserVO; // 接收人
+  prdUrl: string; // 从卡片附件解析出的 JoySpace PRD 链接
+  attachments: CardAttachment[]; // 全部卡片附件 { tagName, name, url }
+  rawLink: string; // 原始链接，用于审计
 }
 
 // 辅助：自动生成分支名（已有实现）
@@ -183,18 +184,18 @@ poria/
 // packages/commands/pipeline/executor.ts
 
 const STAGE_SKILL_MAP: Record<StageEnum, string> = {
-  init:       "skill:init",
+  init: "skill:init",
   review_prd: "skill:review-prd",
-  design:     "skill:gen-trd",
-  workspace:  "skill:workspace",
-  dev:        "skill:gen-code",
-  cr:         "skill:code-review",  // 内部调用 skill:security-scan
-  deploy:     "skill:deploy",       // 单 repo 逻辑，MultiRepo 由编排器分发
+  design: "skill:gen-trd",
+  workspace: "skill:workspace",
+  dev: "skill:gen-code",
+  cr: "skill:code-review", // 内部调用 skill:security-scan
+  deploy: "skill:deploy", // 单 repo 逻辑，MultiRepo 由编排器分发
 };
 
 class PipelineExecutor {
   constructor(
-    private store: SqlitePipelineStore,   // 统一事务写入
+    private store: SqlitePipelineStore, // 统一事务写入
     private loader: IPluginLoader,
     private metrics: IMetricsCollector,
     private multiRepo: MultiRepoOrchestrator,
@@ -230,13 +231,14 @@ class PipelineExecutor {
 
       try {
         // 多仓库 dev/cr/deploy → MultiRepoOrchestrator 分发
-        const result = (pipeline.repos.length > 1 && ["dev", "cr", "deploy"].includes(stage.name))
-          ? await this.executeMultiRepo(stage, pipeline)
-          : await this.executeSingleRepo(stage, pipeline);
+        const result =
+          pipeline.repos.length > 1 && ["dev", "cr", "deploy"].includes(stage.name)
+            ? await this.executeMultiRepo(stage, pipeline)
+            : await this.executeSingleRepo(stage, pipeline);
 
         // ── 阶段出口门禁（cr stage: CR 评分检查 → 可能回退到 dev）
         const exitGates = GateEngine.evaluate(result, pipeline.config.gates, "stage_exit");
-        const regress = exitGates.details.find(g => !g.pass && g.rule.onFail === "regress");
+        const regress = exitGates.details.find((g) => !g.pass && g.rule.onFail === "regress");
 
         if (regress) {
           if (!pipeline.hasRegressed) {
@@ -287,7 +289,6 @@ class PipelineExecutor {
         pipeline.advanceToNext();
         await this.store.saveStageTx(stage, pipeline, pipeline.popEvents());
         this.metrics.recordStageComplete(stage);
-
       } catch (error) {
         await this.handleStageError(pipeline, stage, error);
         if (stage.status === "blocked") {
@@ -330,7 +331,9 @@ class PipelineExecutor {
   /** 多仓库编排 — per-repo 分发 skill */
   private async executeMultiRepo(stage: Stage, pipeline: Pipeline): Promise<GuardedResult> {
     const repoResults = await this.multiRepo.execute(
-      pipeline.repos, stage.name, this.buildContext(pipeline),
+      pipeline.repos,
+      stage.name,
+      this.buildContext(pipeline),
     );
     if (!repoResults.allSuccess) throw new MultiRepoPartialFailure(repoResults);
     const mergedOutput = this.mergeRepoOutputs(repoResults.results);
@@ -339,11 +342,18 @@ class PipelineExecutor {
   }
 
   /** L-06: 生成 rollback 指令 */
-  private buildRollbackInstructions(stage: Stage, result: SkillOutput, pipeline: Pipeline): RollbackInstruction {
+  private buildRollbackInstructions(
+    stage: Stage,
+    result: SkillOutput,
+    pipeline: Pipeline,
+  ): RollbackInstruction {
     const commands: RollbackCommand[] = [];
     if (stage.name === "workspace") {
       for (const repo of pipeline.repos) {
-        commands.push({ type: "remove_worktree", params: { repo: repo.name, path: result.output?.worktreePath } });
+        commands.push({
+          type: "remove_worktree",
+          params: { repo: repo.name, path: result.output?.worktreePath },
+        });
         commands.push({ type: "delete_branch", params: { repo: repo.name, branch: repo.branch } });
       }
     }
@@ -368,7 +378,10 @@ class PipelineExecutor {
 // packages/infrastructure/store/recovery.ts
 
 class PipelineRecovery {
-  constructor(private store: IPipelineStore, private executor: PipelineExecutor) {}
+  constructor(
+    private store: IPipelineStore,
+    private executor: PipelineExecutor,
+  ) {}
 
   /** 系统启动时调用 */
   async recoverAll(): Promise<void> {
@@ -376,13 +389,11 @@ class PipelineRecovery {
     const running = await this.store.findByStatus("running");
 
     for (const pipeline of running) {
-      const lastCompleted = pipeline.stages.findLast(s => s.status === "completed");
-      const resumeFrom = lastCompleted
-        ? pipeline.stages.indexOf(lastCompleted) + 1
-        : 0;
+      const lastCompleted = pipeline.stages.findLast((s) => s.status === "completed");
+      const resumeFrom = lastCompleted ? pipeline.stages.indexOf(lastCompleted) + 1 : 0;
 
       // F7: 精细恢复 — 区分已 commit 和未 commit 的变更
-      const interrupted = pipeline.stages.find(s => s.status === "running");
+      const interrupted = pipeline.stages.find((s) => s.status === "running");
       if (interrupted) {
         if (interrupted.name === "dev" || interrupted.name === "cr") {
           const worktree = await this.loader.load<IWorktreeResource>("resource:worktree");
@@ -406,7 +417,7 @@ class PipelineRecovery {
     // F4: BLOCKED Pipeline 恢复后重新发送京ME提醒
     const blocked = await this.store.findByStatus("blocked");
     for (const p of blocked) {
-      const blockedStage = p.stages.find(s => s.status === "blocked");
+      const blockedStage = p.stages.find((s) => s.status === "blocked");
       if (blockedStage?.issue) {
         // 重启后京ME轮询已断开，需重建轮询或重新通知
         await this.humanLoop.renotify(p, blockedStage);
@@ -426,18 +437,26 @@ class PipelineQueue {
 
   /** 入队 — 幂等（pipeline_id UNIQUE） */
   enqueue(pipelineId: string, priority = 0): void {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT OR IGNORE INTO queue (pipeline_id, priority, enqueued_at)
       VALUES (?, ?, datetime('now'))
-    `).run(pipelineId, priority);
+    `,
+      )
+      .run(pipelineId, priority);
   }
 
   /** 出队 — 原子操作，事务内取出 + 删除，防止重复消费 */
   dequeue(): string | null {
     return this.db.transaction(() => {
-      const row = this.db.prepare(`
+      const row = this.db
+        .prepare(
+          `
         SELECT pipeline_id FROM queue ORDER BY priority DESC, enqueued_at ASC LIMIT 1
-      `).get() as { pipeline_id: string } | undefined;
+      `,
+        )
+        .get() as { pipeline_id: string } | undefined;
       if (!row) return null;
       this.db.prepare(`DELETE FROM queue WHERE pipeline_id = ?`).run(row.pipeline_id);
       return row.pipeline_id;
@@ -457,7 +476,10 @@ class PipelineWorker {
       await this.recovery.recoverAll();
       while (!this.stopped) {
         const pipelineId = this.queue.dequeue();
-        if (!pipelineId) { await sleep(5000); continue; }
+        if (!pipelineId) {
+          await sleep(5000);
+          continue;
+        }
         await this.executor.run(pipelineId);
       }
     } finally {
@@ -482,8 +504,8 @@ interface GateRule {
   id: string;
   name: string;
   enabled: boolean;
-  threshold: unknown;          // 类型由具体门禁决定
-  onFail: "block" | "warn";   // block: 阻断流水线; warn: 标记但继续
+  threshold: unknown; // 类型由具体门禁决定
+  onFail: "block" | "warn"; // block: 阻断流水线; warn: 标记但继续
 }
 
 interface GateResult {
@@ -496,24 +518,74 @@ interface GateResult {
 
 const DEFAULT_GATES: GateRule[] = [
   // deploy 门禁
-  { id: "ci_build",       name: "CI 构建",   enabled: true, threshold: null, onFail: "block", gatePhase: "deploy" },
-  { id: "test_coverage",  name: "测试覆盖率", enabled: true, threshold: 80,   onFail: "block", gatePhase: "deploy" },
-  { id: "security_scan",  name: "安全扫描",   enabled: true, threshold: null, onFail: "block", gatePhase: "stage_exit" },
-  { id: "diff_size",      name: "变更量",     enabled: true, threshold: 500,  onFail: "warn",  gatePhase: "deploy" },
-  { id: "merge_conflict", name: "合并冲突",   enabled: true, threshold: null, onFail: "block", gatePhase: "deploy" },
+  {
+    id: "ci_build",
+    name: "CI 构建",
+    enabled: true,
+    threshold: null,
+    onFail: "block",
+    gatePhase: "deploy",
+  },
+  {
+    id: "test_coverage",
+    name: "测试覆盖率",
+    enabled: true,
+    threshold: 80,
+    onFail: "block",
+    gatePhase: "deploy",
+  },
+  {
+    id: "security_scan",
+    name: "安全扫描",
+    enabled: true,
+    threshold: null,
+    onFail: "block",
+    gatePhase: "stage_exit",
+  },
+  {
+    id: "diff_size",
+    name: "变更量",
+    enabled: true,
+    threshold: 500,
+    onFail: "warn",
+    gatePhase: "deploy",
+  },
+  {
+    id: "merge_conflict",
+    name: "合并冲突",
+    enabled: true,
+    threshold: null,
+    onFail: "block",
+    gatePhase: "deploy",
+  },
   // 阶段出口门禁（cr stage 完成后检查）
-  { id: "cr_score",       name: "CR 评分",   enabled: true, threshold: "B+", onFail: "regress", gatePhase: "stage_exit", regressTo: "dev" },
+  {
+    id: "cr_score",
+    name: "CR 评分",
+    enabled: true,
+    threshold: "B+",
+    onFail: "regress",
+    gatePhase: "stage_exit",
+    regressTo: "dev",
+  },
 ];
 
 class GateEngine {
   /** phase 参数过滤：只执行匹配当前阶段的门禁规则 */
-  static evaluate(result: StageResult, rules: GateRule[], phase: "stage_exit" | "deploy"): GateEvaluation {
-    const applicable = rules.filter(r => r.enabled && r.gatePhase === phase);
-    const results: GateResult[] = applicable
-      .map(rule => this.evaluateOne(rule, result));
+  static evaluate(
+    result: StageResult,
+    rules: GateRule[],
+    phase: "stage_exit" | "deploy",
+  ): GateEvaluation {
+    const applicable = rules.filter((r) => r.enabled && r.gatePhase === phase);
+    const results: GateResult[] = applicable.map((rule) => this.evaluateOne(rule, result));
 
-    const blockingFailures = results.filter(r => !r.pass && this.ruleFor(r.ruleId, rules).onFail === "block");
-    const warnFailures = results.filter(r => !r.pass && this.ruleFor(r.ruleId, rules).onFail === "warn");
+    const blockingFailures = results.filter(
+      (r) => !r.pass && this.ruleFor(r.ruleId, rules).onFail === "block",
+    );
+    const warnFailures = results.filter(
+      (r) => !r.pass && this.ruleFor(r.ruleId, rules).onFail === "warn",
+    );
 
     return {
       allPass: blockingFailures.length === 0,
@@ -568,8 +640,8 @@ class GateEngine {
 // packages/resources/claude/output-guard.ts
 
 interface OutputGuardConfig {
-  allowedPaths: string[];      // TRD 定义的目标文件路径模式
-  maxDiffLines: number;        // 单次变更最大行数（默认 500）
+  allowedPaths: string[]; // TRD 定义的目标文件路径模式
+  maxDiffLines: number; // 单次变更最大行数（默认 500）
   blockedDependencies: string[]; // 已知恶意包名单
 }
 
@@ -583,11 +655,14 @@ class OutputGuard {
     //    空值 fallback: trdScope 为空/undefined 时跳过文件范围检查（warn 而非 block），
     //    因为空 trdScope 更可能是 TRD 提取失败而非"禁止修改所有文件"
     if (config.allowedPaths.length === 0) {
-      violations.push({ type: "trd_scope_empty", severity: "warn",
-        message: "trdScope is empty — file scope guard skipped, all changes allowed" });
+      violations.push({
+        type: "trd_scope_empty",
+        severity: "warn",
+        message: "trdScope is empty — file scope guard skipped, all changes allowed",
+      });
     } else {
       for (const file of agentOutput.changedFiles) {
-        if (!config.allowedPaths.some(p => minimatch(file, p))) {
+        if (!config.allowedPaths.some((p) => minimatch(file, p))) {
           violations.push({ type: "out_of_scope", file, severity: "block" });
         }
       }
@@ -611,7 +686,7 @@ class OutputGuard {
     }
 
     return {
-      pass: violations.filter(v => v.severity === "block").length === 0,
+      pass: violations.filter((v) => v.severity === "block").length === 0,
       violations,
     };
   }
@@ -638,7 +713,7 @@ interface AuditEntry {
   pipelineId: string;
   stage?: string;
   action: AuditAction;
-  operator: string;         // 实际操作身份（提交者的 SSO）
+  operator: string; // 实际操作身份（提交者的 SSO）
   detail: Record<string, unknown>;
 }
 ```
@@ -660,14 +735,14 @@ interface RollbackInstruction {
 class PipelineRollback {
   async execute(pipelineId: string): Promise<RollbackResult> {
     const pipeline = await this.store.load(pipelineId);
-    const mrStage = pipeline.stages.find(s => s.name === "deploy");
+    const mrStage = pipeline.stages.find((s) => s.name === "deploy");
     const mrMerged = mrStage?.output?.mrMerged === true;
 
     if (mrMerged) {
       // 已合并：per-repo 创建 revert commit + revert MR (L-04: 处理所有仓库)
       const revertMrUrls: string[] = [];
       for (const repo of pipeline.repos) {
-        const repoOutput = mrStage.output.perRepo?.find(r => r.repo === repo.name);
+        const repoOutput = mrStage.output.perRepo?.find((r) => r.repo === repo.name);
         if (!repoOutput?.mergeCommitHash) continue;
 
         const revertBranch = `revert/${pipeline.id}/${repo.name}`;
@@ -694,7 +769,7 @@ class PipelineRollback {
 
     // 未合并：按 Stage 逆序执行 rollback 指令
     const instructions = pipeline.stages
-      .filter(s => s.rollback)
+      .filter((s) => s.rollback)
       .sort((a, b) => b.stageIndex - a.stageIndex);
 
     for (const inst of instructions) {
@@ -789,11 +864,15 @@ class EventArchiver {
     const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
 
     // 1. 找到所有已完成且超过保留期的 Pipeline
-    const archived = this.db.prepare(`
+    const archived = this.db
+      .prepare(
+        `
       SELECT id FROM pipelines
       WHERE status IN ('completed', 'cancelled', 'failed')
       AND updated_at < ?
-    `).all(cutoff);
+    `,
+      )
+      .all(cutoff);
 
     // F8: 按 Pipeline ID 归档（每个 Pipeline 一个文件）
     // 目录: workspace/archive/{YYYY-MM}/events-{pipelineId}.jsonl
@@ -804,11 +883,15 @@ class EventArchiver {
     }
 
     // 3. 从 events 表删除（pipelines/stages 元数据保留）
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       DELETE FROM events WHERE pipeline_id IN (
         SELECT id FROM pipelines WHERE status IN ('completed','cancelled','failed') AND updated_at < ?
       )
-    `).run(cutoff);
+    `,
+      )
+      .run(cutoff);
 
     return { archivedCount: archived.length };
   }
@@ -818,9 +901,9 @@ class EventArchiver {
 class EventReplayService {
   async replayAll(pipelineId: string): Promise<PipelineEvent[]> {
     // 1. 先查 SQLite events 表
-    const liveEvents = this.db.prepare(
-      `SELECT * FROM events WHERE pipeline_id = ? ORDER BY seq`
-    ).all(pipelineId);
+    const liveEvents = this.db
+      .prepare(`SELECT * FROM events WHERE pipeline_id = ? ORDER BY seq`)
+      .all(pipelineId);
 
     if (liveEvents.length > 0) return liveEvents;
 
@@ -858,49 +941,54 @@ class EventReplayService {
 ```typescript
 enum IssueClass {
   // 可自动重试
-  COMPILATION_ERROR  = "compilation_error",
-  TEST_FAILURE       = "test_failure",
-  AGENT_TIMEOUT      = "agent_timeout",
-  LLM_RATE_LIMIT     = "llm_rate_limit",
+  COMPILATION_ERROR = "compilation_error",
+  TEST_FAILURE = "test_failure",
+  AGENT_TIMEOUT = "agent_timeout",
+  LLM_RATE_LIMIT = "llm_rate_limit",
 
   // 需人工介入
-  REQUIREMENT_AMBIG  = "requirement_ambiguous",
-  PRD_INVALID        = "prd_invalid",          // PRD 为空/格式异常/导出失败
-  MERGE_CONFLICT     = "merge_conflict",
-  LOW_CR_SCORE       = "low_cr_score",
-  DIFF_TOO_LARGE     = "diff_too_large",
+  REQUIREMENT_AMBIG = "requirement_ambiguous",
+  PRD_INVALID = "prd_invalid", // PRD 为空/格式异常/导出失败
+  MERGE_CONFLICT = "merge_conflict",
+  LOW_CR_SCORE = "low_cr_score",
+  DIFF_TOO_LARGE = "diff_too_large",
 
   // 需运维介入
-  PERMISSION_DENIED  = "permission_denied",
-  INFRA_FAILURE      = "infra_failure",
+  PERMISSION_DENIED = "permission_denied",
+  INFRA_FAILURE = "infra_failure",
 
   // 安全相关
   SECURITY_VIOLATION = "security_violation",
-  OUT_OF_SCOPE       = "out_of_scope_change",
+  OUT_OF_SCOPE = "out_of_scope_change",
 
   // 认证相关
-  AUTH_EXPIRED       = "auth_expired",
+  AUTH_EXPIRED = "auth_expired",
 
-  UNKNOWN            = "unknown",
+  UNKNOWN = "unknown",
 }
 
 // 每种 IssueClass 的处理策略
 const ISSUE_POLICIES: Record<IssueClass, IssuePolicy> = {
-  compilation_error:     { autoRetry: 3, notifyRole: "developer", escalateAt: "2h" },
-  test_failure:          { autoRetry: 3, notifyRole: "developer", escalateAt: "2h" },
-  agent_timeout:         { autoRetry: 1, notifyRole: "developer", escalateAt: "1h" },
-  llm_rate_limit:        { autoRetry: 5, notifyRole: null,        escalateAt: null, retryDelay: "5m" },
-  requirement_ambiguous: { autoRetry: 0, notifyRole: "product",   escalateAt: "4h" },
-  prd_invalid:           { autoRetry: 0, notifyRole: "product",   escalateAt: "4h" },
-  merge_conflict:        { autoRetry: 0, notifyRole: "developer", escalateAt: "2h" },
-  low_cr_score:          { autoRetry: 1, notifyRole: "developer", escalateAt: "4h" },
-  diff_too_large:        { autoRetry: 0, notifyRole: "developer", escalateAt: "4h" },
-  permission_denied:     { autoRetry: 0, notifyRole: "ops",       escalateAt: "1h" },
-  infra_failure:         { autoRetry: 0, notifyRole: "ops",       escalateAt: "1h" },
-  security_violation:    { autoRetry: 0, notifyRole: "security",  escalateAt: "1h" },
-  out_of_scope_change:   { autoRetry: 0, notifyRole: "developer", escalateAt: "2h" },
-  auth_expired:          { autoRetry: 1, notifyRole: "developer", escalateAt: "1h", note: "自动尝试刷新浏览器 cookie" },
-  unknown:               { autoRetry: 0, notifyRole: "developer", escalateAt: "2h" },
+  compilation_error: { autoRetry: 3, notifyRole: "developer", escalateAt: "2h" },
+  test_failure: { autoRetry: 3, notifyRole: "developer", escalateAt: "2h" },
+  agent_timeout: { autoRetry: 1, notifyRole: "developer", escalateAt: "1h" },
+  llm_rate_limit: { autoRetry: 5, notifyRole: null, escalateAt: null, retryDelay: "5m" },
+  requirement_ambiguous: { autoRetry: 0, notifyRole: "product", escalateAt: "4h" },
+  prd_invalid: { autoRetry: 0, notifyRole: "product", escalateAt: "4h" },
+  merge_conflict: { autoRetry: 0, notifyRole: "developer", escalateAt: "2h" },
+  low_cr_score: { autoRetry: 1, notifyRole: "developer", escalateAt: "4h" },
+  diff_too_large: { autoRetry: 0, notifyRole: "developer", escalateAt: "4h" },
+  permission_denied: { autoRetry: 0, notifyRole: "ops", escalateAt: "1h" },
+  infra_failure: { autoRetry: 0, notifyRole: "ops", escalateAt: "1h" },
+  security_violation: { autoRetry: 0, notifyRole: "security", escalateAt: "1h" },
+  out_of_scope_change: { autoRetry: 0, notifyRole: "developer", escalateAt: "2h" },
+  auth_expired: {
+    autoRetry: 1,
+    notifyRole: "developer",
+    escalateAt: "1h",
+    note: "自动尝试刷新浏览器 cookie",
+  },
+  unknown: { autoRetry: 0, notifyRole: "developer", escalateAt: "2h" },
 };
 ```
 
@@ -931,33 +1019,33 @@ const ISSUE_POLICIES: Record<IssueClass, IssuePolicy> = {
 
 interface PoriaMetrics {
   // Pipeline 维度
-  pipeline_total: Counter;                   // 创建总数
-  pipeline_completed: Counter;               // 完成总数
-  pipeline_failed: Counter;                  // 失败总数
-  pipeline_duration_seconds: Histogram;      // 端到端耗时
+  pipeline_total: Counter; // 创建总数
+  pipeline_completed: Counter; // 完成总数
+  pipeline_failed: Counter; // 失败总数
+  pipeline_duration_seconds: Histogram; // 端到端耗时
 
   // Stage 维度
-  stage_duration_seconds: Histogram;         // 按 stage name 分桶
-  stage_retry_total: Counter;                // 重试次数
-  stage_failure_total: Counter;              // 按 issue_class 分桶
+  stage_duration_seconds: Histogram; // 按 stage name 分桶
+  stage_retry_total: Counter; // 重试次数
+  stage_failure_total: Counter; // 按 issue_class 分桶
 
   // Agent 维度
-  agent_execution_seconds: Histogram;        // Agent 执行耗时
-  agent_output_lines: Histogram;             // Agent 输出行数
-  agent_output_guard_violations: Counter;    // 输出拦截次数
+  agent_execution_seconds: Histogram; // Agent 执行耗时
+  agent_output_lines: Histogram; // Agent 输出行数
+  agent_output_guard_violations: Counter; // 输出拦截次数
 
   // LLM 维度
-  llm_tokens_total: Counter;                 // 按 stage + model 分桶
-  llm_cost_total: Counter;                   // 估算成本
+  llm_tokens_total: Counter; // 按 stage + model 分桶
+  llm_cost_total: Counter; // 估算成本
 
   // 人工介入维度
-  human_loop_total: Counter;                 // 人工介入次数
-  human_loop_response_seconds: Histogram;    // 人工回复耗时
-  human_loop_escalation_total: Counter;      // 升级次数
+  human_loop_total: Counter; // 人工介入次数
+  human_loop_response_seconds: Histogram; // 人工回复耗时
+  human_loop_escalation_total: Counter; // 升级次数
 
   // 门禁维度
-  gate_pass_total: Counter;                  // 门禁通过次数（按门禁项）
-  gate_fail_total: Counter;                  // 门禁失败次数（按门禁项）
+  gate_pass_total: Counter; // 门禁通过次数（按门禁项）
+  gate_fail_total: Counter; // 门禁失败次数（按门禁项）
 }
 ```
 
@@ -973,7 +1061,7 @@ interface RepoConfig {
   gitUrl: string;
   branch: string;
   baseBranch: string;
-  dependsOn?: string[];    // 依赖的仓库名
+  dependsOn?: string[]; // 依赖的仓库名
   buildCmd?: string;
 }
 
@@ -994,7 +1082,7 @@ class MultiRepoOrchestrator {
 
     for (const repo of sorted) {
       // 熔断检查
-      const blockedBy = repo.dependsOn?.find(d => failed.has(d));
+      const blockedBy = repo.dependsOn?.find((d) => failed.has(d));
       if (blockedBy) {
         results.push({ repo: repo.name, status: "skipped", reason: `依赖 ${blockedBy} 失败` });
         failed.add(repo.name); // 传递熔断
@@ -1022,28 +1110,28 @@ class MultiRepoOrchestrator {
 
 ## 11. 灰度策略（P2 优化采纳）
 
-| 阶段 | 范围 | 策略 |
-|------|------|------|
-| Alpha | 团队内部 + 非核心需求 | 全流程跑通，MR 不自动标记，手动 review |
-| Beta | 扩展到合作团队 | 门禁自动 + 一键确认，限制每日 Pipeline 数量 |
-| GA | 全量开放 | 完整门禁 + 一键确认，监控指标告警就绪 |
+| 阶段  | 范围                  | 策略                                        |
+| ----- | --------------------- | ------------------------------------------- |
+| Alpha | 团队内部 + 非核心需求 | 全流程跑通，MR 不自动标记，手动 review      |
+| Beta  | 扩展到合作团队        | 门禁自动 + 一键确认，限制每日 Pipeline 数量 |
+| GA    | 全量开放              | 完整门禁 + 一键确认，监控指标告警就绪       |
 
 ---
 
 ## 12. 关键决策汇总
 
-| # | 决策 | 选择 | 理由 |
-|---|------|------|------|
-| D1 | 入口 | 行云卡片链接（唯一入口） | 含 demandId + demandCode，通过 API 获取完整元数据 |
-| D2 | 合并策略 | 门禁自动 + 人工一键确认 | 平衡自动化和安全 |
-| D3 | 持久化 | SQLite 本地文件 | 零部署、事务性好、断点续跑 |
-| D4 | 并发 | 单 Pipeline 串行 + 队列 | MVP 够用，后续开放并发 |
-| D5 | 包组织 | 按能力类型分组 | 独立发包/测试/安装 |
-| D6 | 编排 | 异步 Executor + 每步持久化 | 非同步 for 循环，可恢复 |
-| D7 | Agent 输出 | OutputGuard 拦截 | 文件范围/diff 量/依赖安全 |
-| D8 | 回滚 | 每 Stage 记录 rollback 指令 | 一键回滚 git 变更 |
-| D9 | 监控 | 结构化指标（成功率/耗时/token/人工率） | 可观测性基线 |
-| D10 | 灰度 | Alpha → Beta → GA | 渐进开放，非核心需求先行 |
+| #   | 决策       | 选择                                   | 理由                                              |
+| --- | ---------- | -------------------------------------- | ------------------------------------------------- |
+| D1  | 入口       | 行云卡片链接（唯一入口）               | 含 demandId + demandCode，通过 API 获取完整元数据 |
+| D2  | 合并策略   | 门禁自动 + 人工一键确认                | 平衡自动化和安全                                  |
+| D3  | 持久化     | SQLite 本地文件                        | 零部署、事务性好、断点续跑                        |
+| D4  | 并发       | 单 Pipeline 串行 + 队列                | MVP 够用，后续开放并发                            |
+| D5  | 包组织     | 按能力类型分组                         | 独立发包/测试/安装                                |
+| D6  | 编排       | 异步 Executor + 每步持久化             | 非同步 for 循环，可恢复                           |
+| D7  | Agent 输出 | OutputGuard 拦截                       | 文件范围/diff 量/依赖安全                         |
+| D8  | 回滚       | 每 Stage 记录 rollback 指令            | 一键回滚 git 变更                                 |
+| D9  | 监控       | 结构化指标（成功率/耗时/token/人工率） | 可观测性基线                                      |
+| D10 | 灰度       | Alpha → Beta → GA                      | 渐进开放，非核心需求先行                          |
 
 ---
 
@@ -1056,6 +1144,7 @@ class MultiRepoOrchestrator {
 **问题**：Design §5 使用 `labels: ["poria-auto", "gates-passed"]`，但 `CodingChannel.createMergeRequest` 接口和实现均无 `labels` 参数。底层是 GitLab API v4，虽然 GitLab 支持 labels，但 Poria wrapper 没有透传。
 
 **修正**：
+
 - P1 不依赖 MR labels。门禁状态写入 MR description（已实现）和 Pipeline 事件日志
 - warn gate 信息追加到 `description` 参数（在调用 `createMergeRequest` 之前拼接）
 - 后续如需 labels 支持，在 `channel-coding/mergeRequest.ts` 增加 `labels?: string` 字段透传到 GitLab API
@@ -1064,8 +1153,10 @@ class MultiRepoOrchestrator {
 // 修正后的 deploy skill 调用方式：
 const mrDescription = [
   `## 门禁结果`,
-  ...gateResults.map(g => `- ${g.pass ? "✅" : "❌"} ${g.name}: ${g.message}`),
-  warnGates.length > 0 ? `\n⚠️ 以下项需人工关注:\n${warnGates.map(g => `- ${g.name}`).join("\n")}` : "",
+  ...gateResults.map((g) => `- ${g.pass ? "✅" : "❌"} ${g.name}: ${g.message}`),
+  warnGates.length > 0
+    ? `\n⚠️ 以下项需人工关注:\n${warnGates.map((g) => `- ${g.name}`).join("\n")}`
+    : "",
   `\n[TRD](${trdUrl}) | [CR Report](${crReportUrl})`,
 ].join("\n");
 
@@ -1096,13 +1187,13 @@ const joyspace = await loader.load<IJoySpaceChannel>("channel:joyspace");
 const { outputPath, title } = await joyspace.exportToMarkdown({
   url: prdUrl,
   outputDir: `${projectDir}/source`,
-  outputName: "PRD",           // → source/PRD.md
+  outputName: "PRD", // → source/PRD.md
 });
 
 // 3. 导出结果作为 stage output，供后续 stage 消费
 stage.output = {
   projectDir,
-  prdPath: outputPath,         // 绝对路径
+  prdPath: outputPath, // 绝对路径
   prdTitle: title,
   demandMetadata: metadata,
 };
@@ -1169,24 +1260,24 @@ async run(pipelineId: string): Promise<void> {
 ```typescript
 // 设计约定：不同操作的超时档位
 const TIMEOUT = {
-  GIT_SHORT: 30_000,     // git status, git branch（默认 30s 够用）
-  GIT_MEDIUM: 120_000,   // git push, git revert, git merge（2 分钟）
-  GIT_LONG: 300_000,     // git clone, 大仓 git push（5 分钟）
-  BUILD: 600_000,        // npm run build（10 分钟）
-  AGENT: 1_800_000,      // Claude Code agent 执行（30 分钟）
+  GIT_SHORT: 30_000, // git status, git branch（默认 30s 够用）
+  GIT_MEDIUM: 120_000, // git push, git revert, git merge（2 分钟）
+  GIT_LONG: 300_000, // git clone, 大仓 git push（5 分钟）
+  BUILD: 600_000, // npm run build（10 分钟）
+  AGENT: 1_800_000, // Claude Code agent 执行（30 分钟）
 };
 
 // 示例：rollback 中的 git revert
 await terminal.exec({
   command: `git revert --no-edit ${mergeCommit}`,
   cwd: worktreePath,
-  timeoutMs: TIMEOUT.GIT_MEDIUM,  // 120s
+  timeoutMs: TIMEOUT.GIT_MEDIUM, // 120s
 });
 
 await terminal.exec({
   command: `git push origin ${revertBranch}`,
   cwd: worktreePath,
-  timeoutMs: TIMEOUT.GIT_MEDIUM,  // 120s
+  timeoutMs: TIMEOUT.GIT_MEDIUM, // 120s
 });
 ```
 
@@ -1199,11 +1290,11 @@ await terminal.exec({
 ```typescript
 // workspace stage output
 stage.output = {
-  repos: pipeline.repos.map(repo => ({
+  repos: pipeline.repos.map((repo) => ({
     name: repo.name,
     branch: bindResult.branch,
     baseBranch: bindResult.baseBranch,
-    changeId: bindResult.changeId,  // EasyCI 变更记录 ID，deploy 阶段可能需要
+    changeId: bindResult.changeId, // EasyCI 变更记录 ID，deploy 阶段可能需要
     worktreePath: worktree.path(repo),
   })),
 };
@@ -1262,7 +1353,7 @@ class ClaudeAgentPool {
       options: {
         allowedTools: ["Read", "Edit", "Bash", "Glob", "Grep"],
         permissionMode: "auto",
-        permissionPrompts: "none",  // 永不阻塞等待人工确认
+        permissionPrompts: "none", // 永不阻塞等待人工确认
       },
       initializeTimeoutMs: 60_000,
     });
@@ -1284,14 +1375,18 @@ class ClaudeAgentPool {
         maxBudgetUsd: input.maxBudgetUsd ?? 5.0,
         maxTurns: input.maxTurns ?? 50,
         abortController: controller,
-        persistSession: true,       // 保存 session 用于断点续跑
+        persistSession: true, // 保存 session 用于断点续跑
         model: input.model ?? "sonnet",
         appendSystemPrompt: input.systemPrompt,
         // 安全约束: 不用 bypassPermissions，用 auto + none
         allowedTools: [
-          "Read", "Edit", "Bash", "Glob", "Grep",
+          "Read",
+          "Edit",
+          "Bash",
+          "Glob",
+          "Grep",
           // 按 stage 动态添加:
-          ...input.extraTools ?? [],
+          ...(input.extraTools ?? []),
         ],
       });
 
@@ -1307,7 +1402,7 @@ class ClaudeAgentPool {
       }
 
       // 最后一条 result 消息
-      const resultMsg = messages.findLast(m => m.type === "result");
+      const resultMsg = messages.findLast((m) => m.type === "result");
       return {
         success: true,
         result: resultMsg?.result ?? "",
@@ -1336,14 +1431,14 @@ class ClaudeAgentPool {
 }
 
 interface AgentTaskInput {
-  prompt: string;               // 给 Agent 的指令
-  worktreePath: string;         // Agent 的工作目录
-  systemPrompt?: string;        // 追加系统指令（如 TRD 内容）
-  model?: string;               // 默认 sonnet
-  maxBudgetUsd?: number;        // 默认 $5
-  maxTurns?: number;            // 默认 50
-  timeoutMs?: number;           // 默认 30min
-  extraTools?: string[];        // 额外允许的工具
+  prompt: string; // 给 Agent 的指令
+  worktreePath: string; // Agent 的工作目录
+  systemPrompt?: string; // 追加系统指令（如 TRD 内容）
+  model?: string; // 默认 sonnet
+  maxBudgetUsd?: number; // 默认 $5
+  maxTurns?: number; // 默认 50
+  timeoutMs?: number; // 默认 30min
+  extraTools?: string[]; // 额外允许的工具
   onProgress?: (msg: SDKMessage) => Promise<void>; // 进度回调
 }
 
@@ -1351,20 +1446,20 @@ interface AgentTaskResult {
   success: boolean;
   result?: string;
   error?: string;
-  sessionId?: string;           // 用于断点续跑
-  costUsd?: number;             // LLM 成本
-  messages: SDKMessage[];       // 完整消息流（存入事件日志）
+  sessionId?: string; // 用于断点续跑
+  costUsd?: number; // LLM 成本
+  messages: SDKMessage[]; // 完整消息流（存入事件日志）
 }
 ```
 
 **各 Stage 的 Agent 调度策略**：
 
-| Stage | Agent 用途 | 关键 allowedTools | maxBudgetUsd | maxTurns | timeoutMs |
-|-------|-----------|-------------------|-------------|----------|-----------|
-| review_prd | 分析 PRD 文本 | Read, Grep | $1 | 10 | 5min |
-| design | 生成 TRD | Read, Edit, Grep | $3 | 20 | 10min |
-| dev | 编码 | Read, Edit, Bash, Glob, Grep | $10 | 100 | 30min |
-| cr | 代码审查 | Read, Bash(npm test), Grep | $5 | 30 | 15min |
+| Stage      | Agent 用途    | 关键 allowedTools            | maxBudgetUsd | maxTurns | timeoutMs |
+| ---------- | ------------- | ---------------------------- | ------------ | -------- | --------- |
+| review_prd | 分析 PRD 文本 | Read, Grep                   | $1           | 10       | 5min      |
+| design     | 生成 TRD      | Read, Edit, Grep             | $3           | 20       | 10min     |
+| dev        | 编码          | Read, Edit, Bash, Glob, Grep | $10          | 100      | 30min     |
+| cr         | 代码审查      | Read, Bash(npm test), Grep   | $5           | 30       | 15min     |
 
 **与 OutputGuard 的集成**：
 
@@ -1463,16 +1558,11 @@ class JoyClawBridge {
   async send(message: string, timeoutSec = 120): Promise<string> {
     // 给 JoyClaw agent 发自然语言指令
     // JoyClaw 内部用 joyme_joychat 工具完成发送
-    return this.runAgent(
-      `向 ${target} 发送京ME消息: ${message}`,
-      timeoutSec,
-    );
+    return this.runAgent(`向 ${target} 发送京ME消息: ${message}`, timeoutSec);
   }
 
   async readReplies(chatName: string, since: Date): Promise<string[]> {
-    return this.runAgent(
-      `查看 ${chatName} 聊天中 ${since.toISOString()} 之后的消息`,
-    );
+    return this.runAgent(`查看 ${chatName} 聊天中 ${since.toISOString()} 之后的消息`);
   }
 
   private async runAgent(message: string, timeoutSec = 300): Promise<string> {
@@ -1483,6 +1573,7 @@ class JoyClawBridge {
 ```
 
 **设计约束**：
+
 1. **消息格式是纯文本** — 调用方传自然语言指令给 JoyClaw agent，agent 自行决定如何操作京ME。不能直接控制消息格式（富文本/卡片/按钮）。
 2. **依赖 JoyClaw gateway 常驻** — 如果 gateway 挂了，消息发送超时。需要健康检查。
 3. **回复监听是轮询** — 没有 webhook，只能定期调 JoyClaw "查看最近消息" 来检测回复。
@@ -1500,6 +1591,7 @@ async ensureGatewayAlive(): Promise<void> {
 ```
 
 **对人工回路设计的影响**：
+
 - 原设计的结构化回复格式（"修复"/"跳过"/"取消"）需要 JoyClaw agent 理解并路由。由于 JoyClaw 用内网 LLM，理解能力有限，建议：
   - 通知消息保持简单纯文本
   - 回复解析放宽：不要求精确关键字，用模糊匹配（包含"修复"/"fix" → resume；包含"跳过"/"skip" → skip；包含"取消"/"cancel" → cancel）
@@ -1509,10 +1601,10 @@ async ensureGatewayAlive(): Promise<void> {
 
 **事实**：代码中无显式状态枚举。从 fixture 和 action 名推断的部分映射：
 
-| 状态码 | 含义 | 来源 |
-|--------|------|------|
-| 20 | 沟通中 (communicating) | fixture.ts FIXTURE_DEMAND.status + communicate() 返回 |
-| 30 | 已受理 (accepted) | accept() fixture 返回 demandStatusCode: 30 |
+| 状态码 | 含义                   | 来源                                                  |
+| ------ | ---------------------- | ----------------------------------------------------- |
+| 20     | 沟通中 (communicating) | fixture.ts FIXTURE_DEMAND.status + communicate() 返回 |
+| 30     | 已受理 (accepted)      | accept() fixture 返回 demandStatusCode: 30            |
 
 **代码中从未检查 status 值** — `getDemandById` 返回后不做状态过滤。
 
@@ -1527,7 +1619,7 @@ const KNOWN_ACTIVE_STATUSES = new Set([20, 30]); // 沟通中、已受理
 // 由于映射不完整，采用排除法而非白名单
 
 function isDemandActive(status: number | undefined): boolean {
-  if (status == null) return true;  // status 缺失视为活跃（API 可能省略）
+  if (status == null) return true; // status 缺失视为活跃（API 可能省略）
   // 目前不做状态过滤 — 等收集到完整映射后再加白名单
   // 暂时只在 UI 层展示状态提示，不阻断 Pipeline 创建
   return true;
@@ -1543,13 +1635,13 @@ function isDemandActive(status: number | undefined): boolean {
 
 **事实**：当前 `CodingChannel` 接口不支持以下 deploy 阶段所需能力：
 
-| 能力 | 当前状态 | 需新增 |
-|------|---------|--------|
-| MR labels | 不支持 | 透传 `labels?: string` 到 GitLab API |
-| MR reviewer | 不支持 | 透传 `reviewer_ids?: number[]` |
-| MR 状态查询 | 不支持 | 新增 `getMrStatus(projectId, iid): Promise<MrStatus>` |
-| MR auto merge | 不支持 | 透传 `merge_when_pipeline_succeeds?: boolean` |
-| Push 失败处理 | 无重试 | `git push` 被 pre-receive hook 拒绝时无处理 |
+| 能力          | 当前状态 | 需新增                                                |
+| ------------- | -------- | ----------------------------------------------------- |
+| MR labels     | 不支持   | 透传 `labels?: string` 到 GitLab API                  |
+| MR reviewer   | 不支持   | 透传 `reviewer_ids?: number[]`                        |
+| MR 状态查询   | 不支持   | 新增 `getMrStatus(projectId, iid): Promise<MrStatus>` |
+| MR auto merge | 不支持   | 透传 `merge_when_pipeline_succeeds?: boolean`         |
+| Push 失败处理 | 无重试   | `git push` 被 pre-receive hook 拒绝时无处理           |
 
 **实施建议**：P1 只需新增 `getMrStatus`（用于等待 MR 合并）。其余在 P2+ 按需添加。
 
@@ -1584,10 +1676,7 @@ class PipelineWorker {
       await this.recovery.recoverAll();
 
       // 两个循环并行：队列消费 + MR 轮询
-      await Promise.all([
-        this.consumeQueue(),
-        this.pollMergeRequests(),
-      ]);
+      await Promise.all([this.consumeQueue(), this.pollMergeRequests()]);
     } finally {
       this.releaseLock();
     }
@@ -1597,7 +1686,10 @@ class PipelineWorker {
   private async consumeQueue(): Promise<void> {
     while (!this.stopped) {
       const pipelineId = this.queue.dequeue();
-      if (!pipelineId) { await sleep(5000); continue; }
+      if (!pipelineId) {
+        await sleep(5000);
+        continue;
+      }
       await this.executor.run(pipelineId);
       // run() 在 deploy 创建 MR 后返回（status = waiting_merge）
       // 或在其他阶段异常后返回（status = blocked/failed）
@@ -1609,25 +1701,28 @@ class PipelineWorker {
     while (!this.stopped) {
       const waiting = await this.store.findByStatus("waiting_merge");
       for (const pipeline of waiting) {
-        const deployOutput = pipeline.stages.find(s => s.name === "deploy")?.output;
+        const deployOutput = pipeline.stages.find((s) => s.name === "deploy")?.output;
         const mrUrls: string[] = deployOutput?.mrUrls ?? [deployOutput?.mrUrl].filter(Boolean);
 
         const statuses = await Promise.all(
-          mrUrls.map(url => this.codingChannel.getMrStatus(url))
+          mrUrls.map((url) => this.codingChannel.getMrStatus(url)),
         );
 
-        if (statuses.every(s => s === "merged")) {
+        if (statuses.every((s) => s === "merged")) {
           pipeline.status = "completed";
           await this.store.savePipeline(pipeline);
           await this.eventStore.appendTx(pipeline.id, [PipelineCompletedEvent(pipeline)]);
-        } else if (statuses.some(s => s === "closed")) {
+        } else if (statuses.some((s) => s === "closed")) {
           pipeline.status = "failed";
           await this.store.savePipeline(pipeline);
           // 京ME 通知
         }
         // 超时检查
-        const deployStage = pipeline.stages.find(s => s.name === "deploy");
-        if (deployStage && Date.now() - new Date(deployStage.completedAt!).getTime() > 24 * 3600_000) {
+        const deployStage = pipeline.stages.find((s) => s.name === "deploy");
+        if (
+          deployStage &&
+          Date.now() - new Date(deployStage.completedAt!).getTime() > 24 * 3600_000
+        ) {
           // 24h 超时 → 升级通知
           await this.humanLoop.escalate(pipeline, "MR 超过 24 小时未合并");
         }
@@ -1739,8 +1834,8 @@ const DEFAULT_GATES: GateRule[] = [
 ```typescript
 // Executor — regressTo 时注入 CR 反馈到 dev stage input
 if (gateResult.onFail === "regress") {
-  const crOutput = pipeline.stages.find(s => s.name === "cr")?.output;
-  const devStage = pipeline.stages.find(s => s.name === gateResult.regressTo);
+  const crOutput = pipeline.stages.find((s) => s.name === "cr")?.output;
+  const devStage = pipeline.stages.find((s) => s.name === gateResult.regressTo);
 
   // 重置 dev stage 但注入 CR 反馈
   devStage.status = "pending";
@@ -1748,12 +1843,12 @@ if (gateResult.onFail === "regress") {
     ...devStage.input,
     crFeedback: {
       previousScore: crOutput.crScore,
-      findings: crOutput.findings,       // CR 具体问题列表
+      findings: crOutput.findings, // CR 具体问题列表
       instruction: "上次 CR 评分不达标，请根据以下问题修改代码后重新提交",
     },
   };
   // 同时重置 cr stage
-  const crStage = pipeline.stages.find(s => s.name === "cr");
+  const crStage = pipeline.stages.find((s) => s.name === "cr");
   crStage.status = "pending";
   crStage.output = undefined;
 }
@@ -1960,8 +2055,8 @@ class DeploySkill implements ISkill {
 // mergeRepoOutputs 聚合:
 function mergeRepoOutputs(results: RepoResult[]): StageOutput {
   return {
-    mrUrls: results.map(r => r.output.mrUrl).filter(Boolean),
-    perRepo: results.map(r => ({ repo: r.repo, mrUrl: r.output.mrUrl, mrIid: r.output.mrIid })),
+    mrUrls: results.map((r) => r.output.mrUrl).filter(Boolean),
+    perRepo: results.map((r) => ({ repo: r.repo, mrUrl: r.output.mrUrl, mrIid: r.output.mrIid })),
   };
 }
 ```
@@ -2084,13 +2179,13 @@ const idleChecker = setInterval(() => {
 ```typescript
 // DemandMetadata
 interface DemandMetadata {
-  demandProjectId?: number;    // 行云项目 ID（原 projectId）
+  demandProjectId?: number; // 行云项目 ID（原 projectId）
   // ...
 }
 
 // RepoConfig / workspace output
 interface RepoConfig {
-  gitlabProjectPath: string;   // GitLab project path（原 projectId）
+  gitlabProjectPath: string; // GitLab project path（原 projectId）
   // ...
 }
 ```
@@ -2115,13 +2210,13 @@ for (const stage of pipeline.stages) {
 
 ### CodingChannel 扩展清单（更新）
 
-| 能力 | 优先级 | 用途 |
-|------|--------|------|
-| `getMrStatus(projectPath, iid)` | P1 | MR 合并轮询 |
-| `findMr(query)` | P1 | 幂等 MR 创建（F-03） |
-| `labels?: string` | P2 | MR 标签 |
-| `reviewer_ids?: number[]` | P2 | MR 审批人 |
-| `merge_when_pipeline_succeeds?: boolean` | P3 | CI 通过后自动合并 |
+| 能力                                     | 优先级 | 用途                 |
+| ---------------------------------------- | ------ | -------------------- |
+| `getMrStatus(projectPath, iid)`          | P1     | MR 合并轮询          |
+| `findMr(query)`                          | P1     | 幂等 MR 创建（F-03） |
+| `labels?: string`                        | P2     | MR 标签              |
+| `reviewer_ids?: number[]`                | P2     | MR 审批人            |
+| `merge_when_pipeline_succeeds?: boolean` | P3     | CI 通过后自动合并    |
 
 ---
 

@@ -73,15 +73,15 @@
 
 每个 skill 实现 `ISkill` 接口，支持 fixture 模式：
 
-| Skill | 输入 | 输出 | 关键逻辑 |
-|-------|------|------|----------|
-| init | 行云链接 | projectDir + prdPath + demandMetadata | 链接解析 + JoySpace 导出 PRD |
-| review-prd | PRD.md | PRD_REVIEW.md (P0/P1/P2) | Agent 分析 PRD 文本 |
-| gen-trd | PRD + PRD_REVIEW | TRD.md + trdScope | Agent 生成技术设计，提取允许修改文件列表 |
-| workspace | 项目配置 | worktreePath + branch + changeId + gitlabProjectPath | Git worktree 创建 + 星云分支绑定 |
-| gen-code | TRD.md (+ crFeedback?) | 代码变更 | Agent 编码，OutputGuard 检查产出 |
-| code-review | 代码 diff | CR_REPORT.md + crScore + findings | Agent CR + 内部调用 security-scan |
-| deploy | 门禁通过的代码 | mrUrls + perRepo 状态 | Build + Push + 幂等 MR 创建 |
+| Skill       | 输入                   | 输出                                                 | 关键逻辑                                 |
+| ----------- | ---------------------- | ---------------------------------------------------- | ---------------------------------------- |
+| init        | 行云链接               | projectDir + prdPath + demandMetadata                | 链接解析 + JoySpace 导出 PRD             |
+| review-prd  | PRD.md                 | PRD_REVIEW.md (P0/P1/P2)                             | Agent 分析 PRD 文本                      |
+| gen-trd     | PRD + PRD_REVIEW       | TRD.md + trdScope                                    | Agent 生成技术设计，提取允许修改文件列表 |
+| workspace   | 项目配置               | worktreePath + branch + changeId + gitlabProjectPath | Git worktree 创建 + 星云分支绑定         |
+| gen-code    | TRD.md (+ crFeedback?) | 代码变更                                             | Agent 编码，OutputGuard 检查产出         |
+| code-review | 代码 diff              | CR_REPORT.md + crScore + findings                    | Agent CR + 内部调用 security-scan        |
+| deploy      | 门禁通过的代码         | mrUrls + perRepo 状态                                | Build + Push + 幂等 MR 创建              |
 
 - P1 实现真实逻辑骨架 + fixture fallback，确保 Executor 可驱动
 - 每个 skill 的 `execute(input, ctx)` 返回 `SkillOutput`

@@ -61,22 +61,22 @@ TypeScript `type A = "x" | "y"` → Rust `enum` with `#[serde(rename_all = "snak
 
 关键映射：
 
-| TypeScript | Rust |
-|---|---|
-| `Pipeline` | `struct Pipeline` |
-| `Stage` | `struct Stage` |
-| `PipelineStatus` (union) | `enum PipelineStatus` |
-| `StageStatus` (union) | `enum StageStatus` |
-| `StageEnum` (union) | `enum StageEnum` |
-| `DemandMetadata` | `struct DemandMetadata` |
-| `GateRule/GateResult/GateEvaluation` | `struct GateRule` / `struct GateResult` / `struct GateEvaluation` |
-| `IssueClass` (enum) | `enum IssueClass` |
-| `IssuePolicy` | `struct IssuePolicy` + `lazy_static` map |
-| `PipelineConfig` | `struct PipelineConfig` |
-| `RepoConfig` | `struct RepoConfig` |
-| `RollbackInstruction/RollbackCommand` | `struct RollbackInstruction` / `struct RollbackCommand` |
-| `AgentTaskInput/AgentTaskResult` | `struct AgentTaskInput` / `struct AgentTaskResult` |
-| `TIMEOUT` | `const` 常量 |
+| TypeScript                            | Rust                                                              |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| `Pipeline`                            | `struct Pipeline`                                                 |
+| `Stage`                               | `struct Stage`                                                    |
+| `PipelineStatus` (union)              | `enum PipelineStatus`                                             |
+| `StageStatus` (union)                 | `enum StageStatus`                                                |
+| `StageEnum` (union)                   | `enum StageEnum`                                                  |
+| `DemandMetadata`                      | `struct DemandMetadata`                                           |
+| `GateRule/GateResult/GateEvaluation`  | `struct GateRule` / `struct GateResult` / `struct GateEvaluation` |
+| `IssueClass` (enum)                   | `enum IssueClass`                                                 |
+| `IssuePolicy`                         | `struct IssuePolicy` + `lazy_static` map                          |
+| `PipelineConfig`                      | `struct PipelineConfig`                                           |
+| `RepoConfig`                          | `struct RepoConfig`                                               |
+| `RollbackInstruction/RollbackCommand` | `struct RollbackInstruction` / `struct RollbackCommand`           |
+| `AgentTaskInput/AgentTaskResult`      | `struct AgentTaskInput` / `struct AgentTaskResult`                |
+| `TIMEOUT`                             | `const` 常量                                                      |
 
 #### Contracts (contracts.rs)
 
@@ -148,6 +148,7 @@ Connection 改为 `SQLITE_OPEN_READ_WRITE | SQLITE_OPEN_CREATE`。
 #### Logger
 
 用 `tracing` crate 替代自定义 logger：
+
 ```rust
 pub fn init_logger() {
     tracing_subscriber::fmt().json().init();
@@ -235,15 +236,15 @@ pub struct AppState {
 
 新增 Tauri commands：
 
-| Command | 用途 |
-|---|---|
-| `list_skills` | 返回所有已注册 Skill 元数据 |
-| `get_skill` | 返回单个 Skill 详情 |
-| `list_channels` | 返回所有 Channel 及连接状态 |
-| `get_channel_status` | 检查单个 Channel 可用性 |
-| `submit_pipeline` | **直接执行**（不再转发 sidecar） |
-| `cancel_pipeline` | 直接取消 |
-| `human_loop_respond` | 通过 mpsc channel 发送响应 |
+| Command              | 用途                             |
+| -------------------- | -------------------------------- |
+| `list_skills`        | 返回所有已注册 Skill 元数据      |
+| `get_skill`          | 返回单个 Skill 详情              |
+| `list_channels`      | 返回所有 Channel 及连接状态      |
+| `get_channel_status` | 检查单个 Channel 可用性          |
+| `submit_pipeline`    | **直接执行**（不再转发 sidecar） |
+| `cancel_pipeline`    | 直接取消                         |
+| `human_loop_respond` | 通过 mpsc channel 发送响应       |
 
 Pipeline 执行模型：`submit_pipeline` 在 `tokio::spawn` 中启动异步任务，通过 Tauri emit 推送进度事件。
 

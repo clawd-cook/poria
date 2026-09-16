@@ -22,21 +22,22 @@
 
 **迁移文件清单**:
 
-| 源文件 | 迁移内容 | 备注 |
-|--------|----------|------|
-| `demandUrl.ts` | `parseXingyunDemandUrl()` — 链接解析 | 白名单域名 `*.xingyun.jd.com`，提取 demandId + demandCode |
-| `jacp/client.ts` | JACP HTTP 客户端基础设施 | cookie 注入、错误处理 |
-| `jacp/demands.ts` | `getDemandById()` — GET /openapi/v3/demands/{demandId} | 返回 DemandDetail |
-| `jacp/cards.ts` | `listCardAttachments()` — GET /openapi/v3/cards/code/{demandCode} | 返回 attachments[] |
-| `jacp/prdAttachmentLink.ts` | `isJoySpacePrdLink()` — PRD 链接识别 | JoySpace URL 匹配 |
-| `jacp/easyci.ts` | `bindBranch()` — 分支绑定 | 返回 { branch, changeId, baseBranch } |
-| `jacp/spaces.ts` | 空间相关 API | 按需迁移 |
-| `prd.ts` | `resolvePrdFromAttachments()` — PRD 解析策略 | 单个/多个/歧义/零个 |
-| `git.ts` | `featureBranchName()`, `featureSlug()` — 分支名生成 | 直接复用 |
-| `fixture.ts` | Fixture 模式 mock 数据 | PORIA_XINGYUN_FIXTURE=1 |
-| `index.ts` | 模块导出 | 重构为 IChannel 实现 |
+| 源文件                      | 迁移内容                                                          | 备注                                                      |
+| --------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| `demandUrl.ts`              | `parseXingyunDemandUrl()` — 链接解析                              | 白名单域名 `*.xingyun.jd.com`，提取 demandId + demandCode |
+| `jacp/client.ts`            | JACP HTTP 客户端基础设施                                          | cookie 注入、错误处理                                     |
+| `jacp/demands.ts`           | `getDemandById()` — GET /openapi/v3/demands/{demandId}            | 返回 DemandDetail                                         |
+| `jacp/cards.ts`             | `listCardAttachments()` — GET /openapi/v3/cards/code/{demandCode} | 返回 attachments[]                                        |
+| `jacp/prdAttachmentLink.ts` | `isJoySpacePrdLink()` — PRD 链接识别                              | JoySpace URL 匹配                                         |
+| `jacp/easyci.ts`            | `bindBranch()` — 分支绑定                                         | 返回 { branch, changeId, baseBranch }                     |
+| `jacp/spaces.ts`            | 空间相关 API                                                      | 按需迁移                                                  |
+| `prd.ts`                    | `resolvePrdFromAttachments()` — PRD 解析策略                      | 单个/多个/歧义/零个                                       |
+| `git.ts`                    | `featureBranchName()`, `featureSlug()` — 分支名生成               | 直接复用                                                  |
+| `fixture.ts`                | Fixture 模式 mock 数据                                            | PORIA_XINGYUN_FIXTURE=1                                   |
+| `index.ts`                  | 模块导出                                                          | 重构为 IChannel 实现                                      |
 
 **新增**:
+
 - `demand-guard.ts` — 需求状态判定（Design A10），MVP 阶段不做状态过滤，预留接口
 
 ### M2: joyspace — JoySpace 文档导出
@@ -47,11 +48,11 @@
 
 **迁移文件清单**:
 
-| 源文件 | 迁移内容 | 备注 |
-|--------|----------|------|
+| 源文件      | 迁移内容                                        | 备注                      |
+| ----------- | ----------------------------------------------- | ------------------------- |
 | `export.ts` | `exportToMarkdown()` — JoySpace → Markdown 导出 | 内部处理图片/表格/Mermaid |
-| `vendor/` | 第三方依赖封装 | 按需迁移 |
-| `index.ts` | 模块导出 | 重构为 IChannel 实现 |
+| `vendor/`   | 第三方依赖封装                                  | 按需迁移                  |
+| `index.ts`  | 模块导出                                        | 重构为 IChannel 实现      |
 
 ### M3: coding — EasyCI 仓库/分支/MR 操作
 
@@ -61,19 +62,19 @@
 
 **迁移文件清单**:
 
-| 源文件 | 迁移内容 | 备注 |
-|--------|----------|------|
-| `easyci.ts` | EasyCI HTTP 客户端 | 仓库/分支/CI 操作 |
+| 源文件            | 迁移内容                                        | 备注                               |
+| ----------------- | ----------------------------------------------- | ---------------------------------- |
+| `easyci.ts`       | EasyCI HTTP 客户端                              | 仓库/分支/CI 操作                  |
 | `mergeRequest.ts` | `createMergeRequest()`, `projectIdFromGitUrl()` | MR 创建 + GitLab project path 推导 |
-| `gitUrl.ts` | Git URL 解析工具 | |
-| `index.ts` | 模块导出 | 重构为 IChannel 实现 |
+| `gitUrl.ts`       | Git URL 解析工具                                |                                    |
+| `index.ts`        | 模块导出                                        | 重构为 IChannel 实现               |
 
 **新增（Design A11 + F-03）**:
 
-| 新增方法 | 用途 | 底层 API |
-|----------|------|----------|
-| `getMrStatus(projectPath, iid)` | MR 合并状态轮询（P1 必须） | GET /api/v4/projects/{id}/merge_requests/{iid} |
-| `findMr(query)` | 幂等 MR 创建 — 先查已有 open MR（P1 必须） | GET /api/v4/projects/{id}/merge_requests?source_branch=...&state=opened |
+| 新增方法                        | 用途                                       | 底层 API                                                                |
+| ------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
+| `getMrStatus(projectPath, iid)` | MR 合并状态轮询（P1 必须）                 | GET /api/v4/projects/{id}/merge_requests/{iid}                          |
+| `findMr(query)`                 | 幂等 MR 创建 — 先查已有 open MR（P1 必须） | GET /api/v4/projects/{id}/merge_requests?source_branch=...&state=opened |
 
 ### M4: jme — 京ME 消息通道（新建）
 
@@ -81,14 +82,15 @@
 
 **交付物（Design A9）**:
 
-| 文件 | 内容 | 备注 |
-|------|------|------|
-| `joyclaw-bridge.ts` | JoyClaw Agent 桥接 | spawn node openclaw.mjs，解析 stdout JSON |
-| `index.ts` | `send()` — 发送京ME消息 | 自然语言指令，由 JoyClaw agent 完成发送 |
-| | `readReplies()` — 读取回复 | 轮询式，调 JoyClaw "查看最近消息" |
-| | `ensureGatewayAlive()` — 健康检查 | 检查 :18810 端口 / gateway 进程 |
+| 文件                | 内容                              | 备注                                      |
+| ------------------- | --------------------------------- | ----------------------------------------- |
+| `joyclaw-bridge.ts` | JoyClaw Agent 桥接                | spawn node openclaw.mjs，解析 stdout JSON |
+| `index.ts`          | `send()` — 发送京ME消息           | 自然语言指令，由 JoyClaw agent 完成发送   |
+|                     | `readReplies()` — 读取回复        | 轮询式，调 JoyClaw "查看最近消息"         |
+|                     | `ensureGatewayAlive()` — 健康检查 | 检查 :18810 端口 / gateway 进程           |
 
 **设计约束（Design A9）**:
+
 1. 消息格式是纯文本（JoyClaw agent 自行决定京ME操作方式）
 2. 依赖 JoyClaw gateway 常驻运行（:18810）
 3. 回复监听是轮询，没有 webhook

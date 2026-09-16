@@ -26,6 +26,7 @@
 7. 打印 Pipeline ID + 状态提示
 
 **错误处理**：
+
 - 链接格式无效 → 具体错误信息（域名/格式/缺 demandId）
 - 未登录 → `AuthRequiredError: 请先运行 poria auth login`
 - 需求不存在/已删除 → `需求不存在或已删除 (demandId: xxx)`
@@ -113,7 +114,9 @@
 ### R4: project 命令组（P1 骨架）
 
 #### R4.1: `poria project create`
+
 #### R4.2: `poria project list`
+
 #### R4.3: `poria project status`
 
 P1 仅创建命令骨架（注册 + help text），具体逻辑 P2 实现。

@@ -7,6 +7,7 @@
 ### 1. PipelineExecutor (`packages/commands/pipeline/executor.ts`)
 
 父 design §4.1 的完整实现。核心职责：
+
 - 从 store 加载 Pipeline，驱动 stages 顺序执行
 - STAGE_SKILL_MAP 映射 7 个 stage → skill
 - 每个 Stage 前校验 CredentialGuard
@@ -20,6 +21,7 @@
 ### 2. PipelineWorker (`packages/commands/pipeline/worker.ts`)
 
 父 design §4.3 + §14 F1。核心职责：
+
 - 文件锁单实例互斥（workspace/db/worker.lock）
 - 启动时 PipelineRecovery.recoverAll()
 - 两个并行循环：consumeQueue + pollMergeRequests
@@ -28,6 +30,7 @@
 ### 3. PipelineRollback (`packages/commands/pipeline/rollback.ts`)
 
 父 design §6.3 + §15 F-10。核心职责：
+
 - 未合并：按 Stage 逆序执行 rollback 指令
 - 已合并：per-repo 创建 revert commit + revert MR
 - 幂等保护：close_mr/delete_branch/remove_worktree 各自安全检查
@@ -36,20 +39,21 @@
 ### 4. Skills 骨架 (`packages/skills/`)
 
 7 个 pipeline stage skill + human-loop 协调器。每个 skill:
+
 - 实现 ISkill 接口
 - 支持 fixture 模式 (PORIA_*_FIXTURE=1)
 - P1 实现真实逻辑骨架 + fixture fallback
 
-| Skill | 包路径 | 关键依赖 |
-|-------|--------|----------|
-| init | skills/init/ | xingyun, joyspace |
-| review-prd | skills/review-prd/ | claude agent |
-| gen-trd | skills/gen-trd/ | claude agent |
-| workspace | skills/workspace/ | worktree, xingyun |
-| gen-code | skills/gen-code/ | claude agent, output-guard |
-| code-review | skills/code-review/ | claude agent |
-| deploy | skills/deploy/ | coding, terminal |
-| human-loop | skills/human-loop/ | jme |
+| Skill       | 包路径              | 关键依赖                   |
+| ----------- | ------------------- | -------------------------- |
+| init        | skills/init/        | xingyun, joyspace          |
+| review-prd  | skills/review-prd/  | claude agent               |
+| gen-trd     | skills/gen-trd/     | claude agent               |
+| workspace   | skills/workspace/   | worktree, xingyun          |
+| gen-code    | skills/gen-code/    | claude agent, output-guard |
+| code-review | skills/code-review/ | claude agent               |
+| deploy      | skills/deploy/      | coding, terminal           |
+| human-loop  | skills/human-loop/  | jme                        |
 
 ### 5. ExceptionClassifier + handleStageError
 
@@ -70,7 +74,12 @@ import { PipelineStateMachine, GateEngine, createPipelineId } from "@poria/core"
 import type { Pipeline, Stage, StageEnum, GateRule, PipelineEvent, ISkill } from "@poria/core";
 
 // infrastructure
-import { SqlitePipelineStore, PipelineQueue, PipelineRecovery, EventStore } from "@poria/infrastructure";
+import {
+  SqlitePipelineStore,
+  PipelineQueue,
+  PipelineRecovery,
+  EventStore,
+} from "@poria/infrastructure";
 import { CredentialGuard } from "@poria/infrastructure";
 import { loadConfig } from "@poria/infrastructure";
 

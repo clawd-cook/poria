@@ -64,12 +64,14 @@
 ## 约束
 
 ### C1: 技术栈
+
 - Tauri v2 (Rust backend) + React + Vite + Tailwind CSS
 - 前端状态：useReducer + Tauri event listener (参考 OpenMausBot 模式)
 - Rust 侧：rusqlite 读 SQLite（UI 数据查询）
 - Node sidecar：运行 PipelineWorker（Agent SDK + channel I/O）
 
 ### C2: 复用已有包
+
 - `@poria/core` — 类型、状态机、门禁、事件
 - `@poria/commands` — PipelineExecutor, Worker, Rollback
 - `@poria/skills` — 7 skill + HumanLoopCoordinator
@@ -78,10 +80,12 @@
 - `@poria/resources` — agent pool, output guard, terminal, worktree
 
 ### C3: 平台
+
 - macOS (primary, Apple Silicon)
 - Node.js v24.20.0 (sidecar 内嵌)
 
 ### C4: 渐进式
+
 - MVP: Pipeline 提交/列表/详情/人工回路 + 系统通知
 - P2: 设置面板完善 + 自动更新 + deep-link
 - P3: Dashboard 统计 + 多仓库可视化

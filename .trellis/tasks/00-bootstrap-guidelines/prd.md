@@ -28,18 +28,16 @@ the rest conversationally.
 
 ## Spec files to populate
 
-
 ### Frontend guidelines
 
-| File | What to document |
-|------|------------------|
-| `.trellis/spec/frontend/directory-structure.md` | Component/page/hook organization |
-| `.trellis/spec/frontend/component-guidelines.md` | Component patterns, props conventions |
-| `.trellis/spec/frontend/hook-guidelines.md` | Custom hook naming, patterns |
-| `.trellis/spec/frontend/state-management.md` | State library, patterns, what goes where |
-| `.trellis/spec/frontend/type-safety.md` | TypeScript conventions, type organization |
-| `.trellis/spec/frontend/quality-guidelines.md` | Linting, testing, accessibility |
-
+| File                                             | What to document                          |
+| ------------------------------------------------ | ----------------------------------------- |
+| `.trellis/spec/frontend/directory-structure.md`  | Component/page/hook organization          |
+| `.trellis/spec/frontend/component-guidelines.md` | Component patterns, props conventions     |
+| `.trellis/spec/frontend/hook-guidelines.md`      | Custom hook naming, patterns              |
+| `.trellis/spec/frontend/state-management.md`     | State library, patterns, what goes where  |
+| `.trellis/spec/frontend/type-safety.md`          | TypeScript conventions, type organization |
+| `.trellis/spec/frontend/quality-guidelines.md`   | Linting, testing, accessibility           |
 
 ### Thinking guides (already populated)
 
@@ -56,31 +54,32 @@ Search the repo for existing convention docs. If any exist, read them and
 extract the relevant rules into the matching `.trellis/spec/` files —
 usually much faster than documenting from scratch.
 
-| File / Directory | Tool |
-|------|------|
-| `CLAUDE.md` / `CLAUDE.local.md` | Claude Code |
-| `AGENTS.md` | Codex / Claude Code / agent-compatible tools |
-| `.cursorrules` | Cursor |
-| `.cursor/rules/*.mdc` | Cursor (rules directory) |
-| `.windsurfrules` | Windsurf |
-| `.clinerules` | Cline |
-| `.roomodes` | Roo Code |
-| `.github/copilot-instructions.md` | GitHub Copilot |
-| `.vscode/settings.json` → `github.copilot.chat.codeGeneration.instructions` | VS Code Copilot |
-| `CONVENTIONS.md` / `.aider.conf.yml` | aider |
-| `CONTRIBUTING.md` | General project conventions |
-| `.editorconfig` | Editor formatting rules |
+| File / Directory                                                            | Tool                                         |
+| --------------------------------------------------------------------------- | -------------------------------------------- |
+| `CLAUDE.md` / `CLAUDE.local.md`                                             | Claude Code                                  |
+| `AGENTS.md`                                                                 | Codex / Claude Code / agent-compatible tools |
+| `.cursorrules`                                                              | Cursor                                       |
+| `.cursor/rules/*.mdc`                                                       | Cursor (rules directory)                     |
+| `.windsurfrules`                                                            | Windsurf                                     |
+| `.clinerules`                                                               | Cline                                        |
+| `.roomodes`                                                                 | Roo Code                                     |
+| `.github/copilot-instructions.md`                                           | GitHub Copilot                               |
+| `.vscode/settings.json` → `github.copilot.chat.codeGeneration.instructions` | VS Code Copilot                              |
+| `CONVENTIONS.md` / `.aider.conf.yml`                                        | aider                                        |
+| `CONTRIBUTING.md`                                                           | General project conventions                  |
+| `.editorconfig`                                                             | Editor formatting rules                      |
 
 ### Step 2: Analyze the codebase for anything not covered by existing docs
 
 Scan real code to discover patterns. Before writing each spec file:
+
 - Find 2-3 real examples of each pattern in the codebase.
 - Reference real file paths (not hypothetical ones).
 - Document anti-patterns the team clearly avoids.
 
 ### Step 3: Document reality, not ideals
 
-**Critical**: write what the code *actually does*, not what it should do.
+**Critical**: write what the code _actually does_, not what it should do.
 Sub-agents match the spec, so aspirational patterns that don't exist in the
 codebase will cause sub-agents to write code that looks out of place.
 

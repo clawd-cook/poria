@@ -20,9 +20,7 @@
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [
-    ".trellis/spec/frontend/"
-  ],
+  "relatedFiles": [".trellis/spec/frontend/"],
   "notes": "First-time setup task created by trellis init (frontend project)",
   "meta": {}
 }

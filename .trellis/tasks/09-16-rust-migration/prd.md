@@ -7,6 +7,7 @@
 ## Background
 
 当前架构：
+
 - `packages/` 包含 6 个核心包 + 5 个 channel 适配包（TypeScript/Node.js）
 - `apps/desktop` 是 Tauri v2 应用，Rust 后端目前只做只读 DB 查询，所有写操作和业务逻辑通过 Node sidecar 完成
 - 前端（React 19 + Tailwind）仅展示 Pipeline 列表/详情/事件流
@@ -60,6 +61,7 @@
 ## Requirements
 
 ### R1: poria-core crate
+
 - 所有 TypeScript 类型/接口转为 Rust struct + enum，derive `Serialize`/`Deserialize`/`Clone`/`Debug`
 - Pipeline/Stage 状态机（transition tables）保持一致
 - 30 种 PipelineEvent 类型通过 `#[serde(tag = "kind")]` enum 实现
@@ -68,6 +70,7 @@
 - Pipeline ID 生成保持 `pl-YYYYMMDD-<8chars>` 格式
 
 ### R2: poria-infrastructure crate
+
 - SQLite 改为读写模式，schema 与现有 DDL 保持一致
 - PipelineStore trait + rusqlite 实现（CRUD 全部）
 - EventStore、AuditStore、PipelineQueue、DatabaseBackup
@@ -77,32 +80,38 @@
 - Metrics：InMemory collector + 导出
 
 ### R3: poria-commands crate
+
 - Pipeline 命令层（submit、cancel、status 查询等）
 - 依赖 poria-core 和 poria-infrastructure
 
 ### R4: poria-resources crate
+
 - Terminal 执行（`tokio::process::Command` wrapper）
 - Worktree 管理（git worktree create/remove）
 - Claude Agent Pool（进程池管理、output guard）
 - Session Tracker
 
 ### R5: poria-skills crate
+
 - 7 个 Skill trait 实现：Init, ReviewPrd, GenTrd, Workspace, GenCode, CodeReview, Deploy
 - HumanLoop 协调器
 - Stage → Skill 映射表
 
 ### R6: poria-channels crate
+
 - 5 个 channel 子模块：xingyun, coding, jme, joyspace, defect
 - 各渠道的 URL 解析、请求构造、响应解析
 - Channel trait 统一接口
 
 ### R7: Tauri 后端重构
+
 - DB 切换到读写模式
 - 新增 Tauri commands：skill 列表/详情、channel 列表/状态
 - Pipeline commands 直接调用 Rust 实现而非 sidecar 转发
 - 事件推送从 sidecar 驱动改为 Rust 内部 channel + Tauri emit
 
 ### R8: 前端新增
+
 - Skill 管理页：列表、配置查看
 - Channel 管理页：连接状态、操作入口
 - 移除 sidecar 状态指示器
@@ -123,15 +132,15 @@
 
 此为 parent task，按 crate 拆分 child tasks：
 
-| Child | Slug | 依赖 |
-|---|---|---|
-| 1. poria-core crate | `rust-core` | 无 |
-| 2. poria-infrastructure crate | `rust-infra` | rust-core |
-| 3. poria-commands crate | `rust-commands` | rust-core, rust-infra |
-| 4. poria-resources crate | `rust-resources` | rust-core |
-| 5. poria-skills crate | `rust-skills` | rust-core, rust-resources |
-| 6. poria-channels crate | `rust-channels` | rust-core |
-| 7. Tauri backend rewrite | `rust-tauri` | rust-core, rust-infra, rust-commands, rust-resources, rust-skills, rust-channels |
-| 8. Frontend pages | `rust-frontend` | rust-tauri |
+| Child                         | Slug             | 依赖                                                                             |
+| ----------------------------- | ---------------- | -------------------------------------------------------------------------------- |
+| 1. poria-core crate           | `rust-core`      | 无                                                                               |
+| 2. poria-infrastructure crate | `rust-infra`     | rust-core                                                                        |
+| 3. poria-commands crate       | `rust-commands`  | rust-core, rust-infra                                                            |
+| 4. poria-resources crate      | `rust-resources` | rust-core                                                                        |
+| 5. poria-skills crate         | `rust-skills`    | rust-core, rust-resources                                                        |
+| 6. poria-channels crate       | `rust-channels`  | rust-core                                                                        |
+| 7. Tauri backend rewrite      | `rust-tauri`     | rust-core, rust-infra, rust-commands, rust-resources, rust-skills, rust-channels |
+| 8. Frontend pages             | `rust-frontend`  | rust-tauri                                                                       |
 
 依赖关系写在各 child 的 prd.md 中，不是阻塞关系——而是编码顺序建议。

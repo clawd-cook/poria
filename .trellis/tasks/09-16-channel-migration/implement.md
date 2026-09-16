@@ -8,11 +8,11 @@
 
 ## 源码概况
 
-| 包 | 文件数 | 总行数 | 外部依赖 |
-|---|---|---|---|
-| channel-xingyun | 11 (.ts) + 1 (fixture) | ~1318 行 | `@dj-lib/poria-plugin-sdk`, `@dj-lib/poria-channel-coding` |
-| channel-joyspace | 2 (.ts) + 6 (vendor .mjs/.d.mts) | ~411 行 | `@dj-lib/poria-plugin-sdk` |
-| channel-coding | 4 (.ts) | ~503 行 | `@dj-lib/poria-plugin-sdk` |
+| 包               | 文件数                           | 总行数   | 外部依赖                                                   |
+| ---------------- | -------------------------------- | -------- | ---------------------------------------------------------- |
+| channel-xingyun  | 11 (.ts) + 1 (fixture)           | ~1318 行 | `@dj-lib/poria-plugin-sdk`, `@dj-lib/poria-channel-coding` |
+| channel-joyspace | 2 (.ts) + 6 (vendor .mjs/.d.mts) | ~411 行  | `@dj-lib/poria-plugin-sdk`                                 |
+| channel-coding   | 4 (.ts)                          | ~503 行  | `@dj-lib/poria-plugin-sdk`                                 |
 
 所有 `@dj-lib/poria-plugin-sdk` 引用需替换为 `@poria/core` 的 IChannel 契约；`channel-xingyun` 对 `channel-coding` 的依赖需改为相对导入。
 
@@ -50,6 +50,7 @@
 - [ ] `src/index.ts` — 重写为 IChannel 实现，统一导出
 
 关键适配点:
+
 - `@dj-lib/poria-plugin-sdk` → `@poria/core` (IChannel, CapabilityMetadata 等)
 - `@dj-lib/poria-channel-coding` → 直接在 xingyun 包内引用 easyci 函数，或改为从 `@poria/channel-coding` 导入
 - credentials 类型 → 从 `@poria/core` ChannelContext 获取
@@ -65,6 +66,7 @@
 - [ ] `src/index.ts` — 重写为 IChannel 实现
 
 关键适配点:
+
 - vendor 文件是 .mjs（已编译），直接复制，tsconfig 中配置 `allowJs: true`
 - export.ts 的内部逻辑不改，仅适配接口签名
 
@@ -80,6 +82,7 @@
 - [ ] `src/index.ts` — 重写为 IChannel 实现
 
 **新增（Design A11 + F-03）**:
+
 - [ ] `src/mergeRequest.ts` 中新增 `getMrStatus(projectPath: string, iid: number): Promise<MrStatus>`
   - 底层: GET /api/v4/projects/{encoded_path}/merge_requests/{iid}
   - 返回: `"opened" | "closed" | "merged" | "locked"`

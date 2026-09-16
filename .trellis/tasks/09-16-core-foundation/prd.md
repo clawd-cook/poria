@@ -50,21 +50,22 @@ pending | running | completed | failed | blocked | skipped
 
 **Pipeline 转换规则**（完整覆盖 Design §14 F1 状态图）:
 
-| 源状态 | 目标状态 | 触发条件 |
-|--------|---------|---------|
-| created | running | submit |
-| created | cancelled | cancel before start |
-| running | waiting_merge | deploy MR created |
-| running | blocked | stage needs human |
-| running | failed | retries exhausted |
-| running | cancelled | manual cancel |
-| blocked | running | human reply (resume) |
-| blocked | cancelled | manual cancel |
-| waiting_merge | completed | all MRs merged |
-| waiting_merge | failed | MR closed / 24h timeout |
-| waiting_merge | cancelled | manual cancel |
+| 源状态        | 目标状态      | 触发条件                |
+| ------------- | ------------- | ----------------------- |
+| created       | running       | submit                  |
+| created       | cancelled     | cancel before start     |
+| running       | waiting_merge | deploy MR created       |
+| running       | blocked       | stage needs human       |
+| running       | failed        | retries exhausted       |
+| running       | cancelled     | manual cancel           |
+| blocked       | running       | human reply (resume)    |
+| blocked       | cancelled     | manual cancel           |
+| waiting_merge | completed     | all MRs merged          |
+| waiting_merge | failed        | MR closed / 24h timeout |
+| waiting_merge | cancelled     | manual cancel           |
 
 **实现要求**:
+
 - 提供 `canTransition(from, to): boolean` 判定
 - 提供 `transition(pipeline, to): Pipeline` 执行转换（非法转换抛异常）
 - 提供 `Stage.canTransition(from, to)` 同理

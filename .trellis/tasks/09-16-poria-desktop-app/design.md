@@ -133,7 +133,10 @@ type TauriEvent =
   | { event: "pipeline:list-changed" }
   | { event: "pipeline:updated"; data: { id: string; status: string; currentStage: string } }
   | { event: "stage:progress"; data: { pipelineId: string; stage: string; event: PipelineEvent } }
-  | { event: "human:request"; data: { pipelineId: string; stage: string; issueClass: string; detail: string } }
+  | {
+      event: "human:request";
+      data: { pipelineId: string; stage: string; issueClass: string; detail: string };
+    }
   | { event: "auth:status-changed"; data: AuthStatus }
   | { event: "sidecar:status"; data: { running: boolean; error?: string } };
 ```
@@ -147,7 +150,7 @@ interface AppState {
   pipelines: PipelineSummary[];
   selectedPipelineId: string | null;
   pipelineDetail: PipelineDetail | null;
-  events: PipelineEvent[];  // 当前选中 pipeline 的事件流
+  events: PipelineEvent[]; // 当前选中 pipeline 的事件流
   auth: AuthStatus;
   config: AppConfig;
   sidecar: { running: boolean; error?: string };
@@ -177,10 +180,14 @@ useEffect(() => {
     listen("pipeline:list-changed", () => refreshPipelines()),
     listen("pipeline:updated", (e) => dispatch({ type: "pipelineUpdated", ...e.payload })),
     listen("stage:progress", (e) => dispatch({ type: "eventReceived", event: e.payload })),
-    listen("human:request", (e) => { dispatch({ type: "humanRequest", ...e.payload }); }),
+    listen("human:request", (e) => {
+      dispatch({ type: "humanRequest", ...e.payload });
+    }),
     listen("sidecar:status", (e) => dispatch({ type: "sidecarStatus", ...e.payload })),
   ]);
-  return () => { unlisten.then(fns => fns.forEach(fn => fn())); };
+  return () => {
+    unlisten.then((fns) => fns.forEach((fn) => fn()));
+  };
 }, []);
 ```
 
@@ -227,6 +234,7 @@ SQLite 共享：Rust (rusqlite, WAL mode, 只读) 和 Node sidecar (better-sqlit
 ```
 
 每个节点：圆形图标 + 阶段名 + 连接线。状态映射：
+
 - completed → 绿色勾
 - running → 蓝色旋转
 - pending → 灰色空心
@@ -250,10 +258,10 @@ SQLite 共享：Rust (rusqlite, WAL mode, 只读) 和 Node sidecar (better-sqlit
 
 ## 6. Tauri 插件清单
 
-| 插件 | 用途 | 配置 |
-|------|------|------|
-| tauri-plugin-shell | Sidecar 管理 | `shell:allow-execute` scoped to poria-worker |
-| tauri-plugin-notification | 系统通知 | 默认 |
-| tauri-plugin-store | 用户偏好 | 默认 |
-| tauri-plugin-dialog | 文件/目录选择 | 默认 |
-| tauri-plugin-opener | 打开 MR URL | 默认 |
+| 插件                      | 用途          | 配置                                         |
+| ------------------------- | ------------- | -------------------------------------------- |
+| tauri-plugin-shell        | Sidecar 管理  | `shell:allow-execute` scoped to poria-worker |
+| tauri-plugin-notification | 系统通知      | 默认                                         |
+| tauri-plugin-store        | 用户偏好      | 默认                                         |
+| tauri-plugin-dialog       | 文件/目录选择 | 默认                                         |
+| tauri-plugin-opener       | 打开 MR URL   | 默认                                         |
