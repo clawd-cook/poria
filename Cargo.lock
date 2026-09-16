@@ -2912,11 +2912,13 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "poria-core",
+ "regex",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -2924,12 +2926,15 @@ name = "poria-commands"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "poria-core",
  "poria-infrastructure",
+ "regex",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2970,10 +2975,12 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "dirs",
+ "libc",
  "poria-core",
  "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -2984,6 +2991,7 @@ name = "poria-resources"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "glob",
  "poria-core",
  "serde",
  "serde_json",
