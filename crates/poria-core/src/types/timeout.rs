@@ -1,0 +1,5 @@
+pub const TIMEOUT_GIT_SHORT: i64 = 30_000;
+pub const TIMEOUT_GIT_MEDIUM: i64 = 120_000;
+pub const TIMEOUT_GIT_LONG: i64 = 300_000;
+pub const TIMEOUT_BUILD: i64 = 600_000;
+pub const TIMEOUT_AGENT: i64 = 1_800_000;

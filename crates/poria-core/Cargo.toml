@@ -1,0 +1,14 @@
+[package]
+name = "poria-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+nanoid = { workspace = true }
+regex = "1"
+once_cell = "1"
