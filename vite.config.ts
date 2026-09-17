@@ -3,6 +3,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
+  css: {
+    devSourcemap: true
+  },
   clearScreen: false,
   server: {
     port: 1420,
@@ -11,4 +14,10 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    sourcemap: true,
+    chunkImportMap: true,
+    license: true,
+    manifest: true
+  }
 });
