@@ -1,9 +1,11 @@
+mod bind_branch;
 mod demand_list;
 mod demand_status;
 mod demand_url;
 mod git_url;
 mod types;
 
+pub use bind_branch::{bind_branch, BindBranchInput, BindBranchResult};
 pub use demand_status::format_demand_status;
 pub use demand_url::{
     feature_branch_name, feature_slug, parse_xingyun_demand_url, xingyun_demand_view_url,
@@ -118,13 +120,36 @@ impl Channel for XingyunChannel {
                 }
             }
             XingyunAction::BindBranch => {
-                // BindBranch requires git operations and EasyCI integration.
-                // Full implementation deferred -- returns an error for now since
-                // it depends on local git context.
-                return Err(
-                    "bindBranch action requires local git context (not yet supported in Rust)"
-                        .into(),
-                );
+                let git_url = input
+                    .git_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or("bindBranch requires gitUrl")?
+                    .to_string();
+                let branch = input
+                    .branch
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or("bindBranch requires branch")?
+                    .to_string();
+                let result = bind_branch(
+                    &credentials,
+                    BindBranchInput {
+                        demand_id: input.demand_id,
+                        demand_code: input.demand_code,
+                        git_url,
+                        branch,
+                        base_branch: input.base_branch,
+                    },
+                )
+                .await?;
+                XingyunChannelOutput::BindBranch {
+                    branch: result.branch,
+                    change_id: result.change_id,
+                    base_branch: result.base_branch,
+                }
             }
         };
 
@@ -185,7 +210,7 @@ struct JacpEnvelope {
     data: Option<serde_json::Value>,
 }
 
-async fn jacp_fetch(
+pub(crate) async fn jacp_fetch(
     credentials: &JacpCredentials,
     path: &str,
     method: reqwest::Method,
@@ -521,7 +546,7 @@ pub fn is_demand_active(_status: Option<i32>) -> bool {
 }
 
 // Need urlencoding for path encoding
-mod urlencoding {
+pub(crate) mod urlencoding {
     pub fn encode(input: &str) -> String {
         let mut result = String::new();
         for byte in input.bytes() {

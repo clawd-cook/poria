@@ -1,6 +1,11 @@
+mod easyci_change;
 mod git_url;
 mod types;
 
+pub use easyci_change::{
+    create_change, pick_bind_apps, query_bind_deploy_apps, query_issue_changes, BindApp,
+    BindDeployAppsResult, BoundChange, CreateChangeInput, EasyciDeployApp,
+};
 pub use git_url::{
     normalize_git_url, repo_name_from_git_url, repo_scope_and_name_from_git_url,
     repo_search_path_from_git_url, same_git_url,
@@ -136,7 +141,7 @@ struct GqlError {
     message: Option<String>,
 }
 
-async fn easyci_gql<T: serde::de::DeserializeOwned>(
+pub(crate) async fn easyci_gql<T: serde::de::DeserializeOwned>(
     credentials: &JacpCredentials,
     error_label: &str,
     operation_name: &str,

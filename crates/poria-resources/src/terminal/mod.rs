@@ -37,6 +37,7 @@ pub struct TerminalExecResult {
 const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const GIT_CLONE_TIMEOUT_MS: u64 = 600_000;
 const GIT_FETCH_TIMEOUT_MS: u64 = 60_000;
+const GIT_PUSH_TIMEOUT_MS: u64 = 180_000;
 const GIT_QUERY_TIMEOUT_MS: u64 = 15_000;
 
 // ---------- Terminal Resource ----------
@@ -209,7 +210,7 @@ pub async fn git_clone_with_timeout(
     }
 }
 
-async fn run_git(
+pub(crate) async fn run_git(
     args: &[&str],
     cwd: Option<&Path>,
     timeout_ms: u64,
@@ -263,6 +264,76 @@ pub async fn git_fetch(repo_path: &Path) -> Result<(), ResourceError> {
         Ok(())
     } else {
         Err(git_failure("git fetch", &output))
+    }
+}
+
+/// `git status --porcelain` in a worktree.
+pub async fn git_status_porcelain(repo_path: &Path) -> Result<String, ResourceError> {
+    let output = run_git(
+        &["status", "--porcelain"],
+        Some(repo_path),
+        GIT_QUERY_TIMEOUT_MS,
+    )
+    .await?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(git_failure("git status", &output))
+    }
+}
+
+/// True when `git status --porcelain` is non-empty.
+pub async fn git_has_changes(repo_path: &Path) -> Result<bool, ResourceError> {
+    let porcelain = git_status_porcelain(repo_path).await?;
+    Ok(!porcelain.trim().is_empty())
+}
+
+/// Stage all tracked and untracked changes (`git add -A`).
+pub async fn git_add_all(repo_path: &Path) -> Result<(), ResourceError> {
+    let output = run_git(&["add", "-A"], Some(repo_path), GIT_QUERY_TIMEOUT_MS).await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(git_failure("git add", &output))
+    }
+}
+
+/// Commit staged changes. Returns `false` when there is nothing to commit.
+pub async fn git_commit(repo_path: &Path, message: &str) -> Result<bool, ResourceError> {
+    let output = run_git(
+        &["commit", "-m", message],
+        Some(repo_path),
+        GIT_QUERY_TIMEOUT_MS,
+    )
+    .await?;
+    if output.status.success() {
+        return Ok(true);
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{stderr}\n{stdout}");
+    if combined.contains("nothing to commit") {
+        return Ok(false);
+    }
+    Err(git_failure("git commit", &output))
+}
+
+/// Push a branch and set upstream (`git push -u <remote> <branch>`).
+pub async fn git_push_set_upstream(
+    repo_path: &Path,
+    remote: &str,
+    branch: &str,
+) -> Result<(), ResourceError> {
+    let output = run_git(
+        &["push", "-u", remote, branch],
+        Some(repo_path),
+        GIT_PUSH_TIMEOUT_MS,
+    )
+    .await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(git_failure("git push", &output))
     }
 }
 

@@ -20,7 +20,8 @@ use poria_infrastructure::auth::{
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
 use poria_resources::git_current_branch;
 use poria_skills::{
-    CodeReviewSkill, GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill, WorkspaceSkill,
+    CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill,
+    WorkspaceSkill,
 };
 
 use crate::AppState;
@@ -508,36 +509,49 @@ pub async fn execute_stage(
     match stage_name {
         StageEnum::Init => run_init_stage(&mut pipeline, stage_idx, &app, &store).await,
         StageEnum::ReviewPrd => {
-            run_review_prd_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone())
-                .await
+            run_review_prd_stage(
+                &mut pipeline,
+                stage_idx,
+                &app,
+                &store,
+                state.agent_pool.clone(),
+            )
+            .await
         }
         StageEnum::Design => {
-            run_design_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
+            run_design_stage(
+                &mut pipeline,
+                stage_idx,
+                &app,
+                &store,
+                state.agent_pool.clone(),
+            )
+            .await
         }
         StageEnum::Workspace => {
             run_workspace_stage(&mut pipeline, stage_idx, &app, &store, &state.repo_store).await
         }
         StageEnum::Dev => {
-            run_dev_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
+            run_dev_stage(
+                &mut pipeline,
+                stage_idx,
+                &app,
+                &store,
+                state.agent_pool.clone(),
+            )
+            .await
         }
         StageEnum::Cr => {
-            run_cr_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
-        }
-        _ => {
-            let stage_label = serde_json::to_string(&stage_name)
-                .unwrap_or_default()
-                .trim_matches('"')
-                .to_string();
-            app.emit(
-                "stage:execute-requested",
-                serde_json::json!({
-                    "pipeline_id": pipeline_id,
-                    "stage": stage_label,
-                }),
+            run_cr_stage(
+                &mut pipeline,
+                stage_idx,
+                &app,
+                &store,
+                state.agent_pool.clone(),
             )
-            .map_err(|e| e.to_string())?;
-            Ok(())
+            .await
         }
+        StageEnum::Deploy => run_deploy_stage(&mut pipeline, stage_idx, &app, &store).await,
     }
 }
 
@@ -908,7 +922,10 @@ fn resolve_frontend_clone(
 
 fn assert_path_under_worktrees_root(path: &Path) -> Result<(), String> {
     let root = get_user_root(None).join("worktrees");
-    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
         return Err("工作区路径不合法".into());
     }
     if !path.starts_with(&root) {
@@ -989,7 +1006,10 @@ async fn run_dev_stage(
         .save_stage_tx(
             Some(&pipeline.stages[stage_idx]),
             pipeline,
-            &[CorePipelineEvent::stage_started(&pipeline.id, StageEnum::Dev)],
+            &[CorePipelineEvent::stage_started(
+                &pipeline.id,
+                StageEnum::Dev,
+            )],
         )
         .map_err(|e| e.to_string())?;
     emit_pipeline_updated(app, pipeline)?;
@@ -1093,7 +1113,10 @@ async fn run_cr_stage(
         .save_stage_tx(
             Some(&pipeline.stages[stage_idx]),
             pipeline,
-            &[CorePipelineEvent::stage_started(&pipeline.id, StageEnum::Cr)],
+            &[CorePipelineEvent::stage_started(
+                &pipeline.id,
+                StageEnum::Cr,
+            )],
         )
         .map_err(|e| e.to_string())?;
     emit_pipeline_updated(app, pipeline)?;
@@ -1174,6 +1197,144 @@ async fn run_cr_stage(
                     &[CorePipelineEvent::stage_failed(
                         &pipeline.id,
                         StageEnum::Cr,
+                        &message,
+                        pipeline.stages[stage_idx].retry_count,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Err(message)
+        }
+    }
+}
+
+fn workspace_repo_field<'a>(pipeline: &'a Pipeline, key: &str) -> Option<&'a str> {
+    pipeline
+        .stages
+        .iter()
+        .find(|stage| stage.name == StageEnum::Workspace)
+        .and_then(|stage| stage.output.as_ref())
+        .and_then(|output| output.get("repos"))
+        .and_then(|repos| repos.as_array())
+        .and_then(|repos| repos.first())
+        .and_then(|repo| repo.get(key))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+async fn run_deploy_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &tauri::AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+) -> Result<(), String> {
+    let worktree = resolve_frontend_worktree(pipeline)?;
+    if !worktree.join(".git").exists() {
+        return Err(format!("前端工作区无效: {}", worktree.display()));
+    }
+    let repo = pipeline
+        .config
+        .repos
+        .first()
+        .cloned()
+        .ok_or("缺少前端仓库，无法部署")?;
+    let creds = get_credentials(None).ok_or_else(|| "请先登录".to_string())?;
+
+    pipeline.status = PipelineStatus::Running;
+    pipeline.stages[stage_idx].status = StageStatus::Running;
+    pipeline.stages[stage_idx].skill_id = Some("skill:deploy".into());
+    pipeline.stages[stage_idx].started_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = None;
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_started(
+                &pipeline.id,
+                StageEnum::Deploy,
+            )],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+
+    let worktree_str = worktree.to_string_lossy().into_owned();
+    let branch = workspace_repo_field(pipeline, "branch")
+        .unwrap_or(repo.branch.as_str())
+        .to_string();
+    let base_branch = workspace_repo_field(pipeline, "baseBranch")
+        .unwrap_or(repo.base_branch.as_str())
+        .to_string();
+    let gitlab_project_path = workspace_repo_field(pipeline, "gitlabProjectPath")
+        .unwrap_or(repo.gitlab_project_path.as_str())
+        .to_string();
+
+    let mut extra = serde_json::Map::new();
+    extra.insert(
+        "worktree_path".into(),
+        serde_json::Value::String(worktree_str.clone()),
+    );
+    extra.insert("branch".into(), serde_json::Value::String(branch));
+    extra.insert("base_branch".into(), serde_json::Value::String(base_branch));
+    extra.insert(
+        "gitlab_project_path".into(),
+        serde_json::Value::String(gitlab_project_path),
+    );
+
+    let ctx = SkillContext {
+        pipeline_id: pipeline.id.clone(),
+        workdir: worktree_str,
+        credentials: serde_json::json!({
+            "cookie": creds.cookie,
+            "username": creds.username,
+        }),
+    };
+    let input = SkillInput {
+        stage: pipeline.stages[stage_idx].clone(),
+        pipeline: pipeline.clone(),
+        extra,
+    };
+
+    match DeploySkill::new().execute(input, ctx).await {
+        Ok(output) => {
+            pipeline.status = PipelineStatus::Completed;
+            pipeline.stages[stage_idx].status = StageStatus::Completed;
+            pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_completed(
+                        &pipeline.id,
+                        StageEnum::Deploy,
+                        output.output,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Ok(())
+        }
+        Err(err) => {
+            let message = err.to_string();
+            pipeline.status = PipelineStatus::Failed;
+            pipeline.stages[stage_idx].status = StageStatus::Failed;
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.stages[stage_idx].issue = Some(StageIssue {
+                class: "deploy_failed".into(),
+                message: message.clone(),
+                retryable: true,
+            });
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_failed(
+                        &pipeline.id,
+                        StageEnum::Deploy,
                         &message,
                         pipeline.stages[stage_idx].retry_count,
                     )],

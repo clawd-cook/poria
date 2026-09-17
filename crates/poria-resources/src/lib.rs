@@ -16,7 +16,8 @@ pub mod worktree;
 pub use error::ResourceError;
 
 pub use terminal::{
-    git_clone, git_current_branch, git_fetch, git_list_branches, TerminalExecInput,
+    git_add_all, git_clone, git_commit, git_current_branch, git_fetch, git_has_changes,
+    git_list_branches, git_push_set_upstream, git_status_porcelain, TerminalExecInput,
     TerminalExecResult, TerminalResource,
 };
 pub use worktree::{WorktreeCreateInput, WorktreeCreateResult, WorktreeResource};
