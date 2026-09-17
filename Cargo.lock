@@ -2964,7 +2964,7 @@ dependencies = [
  "poria-infrastructure",
  "poria-resources",
  "poria-skills",
- "rand 0.8.8",
+ "rand 0.9.5",
  "serde",
  "serde_json",
  "tauri",
