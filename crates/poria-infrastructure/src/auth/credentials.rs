@@ -4,6 +4,7 @@ use std::path::{Component, Path, PathBuf};
 const USER_DIR_NAME: &str = ".poria";
 const AUTH_FILE_NAME: &str = "auth.json";
 const REPOS_DIR_NAME: &str = "repos";
+const PROJECTS_DIR_NAME: &str = "projects";
 const ERP_COOKIE_NAME: &str = "erp_erp";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +42,36 @@ pub fn get_auth_file_path(user_root: Option<&Path>) -> PathBuf {
 
 pub fn get_repos_root(home: Option<&Path>) -> PathBuf {
     get_user_root(home).join(REPOS_DIR_NAME)
+}
+
+pub fn get_projects_root(home: Option<&Path>) -> PathBuf {
+    get_user_root(home).join(PROJECTS_DIR_NAME)
+}
+
+/// `~/.poria/projects/<demand_code>` for extracted PRD / TRD markdown.
+pub fn get_demand_project_dir(home: Option<&Path>, demand_code: &str) -> Result<PathBuf, String> {
+    validate_path_segment(demand_code, "需求编码")?;
+    Ok(get_projects_root(home).join(demand_code))
+}
+
+pub fn assert_path_under_projects_root(home: Option<&Path>, path: &Path) -> Result<(), String> {
+    let root = get_projects_root(home);
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err("项目路径不合法".into());
+    }
+    if !path.starts_with(&root) {
+        return Err("项目路径不在 ~/.poria/projects 下".into());
+    }
+    Ok(())
+}
+
+pub fn demand_project_folder_name(demand_code: &str, demand_id: i64) -> String {
+    let trimmed = demand_code.trim();
+    if trimmed.is_empty() {
+        format!("demand-{demand_id}")
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// Build `~/.poria/repos/<scope>/<name>` from a parsed git URL path.
@@ -85,7 +116,7 @@ fn validate_path_segment(segment: &str, field: &str) -> Result<(), String> {
         || segment.contains('/')
         || segment.contains('\\')
     {
-        return Err(format!("非法仓库{field}"));
+        return Err(format!("非法{field}"));
     }
     Ok(())
 }
@@ -199,6 +230,27 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = get_repos_root(Some(dir.path()));
         assert_eq!(path, dir.path().join(".poria").join("repos"));
+    }
+
+    #[test]
+    fn test_get_demand_project_dir_under_poria() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = get_demand_project_dir(Some(dir.path()), "R2026082156824").unwrap();
+        assert_eq!(
+            path,
+            dir.path()
+                .join(".poria")
+                .join("projects")
+                .join("R2026082156824")
+        );
+        assert_path_under_projects_root(Some(dir.path()), &path).unwrap();
+    }
+
+    #[test]
+    fn demand_project_dir_rejects_parent_segments() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(get_demand_project_dir(Some(dir.path()), "..").is_err());
+        assert!(get_demand_project_dir(Some(dir.path()), "a/b").is_err());
     }
 
     #[test]

@@ -1,6 +1,17 @@
+mod client;
+mod export;
+mod markdown;
+
 use async_trait::async_trait;
 use poria_core::contracts::{CapabilityMetadata, Channel, ChannelContext};
 use serde::{Deserialize, Serialize};
+
+pub use client::{
+    extract_page_id_from_url, fetch_page_basic, fetch_page_content, JoySpaceAuth, DEFAULT_TEAM_ID,
+    JOYSPACE_API_BASE,
+};
+pub use export::{export_page_markdown, markdown_from_content, ExportedDocument};
+pub use markdown::{joyspace_content_to_markdown, ConversionResult, DiagramInfo};
 
 /// Credentials for JoySpace API access (cookie-based SSO).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +64,7 @@ pub fn create_joyspace_channel() -> JoySpaceChannel {
             id: "channel:joyspace".into(),
             name: "JoySpace".into(),
             description: "JoySpace document export to Markdown".into(),
-            version: "0.1.0".into(),
+            version: "0.2.0".into(),
         },
     }
 }
@@ -68,45 +79,6 @@ pub fn is_joyspace_fixture_mode() -> bool {
         .ok()
         .map(|v| v == "1")
         .unwrap_or(false)
-}
-
-/// Extract a page ID from a JoySpace URL.
-///
-/// Looks for patterns like `/pages/<pageId>` or `pageId=<id>` in the URL.
-pub fn extract_page_id_from_url(url: &str) -> Result<String, String> {
-    let parsed =
-        url::Url::parse(url.trim()).map_err(|_| format!("Invalid JoySpace URL: {}", url))?;
-
-    // Try query param first
-    if let Some(page_id) = parsed
-        .query_pairs()
-        .find(|(k, _)| k == "pageId" || k == "page_id")
-    {
-        let id = page_id.1.trim().to_string();
-        if !id.is_empty() {
-            return Ok(id);
-        }
-    }
-
-    // Try path segments
-    let segments: Vec<&str> = parsed.path().split('/').filter(|s| !s.is_empty()).collect();
-    for (i, seg) in segments.iter().enumerate() {
-        if (*seg == "pages" || *seg == "page" || *seg == "p_view") && i + 1 < segments.len() {
-            let candidate = segments[i + 1].trim();
-            if !candidate.is_empty() && candidate.len() >= 4 {
-                return Ok(candidate.to_string());
-            }
-        }
-    }
-
-    // Last resort: use the last long segment
-    for seg in segments.iter().rev() {
-        if seg.len() >= 6 {
-            return Ok(seg.to_string());
-        }
-    }
-
-    Err(format!("Cannot extract page ID from JoySpace URL: {}", url))
 }
 
 #[async_trait]
@@ -148,19 +120,38 @@ impl Channel for JoySpaceChannel {
                     })?);
                 }
 
-                // Live mode: requires JoySpace API integration with vendor modules.
-                // The Rust port provides the type structure and URL parsing;
-                // the actual API calls and markdown conversion require the vendored
-                // joyspace-api-client and joyspace-content-to-markdown modules
-                // which are JavaScript-specific. This will be bridged via Tauri commands.
-                let _page_id = extract_page_id_from_url(&url)?;
-                let _credentials: Option<JacpCredentials> =
+                let credentials: Option<JacpCredentials> =
                     serde_json::from_value(ctx.credentials.clone()).ok();
+                let cookie = credentials
+                    .as_ref()
+                    .map(|c| c.cookie.trim())
+                    .filter(|c| !c.is_empty())
+                    .ok_or("JoySpace 登录已过期，请重新登录")?;
+                let auth = JoySpaceAuth::new(cookie, None);
+                let exported = export_page_markdown(&auth, &url).await?;
 
-                Err(
-                    "JoySpace live export not yet implemented in Rust (requires vendor JS bridge)"
-                        .into(),
-                )
+                let output_dir = input.output_dir.unwrap_or_else(|| ".".to_string());
+                let output_name = input
+                    .output_name
+                    .unwrap_or_else(|| exported.title.clone());
+                let output_path = format!(
+                    "{}/{}.md",
+                    output_dir.trim_end_matches('/'),
+                    sanitize_filename(&output_name)
+                );
+                if let Some(parent) = std::path::Path::new(&output_path).parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&output_path, &exported.markdown)?;
+
+                Ok(serde_json::to_value(JoySpaceChannelOutput {
+                    action: "exportToMarkdown".to_string(),
+                    result: ExportJoySpaceResult {
+                        output_path,
+                        title: exported.title,
+                        cookie_source: Some("sso".to_string()),
+                    },
+                })?)
             }
         }
     }
@@ -185,7 +176,6 @@ mod tests {
 
     #[test]
     fn fixture_mode_returns_false_by_default() {
-        // Clear the env var to ensure default behavior
         std::env::remove_var("PORIA_JOYSPACE_FIXTURE");
         assert!(!is_joyspace_fixture_mode());
     }

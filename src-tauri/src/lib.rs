@@ -76,6 +76,8 @@ pub fn run() {
             commands::auth::logout,
             commands::demands::list_demands,
             commands::demands::preview_demand_prd,
+            commands::projects::list_demand_project,
+            commands::projects::read_demand_project_file,
             commands::config::get_config,
             commands::config::update_config,
             commands::skills::list_skills,
