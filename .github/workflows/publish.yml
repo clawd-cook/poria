@@ -1,0 +1,276 @@
+name: Publish (Stable)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "!v*-beta*"
+      - "!v*-rc*"
+      - "!v*-alpha*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24.20.0"
+  PNPM_VERSION: "11.23.0"
+
+jobs:
+  validate:
+    name: Validate stable tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      tag: ${{ steps.extract.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - name: Extract and validate version
+        id: extract
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid stable tag format: $TAG (expected vX.Y.Z, no prerelease suffix)"
+            exit 1
+          fi
+
+          echo "Valid stable tag: $TAG (version: $VERSION)"
+
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    needs: validate
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            target: aarch64-apple-darwin
+          - arch: x64
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - name: Require Apple signing and notarization secrets
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=0
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            eval "value=\${$name}"
+            if [ -z "$value" ]; then
+              echo "::error::Missing required secret: $name (stable releases cannot use ad-hoc signing)"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Setup Node.js + pnpm via corepack
+        run: |
+          export COREPACK_ENABLE_STRICT=0
+          corepack enable
+          corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+          echo "node: $(node -v)"
+          echo "pnpm: $(pnpm -v)"
+        env:
+          COREPACK_ENABLE_AUTO_PIN: "0"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-${{ matrix.target }}-
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Sync version to build configs
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            conf.version = process.env.VERSION;
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+          "
+
+          sed -i '' "s/^version = \".*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = process.env.VERSION;
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+          echo "Version synced to $VERSION"
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck frontend
+        run: pnpm exec tsc --noEmit
+
+      - name: Setup macOS signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Build Tauri app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          CI: true
+        run: |
+          cargo tauri build --target ${{ matrix.target }}
+
+      - name: Package DMG
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          BUNDLE_DIR="target/$TARGET/release/bundle"
+          OUTPUT_DIR="$RUNNER_TEMP/artifacts"
+          mkdir -p "$OUTPUT_DIR"
+
+          DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" -type f | head -1)
+          if [ -z "$DMG" ]; then
+            echo "::error::No .dmg found in $BUNDLE_DIR/dmg/"
+            exit 1
+          fi
+          cp "$DMG" "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg"
+
+          DMG_SIZE=$(stat -f%z "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg" 2>/dev/null || stat --printf='%s' "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg")
+          if [ "$DMG_SIZE" -lt 1048576 ]; then
+            echo "::error::DMG is suspiciously small (${DMG_SIZE} bytes)"
+            exit 1
+          fi
+          echo "DMG: Poria-${VERSION}-${ARCH}.dmg ($(du -h "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg" | cut -f1))"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: poria-macos-${{ matrix.arch }}
+          path: ${{ runner.temp }}/artifacts/Poria-*.dmg
+          retention-days: 7
+
+  create-release:
+    name: Create GitHub Release
+    needs: [validate, build-macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: |
+          echo "Release artifacts:"
+          ls -lh artifacts/
+          echo ""
+          shasum -a 256 artifacts/*.dmg
+
+      - name: Generate release notes
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          cat > release-notes.md << EOF
+          ## Poria Desktop ${VERSION}
+
+          正式版。已使用 Apple Developer 证书签名并提交公证。
+
+          ### 下载
+
+          | 平台 | 架构 | 文件 |
+          |------|------|------|
+          | macOS | Apple Silicon (M1/M2/M3/M4) | \`Poria-${VERSION}-aarch64.dmg\` |
+          | macOS | Intel | \`Poria-${VERSION}-x64.dmg\` |
+
+          ### 安装
+
+          1. 下载对应架构的 \`.dmg\` 文件
+          2. 双击打开，将 Poria 拖入 Applications 文件夹
+          3. 从启动台或 Applications 打开 Poria
+
+          ### SHA-256
+          \`\`\`
+          $(shasum -a 256 artifacts/*.dmg)
+          \`\`\`
+          EOF
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          gh release create "$TAG" \
+            --title "Poria Desktop $VERSION" \
+            --notes-file release-notes.md \
+            --latest \
+            artifacts/*.dmg
+
+          echo "Release created: $(gh release view "$TAG" --json url -q .url)"

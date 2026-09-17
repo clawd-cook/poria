@@ -78,14 +78,8 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
     args
 }
 
-const DEFAULT_DISALLOWED_TOOLS: &[&str] = &[
-    "Agent",
-    "Task",
-    "Bash",
-    "Glob",
-    "WebFetch",
-    "WebSearch",
-];
+const DEFAULT_DISALLOWED_TOOLS: &[&str] =
+    &["Agent", "Task", "Bash", "Glob", "WebFetch", "WebSearch"];
 
 fn disallowed_tools(allowed: &[String]) -> String {
     DEFAULT_DISALLOWED_TOOLS
