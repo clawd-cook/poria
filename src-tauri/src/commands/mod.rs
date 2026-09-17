@@ -3,5 +3,6 @@ pub mod channels;
 pub mod config;
 pub mod demands;
 pub mod pipeline;
+pub mod projects;
 pub mod repos;
 pub mod skills;

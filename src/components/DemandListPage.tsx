@@ -6,6 +6,7 @@ import { invokeErrorMessage } from "../lib/errors";
 import { listDemands, startLogin } from "../lib/tauri";
 import type { DemandListItem, DemandPage } from "../lib/types";
 import { useStore } from "../state/store";
+import { DemandProjectDrawer } from "./DemandProjectDrawer";
 import { StartPipelineWizard } from "./StartPipelineWizard";
 
 const { Title } = Typography;
@@ -27,7 +28,10 @@ function receiverLabel(item: DemandListItem): string {
   return item.receiver_name?.trim() || item.receiver_erp?.trim() || "—";
 }
 
-function demandColumns(onStart: (item: DemandListItem) => void): ColumnsType<DemandListItem> {
+function demandColumns(
+  onStart: (item: DemandListItem) => void,
+  onOpenDocs: (item: DemandListItem) => void,
+): ColumnsType<DemandListItem> {
   return [
     {
       dataIndex: "name",
@@ -58,12 +62,22 @@ function demandColumns(onStart: (item: DemandListItem) => void): ColumnsType<Dem
       align: "right",
       key: "action",
       render: (_, item) => (
-        <Button disabled={!item.id} onClick={() => onStart(item)} size="small" type="link">
-          开始
-        </Button>
+        <Flex justify="flex-end">
+          <Button
+            disabled={!item.demand_code && !item.id}
+            onClick={() => onOpenDocs(item)}
+            size="small"
+            type="link"
+          >
+            文档
+          </Button>
+          <Button disabled={!item.id} onClick={() => onStart(item)} size="small" type="link">
+            开始
+          </Button>
+        </Flex>
       ),
       title: "操作",
-      width: 88,
+      width: 128,
     },
   ];
 }
@@ -83,6 +97,7 @@ export function DemandListPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<DemandListItem | null>(null);
+  const [viewing, setViewing] = useState<DemandListItem | null>(null);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -193,7 +208,10 @@ export function DemandListPage() {
       ) : null}
 
       <Table<DemandListItem>
-        columns={demandColumns((item) => setStarting(item))}
+        columns={demandColumns(
+          (item) => setStarting(item),
+          (item) => setViewing(item),
+        )}
         dataSource={page?.records ?? []}
         loading={loading}
         locale={{
@@ -218,6 +236,7 @@ export function DemandListPage() {
         size="middle"
       />
       <StartPipelineWizard demand={starting} onClose={() => setStarting(null)} />
+      <DemandProjectDrawer demand={viewing} onClose={() => setViewing(null)} />
     </div>
   );
 }
