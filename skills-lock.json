@@ -13,6 +13,12 @@
       "skillPath": "plugins/backend-development/skills/architecture-patterns/SKILL.md",
       "computedHash": "a66aaa5aa49b75bec12b6270dcde8794b1f0cc75fbb9ecb999e43f8b723b461f"
     },
+    "gracker-writing": {
+      "source": "Gracker/gracker-writing",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "121fdb4c3b2760502029667a5bd3aa76211fce73dac7f6ccbcaded8f06efa72d"
+    },
     "logic-audit": {
       "source": "srinitude/skills",
       "sourceType": "github",
