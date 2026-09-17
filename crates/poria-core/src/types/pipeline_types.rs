@@ -106,6 +106,9 @@ pub struct PipelineConfig {
     pub backend_trd_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_context: Option<BackendContext>,
+    /// Local folder `~/.poria/projects/<demand_code>` with extracted markdown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,6 +185,7 @@ mod tests {
                 scope: "ls".into(),
                 name: "ls-api".into(),
             }),
+            project_dir: None,
         };
 
         let parsed: PipelineConfig =
@@ -199,6 +203,7 @@ mod tests {
         assert_eq!(backend.name, "ls-api");
         assert_eq!(parsed.repos.len(), 1);
         assert_eq!(parsed.repos[0].name, "ls-entrance");
+        assert!(parsed.project_dir.is_none());
     }
 
     #[test]

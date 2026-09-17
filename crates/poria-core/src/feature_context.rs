@@ -38,6 +38,21 @@ impl FeatureContext {
         })
     }
 
+    pub fn create_at(
+        root: PathBuf,
+        pipeline_id: &str,
+        demand_id: i64,
+    ) -> Result<Self, std::io::Error> {
+        fs::create_dir_all(&root)?;
+        Ok(Self {
+            id: pipeline_id.to_string(),
+            pipeline_id: pipeline_id.to_string(),
+            demand_id,
+            root,
+            created_at: Utc::now(),
+        })
+    }
+
     pub fn from_existing(app_data_dir: &Path, pipeline_id: &str) -> Option<Self> {
         let root = app_data_dir.join("features").join(pipeline_id);
         if root.is_dir() {
@@ -117,6 +132,19 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("poria-fc-test-{}", nanoid::nanoid!(8)));
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn test_create_at_uses_given_root() {
+        let base = temp_dir();
+        let root = base.join("R2026082156824");
+        let ctx = FeatureContext::create_at(root.clone(), "pipe-012", 99).unwrap();
+        assert_eq!(ctx.root, root);
+        assert!(ctx.root.is_dir());
+        assert_eq!(ctx.demand_id, 99);
+        ctx.write_artifact(ARTIFACT_PRD, "# prd").unwrap();
+        assert!(ctx.has_artifact(ARTIFACT_PRD));
+        fs::remove_dir_all(&base).ok();
     }
 
     #[test]

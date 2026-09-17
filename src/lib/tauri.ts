@@ -6,6 +6,8 @@ import type {
   ChannelInfo,
   DemandPage,
   DemandPrdPreview,
+  DemandProject,
+  DemandProjectFileContent,
   PipelineDetail,
   PipelineSummary,
   RegisteredRepo,
@@ -106,6 +108,28 @@ export async function listDemands(input: {
 
 export async function previewDemandPrd(demandId: number): Promise<DemandPrdPreview> {
   return invoke<DemandPrdPreview>("preview_demand_prd", { demandId });
+}
+
+export async function listDemandProject(input: {
+  demandCode: string;
+  demandId?: number;
+}): Promise<DemandProject> {
+  return invoke<DemandProject>("list_demand_project", {
+    demandCode: input.demandCode,
+    demandId: input.demandId,
+  });
+}
+
+export async function readDemandProjectFile(input: {
+  demandCode: string;
+  demandId?: number;
+  fileName: string;
+}): Promise<DemandProjectFileContent> {
+  return invoke<DemandProjectFileContent>("read_demand_project_file", {
+    demandCode: input.demandCode,
+    demandId: input.demandId,
+    fileName: input.fileName,
+  });
 }
 
 export async function listRepoBranches(id: string): Promise<string[]> {
