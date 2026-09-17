@@ -90,11 +90,13 @@ export async function retryClone(id: string): Promise<RegisteredRepo> {
 }
 
 export async function listDemands(input: {
+  acceptedByMe?: boolean;
   current?: number;
   keyword?: string;
   pageSize?: number;
 }): Promise<DemandPage> {
   return invoke<DemandPage>("list_demands", {
+    acceptedByMe: input.acceptedByMe,
     current: input.current,
     keyword: input.keyword,
     pageSize: input.pageSize,

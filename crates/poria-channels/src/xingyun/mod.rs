@@ -56,6 +56,7 @@ impl Channel for XingyunChannel {
                 let page = list_demands(
                     &credentials,
                     DemandListQuery {
+                        accepted_by_me: input.accepted_by_me.unwrap_or(false),
                         keyword: input.keyword,
                         current: input.current.unwrap_or(0),
                         page_size: input.page_size.unwrap_or(0),
@@ -242,7 +243,10 @@ async fn jacp_fetch(
 // Demand API
 // ---------------------------------------------------------------------------
 
-/// List demands assigned to the current ERP (Xingyun `receiver`).
+/// List demands related to the current ERP.
+///
+/// Default omits `receiver` (related-to-me via cookie / `optErp`). When
+/// `query.accepted_by_me` is true, the body includes `receiver = ERP`.
 pub async fn list_demands(
     credentials: &JacpCredentials,
     query: DemandListQuery,
@@ -265,11 +269,12 @@ pub async fn list_demands(
         "Demand list query failed",
     )
     .await?;
+    let fallback_receiver = query.accepted_by_me.then_some(receiver);
     Ok(demand_list::parse_demand_page(
         data,
         query.current,
         query.page_size,
-        receiver,
+        fallback_receiver,
     ))
 }
 

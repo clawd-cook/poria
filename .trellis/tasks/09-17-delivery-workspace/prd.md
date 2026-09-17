@@ -2,7 +2,7 @@
 
 ## Goal
 
-把 Poria 桌面端做成面向**前端研发**的交付工作台：先登记并克隆仓库，再用 SSO 拉取「指派给我」的行云需求，从需求右侧「开始」配置前端仓、后端仓+分支、JoySpace PRD，然后跑完整流水线。
+把 Poria 桌面端做成面向**前端研发**的交付工作台：先登记并克隆仓库，再用 SSO 拉取「与我相关」的行云需求（可勾选「由我受理」收窄为 receiver=当前 ERP），从需求右侧「开始」配置前端仓、后端仓+分支、JoySpace PRD，然后跑完整流水线。
 
 主交付物始终是前端代码（功能分支、CR、MR）。后端仓不是第二条交付流水线，只按所选分支提供只读代码上下文，辅助生成前端实现。
 
@@ -11,7 +11,7 @@
 当前桌面端（`src/components/Shell.tsx`）是 Pipeline / 技能 / 渠道 三栏，设置为 Pipeline 侧栏 Modal。提交入口是粘贴行云卡片链接（`SubmitBar` → `submit_pipeline`），只解析 URL 并创建空 Pipeline（`repos: []`）。
 
 - SSO 由独立任务 `09-17-sso-login` 提供：凭据在 `~/.poria/auth.json`。本任务只消费登录态。
-- Xingyun channel 已有 `getDemand` / 附件 / `resolvePrdLink`，没有需求列表。列表行为对齐 h2o-plugin `demands.list`（默认指派给我、keyword、分页）。
+- Xingyun channel 已有 `getDemand` / 附件 / `resolvePrdLink`，没有需求列表。列表默认「与我相关」（不传 receiver）；勾选「由我受理」时才传 `receiver`。
 - `RepoConfig` 挂在 Pipeline 上，不是本机已登记仓清单。Worktree 假定 git root 已在本地。`pipeline.repos.length > 1` 会走 multi-repo 开发路径，因此后端上下文不能放进 `pipeline.repos`。
 - git URL 路径解析已有 `repo_search_path_from_git_url`：`git@coding.jd.com:ls/ls-entrance.git` → `ls/ls-entrance`。
 
@@ -33,8 +33,9 @@
 ### R3: 需求列表
 
 - 已登录时用当前 SSO cookie + ERP 拉取行云需求
-- 范围仅「指派给我」+ 关键字搜索 + 分页。不做「我提出的」或项目全量
-- 每行：需求名称、编号、状态、接收人；右侧「开始」
+- 默认「与我相关」（JACP `/openapi/v3/demands/query` 不传 `receiver`，cookie/`optErp` 限定范围）+ 关键字搜索 + 分页。不做「我提出的」或项目全量
+- 复选框「由我受理」：勾选后传 `receiver = 当前 ERP`
+- 每行：需求名称、编号、状态、接收人；右侧「开始」。列表记录通常无 receiver 对象，未勾选时接收人显示「—」，不要伪造当前 ERP
 - 未登录、cookie 失效、接口失败时给出去登录 / 重试，不展示假数据
 
 ### R4: 从需求开始流水线
@@ -67,7 +68,7 @@
 - 流水线阶段不变：`init → review_prd → design → workspace → dev → cr → deploy`
 - 向导候选仓只来自本机已登记且克隆成功的仓库
 - `pipeline.repos` 只含前端交付仓；后端上下文单独存储，避免误入 multi-repo 开发/CR/deploy
-- 不修改 `submodules/`；需求列表对齐 h2o-plugin `demands.list` 的「指派给我」行为
+- 不修改 `submodules/`；需求列表默认与我相关，勾选「由我受理」才对齐 h2o-plugin `assignedToMe`
 
 ## Out of Scope
 

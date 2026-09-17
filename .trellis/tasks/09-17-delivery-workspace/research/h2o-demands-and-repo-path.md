@@ -16,7 +16,17 @@ h2o-plugin `demands.list` (`submodules/h2o-plugin/skills/qingyan/reference.md`):
 
 Implementation sketch in `submodules/h2o-plugin/src/agent/actions.ts` `listDemands`: `queryDemands(credentials, { current, pageSize, keyword, receiver })` with `receiver` defaulting to `credentials.username` when `assignedToMe` is true.
 
-MVP copies this contract: always assigned-to-me, no project-wide list.
+2026-09-17 live JACP `/openapi/v3/demands/query` (cookie + `optErp`, in-progress statuses):
+
+| Body | Meaning | Sample total |
+| --- | --- | --- |
+| omit `receiver` / `processor` | Related-to-me (workbench default) | 28 |
+| `receiver: erp` | Assigned to me (h2o `assignedToMe`) | 18 |
+| `processor: erp` | I am processor (subset of receiver) | 16 |
+
+Unknown extra fields (`relatedErp`, `searchType`, …) are ignored; totals stay at the omit-receiver set. List records have `id/demandCode/name/status/statusName` and typically **no** `receiver` object.
+
+UI: default omit receiver; checkbox 「由我受理」 sends `receiver`. Do not invent receiver as the current ERP unless that filter is on.
 
 PRD prefill: existing `resolvePrdLink` / `resolve_prd_from_attachments` on the selected demand.
 

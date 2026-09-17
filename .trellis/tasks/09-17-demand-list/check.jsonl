@@ -1,3 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
-{"file": ".trellis/tasks/09-17-delivery-workspace/prd.md", "reason": "Parent acceptance and frontend-only delivery constraints."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing Shell pieces, git_url helpers, and PipelineDetail."}
+{"file": ".trellis/tasks/09-17-delivery-workspace/prd.md", "reason": "Parent R3: related-to-me default, 由我受理 checkbox, no fake receiver ERP."}
+{"file": ".trellis/tasks/09-17-delivery-workspace/design.md", "reason": "listDemands accepted_by_me omits or adds JACP receiver."}
+{"file": ".trellis/tasks/09-17-delivery-workspace/research/h2o-demands-and-repo-path.md", "reason": "Live JACP related-to-me vs receiver vs processor totals."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Xingyun demand list query-body contract across UI, Tauri, and channel."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Keep a single owner for receiver query and display fallback."}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "list_demands IPC and acceptedByMe verification."}

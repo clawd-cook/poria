@@ -28,18 +28,22 @@ fn require_jacp_credentials() -> Result<poria_channels::xingyun::JacpCredentials
     })
 }
 
-/// List Xingyun demands assigned to the logged-in ERP.
+/// List Xingyun demands related to the logged-in ERP.
+///
+/// `accepted_by_me` (frontend `acceptedByMe`) adds `receiver = ERP`. Default false.
 #[tauri::command]
 pub async fn list_demands(
     keyword: Option<String>,
     current: Option<i64>,
     page_size: Option<i64>,
+    accepted_by_me: Option<bool>,
 ) -> Result<DemandPage, String> {
     let credentials = require_jacp_credentials()?;
 
     query_xingyun_demands(
         &credentials,
         DemandListQuery {
+            accepted_by_me: accepted_by_me.unwrap_or(false),
             keyword,
             current: current.unwrap_or(0),
             page_size: page_size.unwrap_or(0),

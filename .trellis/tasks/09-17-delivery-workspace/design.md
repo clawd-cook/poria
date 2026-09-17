@@ -44,7 +44,9 @@ UI git URL
 
 ```
 SSO cookie + ERP
-  → Xingyun listDemands { receiver: erp, keyword, current, pageSize }
+  → Xingyun listDemands { keyword, current, pageSize, accepted_by_me? }
+     accepted_by_me false (default): omit receiver (related-to-me via cookie/optErp)
+     accepted_by_me true: receiver = erp
   → table
   → 开始: getDemand + resolvePrdLink (best-effort prefill)
 ```
@@ -114,7 +116,7 @@ Do not append backend to `repos`. Executor uses `pipeline.repos.len() > 1` for m
 | --- | --- |
 | `register_repo` / `list_repos` / `retry_clone` | Inventory + clone |
 | `list_repo_branches` | Backend branch picker |
-| `list_demands` | Assigned-to-me page |
+| `list_demands` | Related-to-me page; `accepted_by_me` adds `receiver` |
 | `preview_demand_prd` | Wizard prefill via `resolvePrdLink` |
 | `submit_pipeline` | Replace link-only payload with structured input |
 

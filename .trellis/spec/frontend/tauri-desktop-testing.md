@@ -35,6 +35,19 @@ invoke<RegisteredRepo[]>("list_repos");
 invoke<RegisteredRepo>("retry_clone", { id });
 ```
 
+Demand list IPC:
+
+```typescript
+invoke<DemandPage>("list_demands", { acceptedByMe, current, keyword, pageSize });
+```
+
+| `acceptedByMe` | JACP `/openapi/v3/demands/query` body | Row receiver when the record has no `receiver` object |
+| --- | --- | --- |
+| omitted / `false` (default) | omit `receiver` and `processor` (related-to-me via cookie / `optErp`) | `null` → UI `—`. Do not stamp the logged-in ERP |
+| `true` (checkbox 「由我受理」) | `receiver` = current ERP; still omit `processor` | may fall back to the query ERP |
+
+Flow: `DemandListPage` → `listDemands({ acceptedByMe })` → Tauri `list_demands` → `DemandListQuery.accepted_by_me`. Logged-out UI must not call this command.
+
 Clone dest: `~/.poria/repos/<scope>/<name>` from `repo_scope_and_name_from_git_url`.
 
 ### 3. Contracts
@@ -52,6 +65,7 @@ macOS AX (osascript) after granting Accessibility to the calling app:
 | --- | --- | --- |
 | Home | `AXMenuItem` | `home 首页` |
 | Demands | `AXMenuItem` | `unordered-list 需求列表` |
+| Accepted-by-me | `AXCheckBox` | `由我受理` |
 | Repos | `AXMenuItem` | `folder 仓库列表` |
 | Settings | `AXMenuItem` | `setting 设置` |
 | Register | `AXButton` | `登 记` (antd inserts a space) |
@@ -90,13 +104,13 @@ Known 2026-09-17 fixtures:
 
 ### 5. Good / Base / Bad Cases
 
-- **Good**: `cargo tauri dev` → AX click `folder 仓库列表` → paste URL → `登 记` → wait until `成功` and `HEAD` exists.
+- **Good**: `cargo tauri dev` → AX click `folder 仓库列表` → paste URL → `登 记` → wait until `成功` and `HEAD` exists. Demand tab default list is larger than 「由我受理」; checking the box refetches page 1 with `receiver`.
 - **Base**: layout-only check in Cursor browser on 1420 (tabs, empty states). Do not claim clone/login/submit passed.
-- **Bad**: treat Cursor browser invoke failure as an app bug; or treat `/Applications/Poria.app` as the current branch.
+- **Bad**: treat Cursor browser invoke failure as an app bug; treat `/Applications/Poria.app` as the current branch; or always send JACP `receiver` / stamp the logged-in ERP on every row.
 
 ### 6. Tests Required
 
-- Unit: `cargo test -p poria-infrastructure -- registered_repo`; git URL `scope_and_name` / path-escape tests.
+- Unit: `cargo test -p poria-infrastructure -- registered_repo`; git URL `scope_and_name` / path-escape tests; `cargo test -p poria-channels -- demand_list` (omit `receiver`/`processor` by default; `accepted_by_me` adds `receiver` only).
 - Manual E2E (this spec): two distinct ready repos, AX statuses `成功`, paths under `~/.poria/repos`.
 - Assert: `pipeline.repos` stays frontend-only when later starting a pipeline (backend is `backend_context`).
 
@@ -117,6 +131,18 @@ export PATH="$HOME/.nvm/versions/node/v24.20.0/bin:$HOME/.cargo/bin:$PATH"
 cargo tauri dev
 # drive process poria-desktop (AX), not the Cursor browser tab
 ```
+
+#### Wrong (demand list)
+
+```json
+{ "current": 1, "pageSize": 20, "status": [2, 13, 3, 5, 6, 7, 8, 9, 10, 11, 12], "receiver": "<erp>" }
+```
+
+Always sending `receiver` hides related-to-me rows. Stamping that ERP onto records that have no `receiver` object also lies in the 接收人 column.
+
+#### Correct (demand list)
+
+Default body omits `receiver` and `processor`. Checkbox 「由我受理」 / `acceptedByMe: true` is the only path that adds `"receiver": "<erp>"`. Unchecked rows with no receiver object render `—`.
 
 ## Common Mistake: Vite tab vs desktop window
 

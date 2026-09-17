@@ -1,4 +1,4 @@
-import { Alert, Button, Empty, Flex, Input, Table, Typography } from "antd";
+import { Alert, Button, Checkbox, Empty, Flex, Input, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 
@@ -75,6 +75,7 @@ export function DemandListPage() {
 
   const [keywordInput, setKeywordInput] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [acceptedByMe, setAcceptedByMe] = useState(false);
   const [current, setCurrent] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [reloadToken, setReloadToken] = useState(0);
@@ -101,6 +102,7 @@ export function DemandListPage() {
     void (async () => {
       try {
         const result = await listDemands({
+          acceptedByMe,
           current,
           keyword: keyword || undefined,
           pageSize,
@@ -123,7 +125,7 @@ export function DemandListPage() {
     return () => {
       cancelled = true;
     };
-  }, [active, current, keyword, loggedIn, pageSize, reloadToken]);
+  }, [acceptedByMe, active, current, keyword, loggedIn, pageSize, reloadToken]);
 
   function handleSearch(value: string) {
     setKeyword(value.trim());
@@ -134,7 +136,7 @@ export function DemandListPage() {
     return (
       <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
         <Title level={4}>需求列表</Title>
-        <Empty description="请先登录后再查看指派给你的需求" style={{ marginTop: 64 }}>
+        <Empty description="请先登录后再查看与你相关的需求" style={{ marginTop: 64 }}>
           <Button onClick={() => void startLogin()} type="primary">
             登录
           </Button>
@@ -146,7 +148,7 @@ export function DemandListPage() {
   return (
     <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
       <Title level={4}>需求列表</Title>
-      <Flex gap={8} style={{ marginBottom: 16, maxWidth: 480 }}>
+      <Flex align="center" gap={12} style={{ marginBottom: 16, maxWidth: 640 }}>
         <Input.Search
           allowClear
           onChange={(event) => setKeywordInput(event.target.value)}
@@ -154,6 +156,15 @@ export function DemandListPage() {
           placeholder="搜索需求名称或编号"
           value={keywordInput}
         />
+        <Checkbox
+          checked={acceptedByMe}
+          onChange={(event) => {
+            setAcceptedByMe(event.target.checked);
+            setCurrent(1);
+          }}
+        >
+          由我受理
+        </Checkbox>
       </Flex>
 
       {error ? (
@@ -185,7 +196,13 @@ export function DemandListPage() {
         columns={demandColumns((item) => setStarting(item))}
         dataSource={page?.records ?? []}
         loading={loading}
-        locale={{ emptyText: error ? "加载失败，请重试" : "暂无指派给你的需求" }}
+        locale={{
+          emptyText: error
+            ? "加载失败，请重试"
+            : acceptedByMe
+              ? "暂无由你受理的需求"
+              : "暂无与你相关的需求",
+        }}
         pagination={{
           current: page?.current ?? current,
           onChange: (nextPage, nextSize) => {

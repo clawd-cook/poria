@@ -3,13 +3,20 @@ use super::demand_status::{
 };
 use super::types::{DemandListItem, DemandListQuery, DemandPage};
 
+/// Build the JACP `/openapi/v3/demands/query` body.
+///
+/// Default (related-to-me): omit `receiver` and never send `processor`.
+/// `accepted_by_me` adds `receiver` = current ERP (由我受理). Do not stamp
+/// that ERP onto list rows unless this flag is on.
 pub(crate) fn demand_list_query_body(query: &DemandListQuery, receiver: &str) -> serde_json::Value {
     let mut body = serde_json::json!({
         "current": query.current,
         "pageSize": query.page_size,
         "status": VISIBLE_DEMAND_STATUSES,
-        "receiver": receiver,
     });
+    if query.accepted_by_me {
+        body["receiver"] = serde_json::Value::String(receiver.to_string());
+    }
     if let Some(keyword) = &query.keyword {
         body["keyword"] = serde_json::Value::String(keyword.clone());
     }
@@ -20,7 +27,7 @@ pub(crate) fn parse_demand_page(
     data: serde_json::Value,
     requested_current: i64,
     requested_page_size: i64,
-    fallback_receiver: &str,
+    fallback_receiver: Option<&str>,
 ) -> DemandPage {
     let obj = data.as_object();
     let raw_records = obj
@@ -48,7 +55,7 @@ pub(crate) fn parse_demand_page(
 
 fn parse_demand_list_item(
     value: serde_json::Value,
-    fallback_receiver: &str,
+    fallback_receiver: Option<&str>,
 ) -> Option<DemandListItem> {
     let obj = value.as_object()?;
     let id = json_i64(obj.get("id"), 0);
@@ -97,7 +104,7 @@ fn parse_demand_list_item(
 
 fn receiver_from_record(
     obj: &serde_json::Map<String, serde_json::Value>,
-    fallback_receiver: &str,
+    fallback_receiver: Option<&str>,
 ) -> (Option<String>, Option<String>) {
     if let Some(recv) = obj.get("receiver").and_then(|v| v.as_object()) {
         let erp = recv
@@ -117,11 +124,12 @@ fn receiver_from_record(
         }
     }
 
-    let fallback = fallback_receiver.trim();
-    if fallback.is_empty() {
-        (None, None)
-    } else {
-        (Some(fallback.to_string()), None)
+    let fallback = fallback_receiver
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    match fallback {
+        Some(erp) => (Some(erp.to_string()), None),
+        None => (None, None),
     }
 }
 
@@ -149,18 +157,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn list_demand_query_body_includes_receiver_and_visible_statuses() {
+    fn list_demand_query_body_omits_receiver_by_default() {
         let query = DemandListQuery {
             current: 2,
-            keyword: None,
             page_size: 10,
+            ..Default::default()
         };
         let body = demand_list_query_body(&query, "heyongqi10");
         assert_eq!(body["current"], 2);
         assert_eq!(body["pageSize"], 10);
-        assert_eq!(body["receiver"], "heyongqi10");
         assert!(body.get("keyword").is_none());
-        assert!(body.get("proposer").is_none());
+        assert_related_to_me_query_fields(&body);
+        assert_eq!(body["status"], serde_json::json!(VISIBLE_DEMAND_STATUSES));
+    }
+
+    #[test]
+    fn list_demand_query_body_includes_receiver_when_accepted_by_me() {
+        let query = DemandListQuery {
+            accepted_by_me: true,
+            current: 2,
+            page_size: 10,
+            ..Default::default()
+        };
+        let body = demand_list_query_body(&query, "heyongqi10");
+        assert_accepted_by_me_query_fields(&body, "heyongqi10");
         assert_eq!(body["status"], serde_json::json!(VISIBLE_DEMAND_STATUSES));
     }
 
@@ -170,9 +190,24 @@ mod tests {
             current: 1,
             keyword: Some("门店".into()),
             page_size: 20,
+            ..Default::default()
         };
         let body = demand_list_query_body(&query, "erp1");
         assert_eq!(body["keyword"], "门店");
+        assert_related_to_me_query_fields(&body);
+    }
+
+    #[test]
+    fn list_demand_query_body_keeps_keyword_when_accepted_by_me() {
+        let query = DemandListQuery {
+            accepted_by_me: true,
+            current: 1,
+            keyword: Some("门店".into()),
+            page_size: 20,
+        };
+        let body = demand_list_query_body(&query, "erp1");
+        assert_eq!(body["keyword"], "门店");
+        assert_accepted_by_me_query_fields(&body, "erp1");
     }
 
     #[test]
@@ -181,11 +216,13 @@ mod tests {
             current: 0,
             keyword: Some("  ".into()),
             page_size: -1,
+            ..Default::default()
         }
         .normalized();
         assert_eq!(query.current, 1);
         assert_eq!(query.page_size, 20);
         assert_eq!(query.keyword, None);
+        assert!(!query.accepted_by_me);
     }
 
     #[test]
@@ -202,7 +239,7 @@ mod tests {
                 "receiver": { "erp": "zhangsan", "name": "张三" }
             }]
         });
-        let page = parse_demand_page(data, 1, 20, "heyongqi10");
+        let page = parse_demand_page(data, 1, 20, None);
         assert_eq!(page.total, 1);
         assert_eq!(page.current, 1);
         assert_eq!(page.page_size, 20);
@@ -226,11 +263,25 @@ mod tests {
             ],
             "total": 3
         });
-        let page = parse_demand_page(data, 1, 20, "erp1");
+        let page = parse_demand_page(data, 1, 20, None);
         assert_eq!(page.records.len(), 1);
         assert_eq!(page.records[0].id, 2);
         assert_eq!(page.records[0].name, "ABC");
         assert_eq!(page.total, 3);
+    }
+
+    #[test]
+    fn parse_list_demand_page_omits_receiver_without_fallback() {
+        let data = serde_json::json!({
+            "records": [{
+                "id": 9,
+                "name": "无接收人",
+                "status": 5
+            }]
+        });
+        let page = parse_demand_page(data, 1, 20, None);
+        assert_eq!(page.records[0].receiver_erp, None);
+        assert_eq!(page.records[0].receiver_name, None);
     }
 
     #[test]
@@ -242,7 +293,7 @@ mod tests {
                 "status": 5
             }]
         });
-        let page = parse_demand_page(data, 1, 20, "heyongqi10");
+        let page = parse_demand_page(data, 1, 20, Some("heyongqi10"));
         assert_eq!(page.records[0].receiver_erp.as_deref(), Some("heyongqi10"));
         assert_eq!(page.records[0].receiver_name, None);
         assert_eq!(page.records[0].status_label, "处理中（直接处理）");
@@ -258,9 +309,21 @@ mod tests {
                 "status": "13"
             }]
         });
-        let page = parse_demand_page(data, 1, 20, "erp1");
+        let page = parse_demand_page(data, 1, 20, None);
         assert_eq!(page.records.len(), 1);
         assert_eq!(page.records[0].id, 42);
         assert_eq!(page.records[0].status, Some(13));
+    }
+
+    fn assert_related_to_me_query_fields(body: &serde_json::Value) {
+        assert!(body.get("receiver").is_none());
+        assert!(body.get("processor").is_none());
+        assert!(body.get("proposer").is_none());
+    }
+
+    fn assert_accepted_by_me_query_fields(body: &serde_json::Value, receiver: &str) {
+        assert_eq!(body["receiver"], receiver);
+        assert!(body.get("processor").is_none());
+        assert!(body.get("proposer").is_none());
     }
 }

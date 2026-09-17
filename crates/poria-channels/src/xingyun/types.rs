@@ -57,11 +57,16 @@ pub struct DemandDetail {
     pub receiver: Option<UserVO>,
 }
 
-/// Query for assigned-to-me demand list. Receiver is always the current ERP.
+/// Query for related-to-me demand list.
+///
+/// Default (`accepted_by_me` false) omits `receiver` so JACP returns demands
+/// related to the current ERP via cookie / `optErp`. When true, `receiver` is
+/// the current ERP (assigned-to-me / 由我受理).
 #[derive(Debug, Clone, Default)]
 pub struct DemandListQuery {
-    pub keyword: Option<String>,
+    pub accepted_by_me: bool,
     pub current: i64,
+    pub keyword: Option<String>,
     pub page_size: i64,
 }
 
@@ -76,8 +81,9 @@ impl DemandListQuery {
             }
         });
         Self {
-            keyword,
+            accepted_by_me: self.accepted_by_me,
             current: if self.current > 0 { self.current } else { 1 },
+            keyword,
             page_size: if self.page_size > 0 {
                 self.page_size
             } else {
@@ -87,7 +93,7 @@ impl DemandListQuery {
     }
 }
 
-/// One row in the assigned-to-me demand table.
+/// One row in the related-to-me demand table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DemandListItem {
     pub id: i64,
@@ -99,7 +105,7 @@ pub struct DemandListItem {
     pub receiver_name: Option<String>,
 }
 
-/// Paginated assigned-to-me demand list.
+/// Paginated related-to-me demand list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DemandPage {
     pub records: Vec<DemandListItem>,
@@ -167,6 +173,8 @@ pub struct XingyunChannelInput {
     pub current: Option<i64>,
     #[serde(rename = "pageSize", skip_serializing_if = "Option::is_none")]
     pub page_size: Option<i64>,
+    #[serde(rename = "acceptedByMe", skip_serializing_if = "Option::is_none")]
+    pub accepted_by_me: Option<bool>,
 }
 
 /// Output from the Xingyun channel.

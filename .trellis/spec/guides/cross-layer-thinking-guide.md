@@ -290,6 +290,18 @@ When a CLI auto-detects a mode by probing a remote resource (e.g., checking if `
 
 ---
 
+## Xingyun Demand List Query Body
+
+When changing demand-list filters (`acceptedByMe`, `receiver`, `processor`):
+
+- [ ] Does the default JACP body omit `receiver` (related-to-me via cookie / `optErp`)?
+- [ ] Is 「由我受理」 the only path that adds `receiver`?
+- [ ] Are you avoiding `processor` and inventing receiver ERP on related-to-me rows?
+
+→ Read [Tauri Desktop Testing](../frontend/tauri-desktop-testing.md) (demand list IPC).
+
+---
+
 ## When to Create Flow Documentation
 
 Create detailed flow docs when:
