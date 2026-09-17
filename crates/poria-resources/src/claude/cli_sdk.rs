@@ -58,8 +58,13 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
     }
 
     if !options.allowed_tools.is_empty() {
+        let tools = options.allowed_tools.join(",");
+        args.push("--tools".into());
+        args.push(tools.clone());
         args.push("--allowedTools".into());
-        args.push(options.allowed_tools.join(","));
+        args.push(tools);
+        args.push("--disallowedTools".into());
+        args.push("Agent,Task,Bash,Glob,WebFetch,WebSearch".into());
     }
 
     if let Some(max_turns) = options.max_turns {
@@ -229,6 +234,9 @@ mod tests {
         assert!(args.contains(&"You are a code reviewer.".to_string()));
         assert!(args.contains(&"--allowedTools".to_string()));
         assert!(args.contains(&"Read,Grep".to_string()));
+        assert!(args.contains(&"--tools".to_string()));
+        assert!(args.contains(&"--disallowedTools".to_string()));
+        assert!(args.contains(&"Agent,Task,Bash,Glob,WebFetch,WebSearch".to_string()));
         assert!(args.contains(&"--max-turns".to_string()));
         assert!(args.contains(&"20".to_string()));
     }

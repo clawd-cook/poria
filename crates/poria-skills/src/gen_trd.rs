@@ -80,9 +80,21 @@ impl Skill for GenTrdSkill {
             .extra
             .get("feature_dir")
             .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                let workdir = ctx.workdir.trim();
+                if workdir.is_empty() {
+                    None
+                } else {
+                    Some(workdir.to_string())
+                }
+            })
+            .or_else(|| input.pipeline.config.project_dir.clone())
             .ok_or("missing feature_dir in skill input")?;
 
-        let feature_ctx = FeatureContext::from_root(std::path::Path::new(feature_dir))
+        let feature_ctx = FeatureContext::from_root(std::path::Path::new(&feature_dir))
             .ok_or("feature context not found")?;
 
         let prd_content = feature_ctx
@@ -93,23 +105,46 @@ impl Skill for GenTrdSkill {
             .read_artifact(ARTIFACT_PRD_REVIEW)?
             .unwrap_or_default();
 
+        let title = input
+            .pipeline
+            .demand_name
+            .clone()
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or_else(|| input.pipeline.demand_code.clone());
+        let repo_name = input
+            .pipeline
+            .config
+            .repos
+            .first()
+            .map(|repo| repo.name.clone())
+            .unwrap_or_default();
+
         let mut vars = HashMap::new();
-        vars.insert("feature_dir".into(), feature_dir.to_string());
+        vars.insert("feature_dir".into(), feature_dir.clone());
         vars.insert("project_root".into(), ctx.workdir.clone());
         vars.insert("prd_content".into(), prd_content);
         vars.insert("prd_review_content".into(), prd_review_content);
+        vars.insert("title".into(), title);
+        vars.insert("repo_name".into(), repo_name);
         insert_backend_coding_aid_vars(&mut vars, &input.pipeline.config, &feature_ctx);
 
-        let system_prompt = render_prompt(TRD_GEN_PROMPT, &vars);
+        let system_prompt = format!(
+            "{rendered}\n\n## 桌面端非交互覆盖（优先于上文任何等待指令）\n\
+             没有用户可以回复。禁止提问。默认本期做完 PRD 前端可见项（明确二期/不做除外）。\n\
+             无 API.md 则用「仅高保真 UI」。grilling 用推荐答案写入附录 B。\n\
+             禁止读取 backend_repo_path 下任何源码，禁止派生子 agent / Explore / Bash。\n\
+             第一个工具调用必须是 Write `TRD.md`。",
+            rendered = render_prompt(TRD_GEN_PROMPT, &vars)
+        );
 
         let agent_input = AgentTaskInput {
-            prompt: "基于 PRD 和 PRD_REVIEW 生成前端技术设计文档 TRD.md。后端 TRD 与后端仓仅作只读参考，禁止改后端仓，不得覆盖前端 TRD.md。".into(),
+            prompt: "这是桌面端非交互执行。材料已在系统提示中。不要读后端仓、不要子 agent、不要 Bash。第一个工具调用必须 Write TRD.md。grilling 推荐答案写入附录 B。禁止改后端仓，不得覆盖或改名前端 TRD.md。".into(),
             worktree_path: ctx.workdir.clone(),
             system_prompt: Some(system_prompt),
             model: None,
             max_budget_usd: Some(3.0),
             max_turns: Some(20),
-            timeout_ms: Some(10 * 60_000),
+            timeout_ms: Some(12 * 60_000),
             extra_tools: Some(vec![
                 "Read".into(),
                 "Write".into(),
@@ -119,25 +154,26 @@ impl Skill for GenTrdSkill {
         };
 
         let result = agent_pool.dispatch(agent_input).await;
-
-        if !result.success {
+        let trd_exists = feature_ctx.has_artifact(ARTIFACT_TRD);
+        if !result.success && !trd_exists {
             return Err(format!(
                 "Agent dispatch failed: {}",
                 result.error.unwrap_or_default()
             )
             .into());
         }
-
-        let trd_exists = feature_ctx.has_artifact(ARTIFACT_TRD);
+        if !trd_exists {
+            return Err("TRD.md was not written".into());
+        }
 
         Ok(SkillOutput {
             output: json!({
                 "trdPath": feature_ctx.artifact_path(ARTIFACT_TRD),
-                "trdExists": trd_exists,
+                "trdExists": true,
                 "agentSessionId": result.session_id,
                 "costUsd": result.cost_usd,
             }),
-            gates_pass: Some(trd_exists),
+            gates_pass: Some(true),
         })
     }
 }

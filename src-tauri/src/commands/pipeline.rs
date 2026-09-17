@@ -19,7 +19,7 @@ use poria_infrastructure::auth::{
 };
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
 use poria_resources::git_current_branch;
-use poria_skills::{InitSkill, ReviewPrdSkill};
+use poria_skills::{GenTrdSkill, InitSkill, ReviewPrdSkill};
 
 use crate::AppState;
 
@@ -509,6 +509,9 @@ pub async fn execute_stage(
             run_review_prd_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone())
                 .await
         }
+        StageEnum::Design => {
+            run_design_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
+        }
         _ => {
             let stage_label = serde_json::to_string(&stage_name)
                 .unwrap_or_default()
@@ -763,6 +766,107 @@ async fn run_review_prd_stage(
                     &[CorePipelineEvent::stage_failed(
                         &pipeline.id,
                         StageEnum::ReviewPrd,
+                        &message,
+                        pipeline.stages[stage_idx].retry_count,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Err(message)
+        }
+    }
+}
+
+async fn run_design_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &tauri::AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
+) -> Result<(), String> {
+    let project_dir = resolve_demand_project_dir(pipeline)?;
+    if !project_dir.join("PRD.md").is_file() {
+        return Err("请先完成初始化，导出 PRD.md".into());
+    }
+
+    pipeline.status = PipelineStatus::Running;
+    pipeline.stages[stage_idx].status = StageStatus::Running;
+    pipeline.stages[stage_idx].skill_id = Some("skill:gen-trd".into());
+    pipeline.stages[stage_idx].started_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = None;
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_started(
+                &pipeline.id,
+                StageEnum::Design,
+            )],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+
+    let project_dir_str = project_dir.to_string_lossy().to_string();
+    let mut extra = serde_json::Map::new();
+    extra.insert(
+        "feature_dir".into(),
+        serde_json::Value::String(project_dir_str.clone()),
+    );
+
+    let ctx = SkillContext {
+        pipeline_id: pipeline.id.clone(),
+        workdir: project_dir_str,
+        credentials: serde_json::json!({}),
+    };
+    let input = SkillInput {
+        stage: pipeline.stages[stage_idx].clone(),
+        pipeline: pipeline.clone(),
+        extra,
+    };
+
+    match GenTrdSkill::new()
+        .with_agent_pool(agent_pool)
+        .execute(input, ctx)
+        .await
+    {
+        Ok(output) => {
+            pipeline.stages[stage_idx].status = StageStatus::Completed;
+            pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_completed(
+                        &pipeline.id,
+                        StageEnum::Design,
+                        output.output,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Ok(())
+        }
+        Err(err) => {
+            let message = err.to_string();
+            pipeline.status = PipelineStatus::Failed;
+            pipeline.stages[stage_idx].status = StageStatus::Failed;
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.stages[stage_idx].issue = Some(StageIssue {
+                class: "design_failed".into(),
+                message: message.clone(),
+                retryable: true,
+            });
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_failed(
+                        &pipeline.id,
+                        StageEnum::Design,
                         &message,
                         pipeline.stages[stage_idx].retry_count,
                     )],
