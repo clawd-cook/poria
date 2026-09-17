@@ -7,14 +7,18 @@ use tauri::State;
 
 use poria_channels::coding::repo_search_path_from_git_url;
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
+use poria_core::contracts::{Skill, SkillContext};
 use poria_core::pipeline::{create_pipeline_id, PipelineEvent as CorePipelineEvent};
 use poria_core::types::{
-    BackendContext, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, Stage, StageStatus,
-    STAGE_ORDER,
+    BackendContext, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, SkillInput, Stage,
+    StageEnum, StageIssue, StageStatus, STAGE_ORDER,
 };
-use poria_infrastructure::auth::{assert_path_under_repos_root, get_credentials};
-use poria_infrastructure::store::{CloneStatus, RegisteredRepo};
+use poria_infrastructure::auth::{
+    assert_path_under_repos_root, demand_project_folder_name, get_credentials, get_demand_project_dir,
+};
+use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
 use poria_resources::git_current_branch;
+use poria_skills::InitSkill;
 
 use crate::AppState;
 
@@ -320,6 +324,7 @@ pub async fn submit_pipeline(
         prd_url: Some(prd_url),
         backend_trd_url: Some(backend_trd_url),
         backend_context: Some(backend_context),
+        project_dir: None,
     };
 
     let pipeline = Pipeline {
@@ -481,32 +486,165 @@ pub async fn execute_stage(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let pipeline = state
-        .store
+    let store = state.store.clone();
+    let mut pipeline = store
         .load(&pipeline_id)?
         .ok_or_else(|| format!("Pipeline not found: {}", pipeline_id))?;
 
-    let current = pipeline
+    let stage_idx = pipeline
         .stages
         .iter()
-        .find(|s| s.status == StageStatus::Pending)
+        .position(|s| s.status != StageStatus::Completed && s.status != StageStatus::Skipped)
         .ok_or("No pending stages")?;
 
-    let stage_name = serde_json::to_string(&current.name)
+    if pipeline.stages[stage_idx].status == StageStatus::Running {
+        return Err("阶段正在执行".into());
+    }
+
+    let stage_name = pipeline.stages[stage_idx].name;
+    if stage_name != StageEnum::Init {
+        let stage_label = serde_json::to_string(&stage_name)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string();
+        app.emit(
+            "stage:execute-requested",
+            serde_json::json!({
+                "pipeline_id": pipeline_id,
+                "stage": stage_label,
+            }),
+        )
+        .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    run_init_stage(&mut pipeline, stage_idx, &app, &store).await
+}
+
+fn emit_pipeline_updated(app: &tauri::AppHandle, pipeline: &Pipeline) -> Result<(), String> {
+    let current_stage = pipeline
+        .stages
+        .iter()
+        .find(|s| s.status != StageStatus::Completed && s.status != StageStatus::Skipped)
+        .map(|s| {
+            serde_json::to_string(&s.name)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string()
+        })
+        .unwrap_or_default();
+    let status = serde_json::to_string(&pipeline.status)
         .unwrap_or_default()
         .trim_matches('"')
         .to_string();
-
     app.emit(
-        "stage:execute-requested",
+        "pipeline:updated",
         serde_json::json!({
-            "pipeline_id": pipeline_id,
-            "stage": stage_name,
+            "id": pipeline.id,
+            "status": status,
+            "currentStage": current_stage,
         }),
     )
     .map_err(|e| e.to_string())?;
-
+    app.emit("pipeline:list-changed", &pipeline.id)
+        .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+async fn run_init_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &tauri::AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+) -> Result<(), String> {
+    let creds = get_credentials(None).ok_or_else(|| "请先登录".to_string())?;
+    if creds.cookie.trim().is_empty() {
+        return Err("请先登录".into());
+    }
+
+    let folder = demand_project_folder_name(&pipeline.demand_code, pipeline.demand_id);
+    let project_dir = get_demand_project_dir(None, &folder)?;
+
+    pipeline.status = PipelineStatus::Running;
+    pipeline.stages[stage_idx].status = StageStatus::Running;
+    pipeline.stages[stage_idx].skill_id = Some("skill:init".into());
+    pipeline.stages[stage_idx].started_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = None;
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_started(
+                &pipeline.id,
+                StageEnum::Init,
+            )],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+
+    let ctx = SkillContext {
+        pipeline_id: pipeline.id.clone(),
+        workdir: project_dir.to_string_lossy().to_string(),
+        credentials: serde_json::json!({
+            "cookie": creds.cookie,
+            "username": creds.username,
+        }),
+    };
+    let input = SkillInput {
+        stage: pipeline.stages[stage_idx].clone(),
+        pipeline: pipeline.clone(),
+        extra: serde_json::Map::new(),
+    };
+
+    match InitSkill::new().execute(input, ctx).await {
+        Ok(output) => {
+            pipeline.config.project_dir = Some(project_dir.to_string_lossy().to_string());
+            pipeline.stages[stage_idx].status = StageStatus::Completed;
+            pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_completed(
+                        &pipeline.id,
+                        StageEnum::Init,
+                        output.output,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Ok(())
+        }
+        Err(err) => {
+            let message = err.to_string();
+            pipeline.status = PipelineStatus::Failed;
+            pipeline.stages[stage_idx].status = StageStatus::Failed;
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.stages[stage_idx].issue = Some(StageIssue {
+                class: "init_failed".into(),
+                message: message.clone(),
+                retryable: true,
+            });
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_failed(
+                        &pipeline.id,
+                        StageEnum::Init,
+                        &message,
+                        pipeline.stages[stage_idx].retry_count,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Err(message)
+        }
+    }
 }
 
 /// Skip a pending stage in a pipeline.

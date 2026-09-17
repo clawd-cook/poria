@@ -143,6 +143,23 @@ export interface DemandPrdPreview {
   url: string | null;
 }
 
+export interface DemandProjectFile {
+  name: string;
+  size: number;
+}
+
+export interface DemandProject {
+  demand_code: string;
+  exists: boolean;
+  files: DemandProjectFile[];
+  project_dir: string;
+}
+
+export interface DemandProjectFileContent {
+  content: string;
+  name: string;
+}
+
 export interface SubmitPipelineInput {
   backendBranch: string;
   backendRepoId: string;
