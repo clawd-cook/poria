@@ -48,6 +48,8 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
         prompt.into(),
         "--output-format".into(),
         "stream-json".into(),
+        "--verbose".into(),
+        "--dangerously-skip-permissions".into(),
     ];
 
     if let Some(ref sys_prompt) = options.append_system_prompt {
@@ -56,8 +58,13 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
     }
 
     if !options.allowed_tools.is_empty() {
+        let tools = options.allowed_tools.join(",");
+        args.push("--tools".into());
+        args.push(tools.clone());
         args.push("--allowedTools".into());
-        args.push(options.allowed_tools.join(","));
+        args.push(tools);
+        args.push("--disallowedTools".into());
+        args.push("Agent,Task,Bash,Glob,WebFetch,WebSearch".into());
     }
 
     if let Some(max_turns) = options.max_turns {
@@ -95,8 +102,10 @@ impl AgentSdk for ClaudeCliSdk {
 
         let mut cmd = Command::new(&self.claude_path);
         cmd.args(&args)
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
 
         if let Some(ref cwd) = options.cwd {
             cmd.current_dir(cwd);
@@ -197,7 +206,17 @@ mod tests {
             allowed_tools: vec![],
         };
         let args = build_cli_args("hello", &options);
-        assert_eq!(args, vec!["-p", "hello", "--output-format", "stream-json"]);
+        assert_eq!(
+            args,
+            vec![
+                "-p",
+                "hello",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--dangerously-skip-permissions",
+            ]
+        );
     }
 
     #[test]
@@ -215,6 +234,9 @@ mod tests {
         assert!(args.contains(&"You are a code reviewer.".to_string()));
         assert!(args.contains(&"--allowedTools".to_string()));
         assert!(args.contains(&"Read,Grep".to_string()));
+        assert!(args.contains(&"--tools".to_string()));
+        assert!(args.contains(&"--disallowedTools".to_string()));
+        assert!(args.contains(&"Agent,Task,Bash,Glob,WebFetch,WebSearch".to_string()));
         assert!(args.contains(&"--max-turns".to_string()));
         assert!(args.contains(&"20".to_string()));
     }
