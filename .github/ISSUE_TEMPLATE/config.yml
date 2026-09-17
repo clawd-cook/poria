@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞（私下披露）
+    url: https://github.com/clawd-cook/poria/security/advisories/new
+    about: 不要开公开 Issue。请走 GitHub 安全公告，或按 SECURITY.md 发邮件。
+  - name: 产品说明
+    url: https://github.com/clawd-cook/poria/blob/main/README.md
+    about: 安装、使用、流水线阶段与发布方式
+  - name: 贡献指南
+    url: https://github.com/clawd-cook/poria/blob/main/CONTRIBUTING.md
+    about: 本地环境、分层约定、提交与 PR 检查

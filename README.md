@@ -10,7 +10,7 @@
   [![pnpm](https://img.shields.io/badge/pnpm-11.23.0-f69220.svg)](https://pnpm.io)
   [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/clawd-cook/poria)
 
-  [功能](#功能) · [架构](#架构) · [快速开始](#快速开始) · [使用](#使用) · [开发](#开发) · [发布](#发布)
+  [功能](#功能) · [架构](#架构) · [快速开始](#快速开始) · [使用](#使用) · [开发](#开发) · [发布](#发布) · [贡献](#贡献)
 
 </div>
 
@@ -184,3 +184,7 @@ GitHub Actions 打 macOS DMG（`aarch64` + `x86_64`）。有 `APPLE_*` secret �
 git tag v1.1.1-beta.1 && git push origin v1.1.1-beta.1
 git tag v1.1.1 && git push origin v1.1.1
 ```
+
+## 贡献
+
+开发环境、分层约定和提交检查见 [CONTRIBUTING.md](CONTRIBUTING.md)。缺陷、功能建议和开发疑问请用 GitHub Issue 表单；安全问题见 [SECURITY.md](SECURITY.md)，不要开公开 Issue。

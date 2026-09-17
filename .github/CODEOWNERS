@@ -1,0 +1,6 @@
+# Default owner (GitHub user that owns clawd-cook/poria)
+* @clawd-cook
+
+# Release signing and publish entrypoints
+/.github/workflows/publish.yml @clawd-cook
+/.github/workflows/pre-publish.yml @clawd-cook

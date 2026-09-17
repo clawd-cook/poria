@@ -1,0 +1,46 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/**
+          - index.html
+          - vite.config.ts
+          - tsconfig.json
+          - tsconfig.app.json
+          - package.json
+          - pnpm-lock.yaml
+
+rust:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/**
+          - Cargo.toml
+          - Cargo.lock
+
+desktop:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src-tauri/**
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - .trellis/spec/**
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/workflows/**
+          - .github/dependabot.yml
+          - .github/labeler.yml
+          - .github/labels.yml
+
+skills:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/poria-skills/**
+
+channels:
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/poria-channels/**

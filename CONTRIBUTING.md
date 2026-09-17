@@ -5,8 +5,9 @@
 ## 报告问题
 
 - **安全漏洞**：不要开公开 Issue。按 [SECURITY.md](SECURITY.md) 私下披露。
-- **缺陷**：先搜现有 Issue，再用 [Bug 模板](.github/ISSUE_TEMPLATE/bug_report.md)。写清 Poria / Node / pnpm / Rust 版本、复现步骤、期望与实际结果。登录、需求列表、克隆、提交流水线必须在 **Poria 桌面窗口**里复现，不要用浏览器打开 `http://localhost:1420`。
-- **功能建议**：用 [Feature 模板](.github/ISSUE_TEMPLATE/feature_request.md)。较大改动请先开 Issue 再写代码。
+- **缺陷**：先搜现有 Issue，再用 [缺陷报告表单](.github/ISSUE_TEMPLATE/bug_report.yml)。写清 Poria / Node / pnpm / Rust 版本、复现步骤、期望与实际结果。登录、需求列表、克隆、提交流水线必须在 **Poria 桌面窗口**里复现，不要用浏览器打开 `http://localhost:1420`。
+- **功能建议**：用 [功能建议表单](.github/ISSUE_TEMPLATE/feature_request.yml)。较大改动请先开 Issue 再写代码。
+- **使用或开发疑问**：用 [问题表单](.github/ISSUE_TEMPLATE/question.yml)。空白 Issue 已关闭，请不要绕过模板。
 
 不要在 Issue 或 PR 里粘贴 SSO Cookie、`~/.poria/auth.json`、Apple / Tauri 签名密钥。
 
@@ -58,7 +59,7 @@ IPC 封装只放在 `src/lib/tauri.ts`。前端参数用 camelCase（`pipelineId
 2. 只改与问题相关的文件。不要改 `submodules/` 里的内容；实现应写在本仓库的 crate / `src/`。
 3. Rust 改动补 `#[cfg(test)]` / `#[tokio::test]`。前端没有测试框架，至少 `pnpm typecheck`，涉及 IPC 时在桌面窗口走一遍主路径。
 4. 提交说明写「为什么」，一两句即可。无强制前缀。流水线部署生成的提交是 `feat(<需求编号>): <需求名>`，人工提交不必模仿。
-5. 打开 PR，说明动机、验证步骤（含是否在 `poria-desktop` 里测过）。
+5. 打开 PR。GitHub 会套用 [默认模板](.github/PULL_REQUEST_TEMPLATE.md)；功能 / 修复可改用 [`feature.md`](.github/PULL_REQUEST_TEMPLATE/feature.md) / [`bugfix.md`](.github/PULL_REQUEST_TEMPLATE/bugfix.md)（创建 PR 时 URL 加 `?template=feature.md` 或 `?template=bugfix.md`）。写清动机，以及是否在 `poria-desktop` 窗口里测过。路径变更会由 [labeler](.github/workflows/labeler.yml) 自动打标签；[CODEOWNERS](.github/CODEOWNERS) 会请求 `@clawd-cook` 评审。
 
 合并前本地至少：
 

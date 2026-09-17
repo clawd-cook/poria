@@ -1,0 +1,134 @@
+name: 缺陷报告
+description: 报告桌面端、流水线或 IPC 的异常行为
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。登录、需求列表、仓库克隆、提交流水线必须在 **Poria 桌面窗口**（`pnpm tauri dev` 或正式 DMG）里复现。
+
+        浏览器打开 `http://localhost:1420` **没有** Tauri `invoke`，不能当作 IPC 复现环境。
+
+        安全漏洞请走 [私下披露](https://github.com/clawd-cook/poria/security/advisories/new)，不要填这个表。不要粘贴 SSO Cookie、`~/.poria/auth.json` 或签名密钥。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么？影响哪条路径？
+      placeholder: 例如：点「由我受理」后需求列表一直转圈，桌面窗口标题是 Poria。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 从打开 Poria 开始写。涉及登录 / 需求 / 克隆 / 流水线时，写明是桌面窗口而不是浏览器。
+      placeholder: |
+        1. `pnpm tauri dev` 打开 Poria
+        2. 登录 SSO
+        3. 打开需求列表，勾选「由我受理」
+        4. 看到……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 包含报错文案。日志里的 Cookie / token 请打码。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 出问题的位置
+      options:
+        - 登录 / SSO
+        - 需求列表
+        - 仓库克隆 / 仓库列表
+        - 流水线看板 / 人工介入
+        - Init
+        - ReviewPrd
+        - Design
+        - Workspace
+        - Dev
+        - Cr
+        - Deploy
+        - 设置 / 门禁
+        - 发布 / DMG
+        - 其他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 运行环境
+      description: IPC 相关问题请选择桌面窗口，不要选「仅 Vite :1420」。
+      options:
+        - 本仓库 debug（pnpm tauri dev）
+        - 正式版 DMG（/Applications/Poria.app）
+        - 仅 Vite :1420（无 IPC，不适合复现登录/需求/流水线）
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: poria-version
+    attributes:
+      label: Poria 版本
+      description: tag、Release 版本号，或 `git rev-parse --short HEAD`
+      placeholder: 例如 1.1.1 或 abc1234
+    validations:
+      required: false
+
+  - type: input
+    id: toolchain
+    attributes:
+      label: 工具链
+      description: 开发态请填 Node / pnpm / rustc。正式 DMG 可留空。
+      placeholder: Node 24.20.0, pnpm 11.23.0, rustc 1.xx
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: 粘贴终端、tracing 或桌面端报错。务必去掉 Cookie 与 token。
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图
+      description: 可粘贴图片或描述窗口状态（标题应为 Poria）。
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 确认
+      options:
+        - label: 我已搜索过现有 Issue
+          required: true
+        - label: 这不是安全漏洞（安全问题已走私下披露）
+          required: true
+        - label: 若涉及登录 / 需求 / 克隆 / 流水线，我是在 Poria 桌面窗口里复现的，而不是浏览器打开 localhost:1420
+          required: true
+        - label: 日志和截图里没有 Cookie、auth.json 或签名密钥
+          required: true

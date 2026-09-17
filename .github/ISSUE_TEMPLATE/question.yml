@@ -1,0 +1,41 @@
+name: 使用或开发问题
+description: 环境、桌面窗口验证、分层约定等疑问（不是缺陷）
+title: "[Question]: "
+labels: ["question", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先看 [README](https://github.com/clawd-cook/poria/blob/main/README.md) 和 [CONTRIBUTING](https://github.com/clawd-cook/poria/blob/main/CONTRIBUTING.md)。
+
+        常见结论：Cursor / 浏览器打开 `:1420` 不能登录、拉需求或提交流水线；需要 `pnpm tauri dev` 打开标题为 Poria 的桌面窗口。
+
+  - type: textarea
+    id: question
+    attributes:
+      label: 问题
+      description: 你在做什么，卡在哪一步？
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: 主题
+      options:
+        - 本地环境（Node / pnpm / Rust）
+        - 桌面窗口 vs Vite :1420
+        - SSO / 鉴权
+        - 流水线阶段
+        - 分层 / crate 该把代码放哪
+        - 发布 / DMG / 签名
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: 已经试过的
+    validations:
+      required: false
