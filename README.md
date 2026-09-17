@@ -6,6 +6,7 @@
   *AI-native delivery platform that turns a product requirement into a deployed merge request.*
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/clawd-cook/poria)
 
   [Features](#features) · [Architecture](#architecture) · [Getting Started](#getting-started) · [Usage](#usage) · [Development](#development)
 
