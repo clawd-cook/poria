@@ -68,26 +68,6 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 1
 
-      - name: Require Apple signing and notarization secrets
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          missing=0
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-            eval "value=\${$name}"
-            if [ -z "$value" ]; then
-              echo "::error::Missing required secret: $name (stable releases cannot use ad-hoc signing)"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
-            exit 1
-          fi
-
       - name: Setup Node.js + pnpm via corepack
         run: |
           export COREPACK_ENABLE_STRICT=0
@@ -151,6 +131,7 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       - name: Setup macOS signing
+        if: env.APPLE_CERTIFICATE != ''
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -178,22 +159,36 @@ jobs:
         run: |
           cargo tauri build --target ${{ matrix.target }}
 
-      - name: Package DMG
+      - name: Ad-hoc sign and repackage DMG
         env:
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.validate.outputs.version }}
           ARCH: ${{ matrix.arch }}
+          HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
         run: |
           BUNDLE_DIR="target/$TARGET/release/bundle"
           OUTPUT_DIR="$RUNNER_TEMP/artifacts"
           mkdir -p "$OUTPUT_DIR"
 
-          DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" -type f | head -1)
-          if [ -z "$DMG" ]; then
-            echo "::error::No .dmg found in $BUNDLE_DIR/dmg/"
-            exit 1
+          APP_PATH=$(find "$BUNDLE_DIR/macos" -name "*.app" -type d | head -1)
+
+          if [ "$HAS_CERT" != "true" ] && [ -n "$APP_PATH" ]; then
+            echo "No Apple certificate — applying ad-hoc signature"
+            codesign --force --deep -s - "$APP_PATH"
+            codesign --verify --verbose "$APP_PATH"
+
+            DMG_OUT="$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg"
+            hdiutil create -volname "Poria" -srcfolder "$APP_PATH" \
+              -ov -format UDZO "$DMG_OUT"
+            echo "Re-created DMG with ad-hoc signed app"
+          else
+            DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" -type f | head -1)
+            if [ -z "$DMG" ]; then
+              echo "::error::No .dmg found in $BUNDLE_DIR/dmg/"
+              exit 1
+            fi
+            cp "$DMG" "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg"
           fi
-          cp "$DMG" "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg"
 
           DMG_SIZE=$(stat -f%z "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg" 2>/dev/null || stat --printf='%s' "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg")
           if [ "$DMG_SIZE" -lt 1048576 ]; then
@@ -240,7 +235,7 @@ jobs:
           cat > release-notes.md << EOF
           ## Poria Desktop ${VERSION}
 
-          正式版。已使用 Apple Developer 证书签名并提交公证。
+          正式版。
 
           ### 下载
 
@@ -253,7 +248,13 @@ jobs:
 
           1. 下载对应架构的 \`.dmg\` 文件
           2. 双击打开，将 Poria 拖入 Applications 文件夹
-          3. 从启动台或 Applications 打开 Poria
+          3. **首次打开前**，若系统提示已损坏，在终端执行：
+             \`\`\`bash
+             xattr -cr /Applications/Poria.app
+             \`\`\`
+          4. 双击打开 Poria
+
+          > 当前构建未配置 Apple Developer 证书时使用 ad-hoc 签名，macOS 可能提示“已损坏”。配齐签名/公证 secret 后可省略 \`xattr -cr\`。
 
           ### SHA-256
           \`\`\`

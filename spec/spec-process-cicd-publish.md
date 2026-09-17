@@ -1,6 +1,6 @@
 ---
 title: CI/CD Workflow Specification - Publish (Stable)
-version: 1.0
+version: 1.1
 date_created: 2026-09-17
 last_updated: 2026-09-17
 owner: DevOps Team
@@ -9,7 +9,7 @@ tags: [process, cicd, github-actions, automation, tauri, macos, release, stable,
 
 ## Workflow Overview
 
-**Purpose**: Build signed and notarized macOS Tauri installers for ARM64 and Intel, then publish them as the GitHub latest (non-prerelease) release for a stable version tag.
+**Purpose**: Build macOS Tauri installers for ARM64 and Intel, then publish them as the GitHub latest (non-prerelease) release for a stable version tag. Apple signing and notarization are used when secrets exist; otherwise the job falls back to ad-hoc signing (same as beta).
 **Trigger Events**: Push of a stable semantic version tag (`vX.Y.Z` with no prerelease suffix)
 **Target Environments**: macOS (aarch64 + x86_64) production distribution via GitHub Releases
 
@@ -20,13 +20,11 @@ This workflow is the GA counterpart of [Pre-Publish (Beta)](./spec-process-cicd-
 ```mermaid
 graph TD
     A[Tag Push: vX.Y.Z] --> B[Validate stable tag]
-    B --> C{Apple signing secrets present?}
-    C -->|No| X[Fail fast]
-    C -->|Yes| D[Build macOS aarch64]
-    C -->|Yes| E[Build macOS x64]
+    B --> D[Build macOS aarch64]
+    B --> E[Build macOS x64]
     D --> F[Create GitHub latest release]
     E --> F
-    F --> G[Latest release with signed DMGs]
+    F --> G[Latest release with DMGs]
 
     style A fill:#e1f5fe
     style G fill:#e8f5e8
@@ -34,7 +32,6 @@ graph TD
     style D fill:#fff3e0
     style E fill:#fff3e0
     style F fill:#e8f5e8
-    style X fill:#ffebee
 ```
 
 ## Jobs & Dependencies
@@ -42,7 +39,7 @@ graph TD
 | Job Name | Purpose | Dependencies | Execution Context |
 |----------|---------|--------------|-------------------|
 | validate | Extract version; reject beta/rc/alpha and non-semver tags | none | ubuntu-latest |
-| build-macos (x2) | Typecheck, sign, notarize, and package DMG per arch | validate | macos-latest (matrix) |
+| build-macos (x2) | Typecheck, bundle, sign (or ad-hoc), and package DMG per arch | validate | macos-latest (matrix) |
 | create-release | Publish GitHub latest release with both DMGs + checksums | validate, build-macos | ubuntu-latest |
 
 ## Requirements Matrix
@@ -59,17 +56,17 @@ graph TD
 | REQ-006 | GitHub **latest** release (not prerelease) | High | Release is not marked prerelease; becomes latest for the repo |
 | REQ-007 | Frontend typechecked before bundle | Medium | Frontend typecheck passes |
 | REQ-008 | Cargo workspace + desktop binary compile | High | Both matrix legs produce a DMG |
-| REQ-009 | Apple Developer signing is mandatory | High | Missing certificate fails the job; no ad-hoc fallback |
-| REQ-010 | Apple notarization is mandatory | High | Missing notarization identity fails the job |
-| REQ-011 | Release notes omit beta/xattr workaround | High | Notes describe a signed, notarized install path |
+| REQ-009 | Apple Developer signing when secrets exist | High | Certificate present → Developer ID sign; absent → ad-hoc, job still succeeds |
+| REQ-010 | Apple notarization when identity exists | High | Identity present → notarize; absent → skip, do not fail the job |
+| REQ-011 | Release notes cover unsigned Gatekeeper workaround | High | Notes include `xattr -cr` when ad-hoc signing is used |
 | REQ-012 | SHA-256 of both DMGs published | Medium | Checksums in release notes and/or assets |
 
 ### Security Requirements
 
 | ID | Requirement | Implementation Constraint |
 |----|-------------|---------------------------|
-| SEC-001 | Apple signing identity required | Certificate stored as encrypted repository/org secret; never ad-hoc for GA |
-| SEC-002 | Notarization identity required | Apple ID, app-specific password, and team ID must all be present |
+| SEC-001 | Apple signing identity optional | Certificate stored as encrypted secret; ad-hoc fallback when unset |
+| SEC-002 | Notarization identity optional | Apple ID, app-specific password, and team ID used when all present |
 | SEC-003 | Tauri updater signing key | Private key from secrets when updater is enabled |
 | SEC-004 | Contents write only | Workflow token limited to creating/updating the release for that tag |
 | SEC-005 | No secret leakage | Secrets never echoed; artifacts are installers only |
@@ -124,11 +121,11 @@ notes: download table, signed-install steps, SHA-256
 
 | Type | Name | Purpose | Scope | Required |
 |------|------|---------|-------|----------|
-| Secret | APPLE_CERTIFICATE | Code signing identity (base64 p12) | Workflow | Yes |
-| Secret | APPLE_CERTIFICATE_PASSWORD | P12 passphrase | Workflow | Yes |
-| Secret | APPLE_ID | Notarization Apple ID | Workflow | Yes |
-| Secret | APPLE_PASSWORD | Notarization app-specific password | Workflow | Yes |
-| Secret | APPLE_TEAM_ID | Team ID for notarization | Workflow | Yes |
+| Secret | APPLE_CERTIFICATE | Code signing identity (base64 p12) | Workflow | No |
+| Secret | APPLE_CERTIFICATE_PASSWORD | P12 passphrase | Workflow | No |
+| Secret | APPLE_ID | Notarization Apple ID | Workflow | No |
+| Secret | APPLE_PASSWORD | Notarization app-specific password | Workflow | No |
+| Secret | APPLE_TEAM_ID | Team ID for notarization | Workflow | No |
 | Secret | TAURI_SIGNING_PRIVATE_KEY | Tauri updater signing | Workflow | Optional |
 | Token | github.token | Create GitHub release | Workflow | Yes (default) |
 
@@ -169,7 +166,7 @@ notes: download table, signed-install steps, SHA-256
 | Error Type | Response | Recovery Action |
 |------------|----------|-----------------|
 | Invalid or prerelease tag | Fail validate | Do not publish; use beta workflow or retag `vX.Y.Z` |
-| Missing Apple signing/notarization secrets | Fail build before bundle | Configure org/repo secrets; re-run |
+| Missing Apple signing/notarization secrets | Ad-hoc sign and still publish | Configure secrets later to drop `xattr -cr` |
 | Typecheck failure | Fail build | Fix TypeScript; move tag or push a new patch tag |
 | Rust compilation error | Fail build | Fix crates; new tag |
 | Notarization rejected | Fail build | Inspect Apple notarization log; fix entitlements/signing |
@@ -188,7 +185,7 @@ notes: download table, signed-install steps, SHA-256
 | Not a prerelease tag | No `-beta` / `-rc` / `-alpha` / other `-` suffix | None |
 | TypeScript | Frontend typecheck passes | None |
 | Rust + Tauri bundle | Both matrix targets succeed | None |
-| Apple identity | Signing + notarization secrets non-empty | None |
+| Apple identity | Secrets present → Developer ID + notarize | Allowed to skip; ad-hoc fallback |
 | DMG size | > 1 MB | None |
 | Release kind | Latest, not prerelease | None |
 
@@ -250,7 +247,7 @@ notes: download table, signed-install steps, SHA-256
 | Tag `v1.0.1-beta.15` | This workflow does not run (or validate fails) | Trigger exclude + regex |
 | Tag `v1.0.1` on main | Builds from that tag; latest GitHub release | Release URL and assets |
 | Tag `v1.0.1` while a beta release exists | GA is latest; beta remains prerelease | GitHub latest points at GA |
-| Missing `APPLE_CERTIFICATE` | Job fails; no unsigned GA DMG | Actions log |
+| Missing `APPLE_CERTIFICATE` | Ad-hoc signing, `xattr` instructions in notes | DMG still produced |
 | Tag not on main | Still builds the tagged commit | Operators should tag main |
 | Concurrent tags | Isolated by ref concurrency group | One run per tag |
 | Re-run of the same tag | Cancels in-progress duplicate; may fail if release already exists | Operator deletes or uses a patch tag |
@@ -264,9 +261,9 @@ notes: download table, signed-install steps, SHA-256
 - **VLD-002**: `v*-beta*` continues to use the beta pre-publish workflow exclusively
 - **VLD-003**: Both architecture DMGs are attached
 - **VLD-004**: Release is not marked prerelease
-- **VLD-005**: Notes include SHA-256 and a signed-install path (no `xattr -cr` as the primary instruction)
+- **VLD-005**: Notes include SHA-256; unsigned builds include `xattr -cr`
 - **VLD-006**: Version in bundle metadata equals the tag version
-- **VLD-007**: Unsigned/ad-hoc GA artifacts are never published
+- **VLD-007**: Missing Apple secrets must not fail the job
 
 ### Performance Benchmarks
 
@@ -289,6 +286,7 @@ notes: download table, signed-install steps, SHA-256
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
 | 1.0 | 2026-09-17 | Initial GA publish specification | heyongqi10 |
+| 1.1 | 2026-09-17 | Apple secrets optional; ad-hoc fallback matches beta | heyongqi10 |
 
 ## Related Specifications
 
