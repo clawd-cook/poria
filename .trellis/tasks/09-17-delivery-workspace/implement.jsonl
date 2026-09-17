@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Repos, Xingyun list, and submit_pipeline cross UI, Tauri, store, and channels; keep contracts aligned."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse repo_search_path_from_git_url, resolvePrdLink, AuthStatus, PipelineDetail instead of new parallel stacks."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend package entry before Shell/tab/page work."}
+{"file": ".trellis/tasks/09-17-delivery-workspace/research/h2o-demands-and-repo-path.md", "reason": "Assigned-to-me list contract and ~/.poria/repos/scope/repo path rules."}
+{"file": ".trellis/tasks/09-17-delivery-workspace/design.md", "reason": "IPC, schema v2, backend_context vs pipeline.repos, tab IA."}

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify demand/repo/pipeline payloads stay consistent across Rust commands and React state."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check that FE-only repos were not duplicated into a second multi-repo delivery path."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend quality entry for Shell and new pages."}
+{"file": ".trellis/tasks/09-17-delivery-workspace/research/h2o-demands-and-repo-path.md", "reason": "Demand list must stay assigned-to-me; clone path must be scope/repo."}
+{"file": ".trellis/tasks/09-17-delivery-workspace/prd.md", "reason": "Acceptance criteria for four tabs, wizard, and frontend-only delivery."}
