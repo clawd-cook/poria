@@ -6,9 +6,7 @@ use tauri::Emitter;
 use tauri::State;
 
 use poria_channels::coding::repo_search_path_from_git_url;
-use poria_channels::xingyun::{
-    feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url,
-};
+use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
 use poria_core::pipeline::{create_pipeline_id, PipelineEvent as CorePipelineEvent};
 use poria_core::types::{
     BackendContext, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, Stage, StageStatus,
