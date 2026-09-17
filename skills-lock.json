@@ -25,6 +25,12 @@
       "skillPath": ".agents/skills/next-best-practices/SKILL.md",
       "computedHash": "db85045827ebeb83ac8dbc992b69188755eeb74dcf01cbf5e694d58aa494a106"
     },
+    "pr-template-builder": {
+      "source": "patricio0312rev/skills",
+      "sourceType": "github",
+      "skillPath": "foundation/pr-template-builder/SKILL.md",
+      "computedHash": "25f030f3f07e406c460253fcc243dc1d2531f0078bc7f96711a71713e00239bd"
+    },
     "rust-best-practices": {
       "source": "apollographql/skills",
       "sourceType": "github",
