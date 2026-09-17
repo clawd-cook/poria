@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub const ARTIFACT_PRD: &str = "PRD.md";
 pub const ARTIFACT_PRD_REVIEW: &str = "PRD_REVIEW.md";
 pub const ARTIFACT_TRD: &str = "TRD.md";
+pub const ARTIFACT_BACKEND_TRD: &str = "BACKEND_TRD.md";
 pub const ARTIFACT_TASK: &str = "TASK.md";
 pub const ARTIFACT_CR: &str = "CR.md";
 
@@ -232,6 +233,26 @@ mod tests {
         ctx.write_artifact(ARTIFACT_TRD, "v2").unwrap();
         let content = ctx.read_artifact(ARTIFACT_TRD).unwrap();
         assert_eq!(content.as_deref(), Some("v2"));
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn test_backend_trd_artifact_does_not_replace_frontend_trd() {
+        let base = temp_dir();
+        let ctx = FeatureContext::create(&base, "pipe-011", 1).unwrap();
+        ctx.write_artifact(ARTIFACT_TRD, "frontend trd").unwrap();
+        ctx.write_artifact(ARTIFACT_BACKEND_TRD, "backend trd")
+            .unwrap();
+        assert_eq!(ARTIFACT_BACKEND_TRD, "BACKEND_TRD.md");
+        assert_ne!(ARTIFACT_BACKEND_TRD, ARTIFACT_TRD);
+        assert_eq!(
+            ctx.read_artifact(ARTIFACT_TRD).unwrap().as_deref(),
+            Some("frontend trd")
+        );
+        assert_eq!(
+            ctx.read_artifact(ARTIFACT_BACKEND_TRD).unwrap().as_deref(),
+            Some("backend trd")
+        );
         fs::remove_dir_all(&base).ok();
     }
 }

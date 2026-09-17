@@ -9,6 +9,7 @@ use poria_core::feature_context::{FeatureContext, ARTIFACT_PRD, ARTIFACT_TASK, A
 use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
+use crate::backend_aid::insert_backend_coding_aid_vars;
 use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
 use crate::prompt_templates::{render_prompt, CODE_IMPL_PROMPT};
@@ -94,11 +95,12 @@ impl Skill for GenCodeSkill {
         vars.insert("project_root".into(), ctx.workdir.clone());
         vars.insert("trd_content".into(), trd_content);
         vars.insert("prd_content".into(), prd_content);
+        insert_backend_coding_aid_vars(&mut vars, &input.pipeline.config, &feature_ctx);
 
         let system_prompt = render_prompt(CODE_IMPL_PROMPT, &vars);
 
         let agent_input = AgentTaskInput {
-            prompt: "基于 TRD 生成执行计划 TASK.md，然后按计划实现代码".into(),
+            prompt: "基于前端 TRD 生成执行计划 TASK.md，然后按计划实现代码。后端 TRD 与后端仓仅作只读参考，禁止改后端仓。".into(),
             worktree_path: ctx.workdir.clone(),
             system_prompt: Some(system_prompt),
             model: None,

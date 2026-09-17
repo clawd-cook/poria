@@ -8,6 +8,10 @@
 - Feature 目录：`{{feature_dir}}`
 - PRD 内容：{{prd_content}}
 - PRD_REVIEW 内容：{{prd_review_content}}
+- 后端 TRD URL（只读参考，**不是**前端 `TRD.md`）：{{backend_trd_url}}
+- 后端 TRD 导出内容（可能为空；URL 存在时仍须参考该链接）：{{backend_trd_content}}
+- 后端仓只读路径：`{{backend_repo_path}}`
+- 后端分支：`{{backend_branch}}`
 
 ## 产物
 
@@ -140,3 +144,6 @@
 - 有 P0 跳过不得推导为「可开发」
 - 无 API 时不编造字段名
 - 监控告警、SPM 留空表不删章
+- 后端 TRD 与后端仓是**只读参考**，用于辅助前端接口/字段/流程设计；禁止修改后端仓任何文件
+- 前端交付设计文档仍是 `{{feature_dir}}/TRD.md`，不得被后端 TRD 覆盖或改名为后端文档
+- 若后端 TRD URL 非空，即使 Markdown 导出缺失也必须参考该 URL（不要假装没有后端设计）

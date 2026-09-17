@@ -8,7 +8,7 @@ import { useStore } from "../state/store";
 
 const { Text } = Typography;
 
-const STEP_ITEMS = [{ title: "前端仓库" }, { title: "后端仓库" }, { title: "PRD" }];
+const STEP_ITEMS = [{ title: "前端仓库" }, { title: "后端仓库" }, { title: "文档" }];
 
 function isJoySpaceUrl(raw: string): boolean {
   try {
@@ -42,6 +42,7 @@ export function StartPipelineWizard({
   const [backendRepoId, setBackendRepoId] = useState<string>();
   const [backendBranch, setBackendBranch] = useState<string>();
   const [prdUrl, setPrdUrl] = useState("");
+  const [backendTrdUrl, setBackendTrdUrl] = useState("");
   const [prdHint, setPrdHint] = useState<string | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -59,6 +60,7 @@ export function StartPipelineWizard({
     setBackendRepoId(undefined);
     setBackendBranch(undefined);
     setPrdUrl("");
+    setBackendTrdUrl("");
     setPrdHint(null);
     setBranches([]);
     setBranchError(null);
@@ -130,15 +132,29 @@ export function StartPipelineWizard({
   const canNextStep1 = Boolean(
     backendRepoId && backendBranch && frontendRepoId && backendRepoId !== frontendRepoId,
   );
-  const canSubmit = canNextStep0 && canNextStep1 && isJoySpaceUrl(prdUrl);
+  const trimmedPrd = prdUrl.trim();
+  const trimmedBackendTrd = backendTrdUrl.trim();
+  const canSubmit =
+    canNextStep0 &&
+    canNextStep1 &&
+    isJoySpaceUrl(trimmedPrd) &&
+    isJoySpaceUrl(trimmedBackendTrd) &&
+    trimmedPrd !== trimmedBackendTrd;
 
   async function handleSubmit() {
     if (!demand || !frontendRepoId || !backendRepoId || !backendBranch) {
       return;
     }
-    const trimmedPrd = prdUrl.trim();
     if (!isJoySpaceUrl(trimmedPrd)) {
       message.error("请填写 JoySpace PRD 链接");
+      return;
+    }
+    if (!isJoySpaceUrl(trimmedBackendTrd)) {
+      message.error("请填写 JoySpace 后端 TRD 链接");
+      return;
+    }
+    if (trimmedPrd === trimmedBackendTrd) {
+      message.error("后端 TRD 不能与 PRD 使用相同链接");
       return;
     }
 
@@ -147,6 +163,7 @@ export function StartPipelineWizard({
       const id = await submitPipeline({
         backendBranch,
         backendRepoId,
+        backendTrdUrl: trimmedBackendTrd,
         demandCode: demand.demand_code || undefined,
         demandId: demand.id,
         demandName: demand.name || undefined,
@@ -303,17 +320,37 @@ export function StartPipelineWizard({
       ) : null}
 
       {step === 2 ? (
-        <Flex gap={8} vertical>
-          <Text>填写 JoySpace PRD 链接，可改自动预填结果。</Text>
-          <Input
-            onChange={(event) => setPrdUrl(event.target.value)}
-            placeholder="https://joyspace.jd.com/..."
-            value={prdUrl}
-          />
-          {prdHint ? <Text type="secondary">{prdHint}</Text> : null}
-          {prdUrl.trim() && !isJoySpaceUrl(prdUrl) ? (
-            <Text type="danger">必须是 JoySpace 链接</Text>
-          ) : null}
+        <Flex gap={12} vertical>
+          <Flex gap={8} vertical>
+            <Text>填写 JoySpace PRD 链接，可改自动预填结果。</Text>
+            <Input
+              aria-label="JoySpace PRD"
+              onChange={(event) => setPrdUrl(event.target.value)}
+              placeholder="https://joyspace.jd.com/pages/prd"
+              value={prdUrl}
+            />
+            {prdHint ? <Text type="secondary">{prdHint}</Text> : null}
+            {trimmedPrd && !isJoySpaceUrl(trimmedPrd) ? (
+              <Text type="danger">PRD 必须是 JoySpace 链接</Text>
+            ) : null}
+          </Flex>
+          <Flex gap={8} vertical>
+            <Text>
+              填写 JoySpace 后端 TRD 链接。后端 TRD 只读，辅助前端设计/编码，不会改后端仓。
+            </Text>
+            <Input
+              aria-label="JoySpace 后端 TRD"
+              onChange={(event) => setBackendTrdUrl(event.target.value)}
+              placeholder="https://joyspace.jd.com/pages/backend-trd"
+              value={backendTrdUrl}
+            />
+            {trimmedBackendTrd && !isJoySpaceUrl(trimmedBackendTrd) ? (
+              <Text type="danger">后端 TRD 必须是 JoySpace 链接</Text>
+            ) : null}
+            {trimmedPrd && trimmedBackendTrd && trimmedPrd === trimmedBackendTrd ? (
+              <Text type="danger">后端 TRD 不能与 PRD 使用相同链接</Text>
+            ) : null}
+          </Flex>
         </Flex>
       ) : null}
     </Modal>

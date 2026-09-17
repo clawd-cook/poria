@@ -54,12 +54,13 @@ SSO cookie + ERP
 ### Start pipeline
 
 ```
-demand + frontendRepoId + backendRepoId + backendBranch + prdUrl
-  → validate: both repos ready, ids different, prdUrl non-empty, backendBranch non-empty
+demand + frontendRepoId + backendRepoId + backendBranch + prdUrl + backendTrdUrl
+  → validate: both repos ready, ids different, prdUrl and backendTrdUrl JoySpace and distinct, backendBranch non-empty
   → build Pipeline:
        repos: [frontend RepoConfig] only
        config.backend_context: { git_url, local_path, branch, scope, name }
        config.prd_url: JoySpace URL
+       config.backend_trd_url: JoySpace URL (read-only FE coding aid; not frontend TRD.md)
        raw_link: Xingyun view URL from demandId/code
        operator: ERP
   → persist + emit pipeline:created
@@ -98,6 +99,7 @@ CREATE TABLE IF NOT EXISTS registered_repos (
   trd_scope: string[],
   repos: RepoConfig[],          // length 1: frontend
   prd_url?: string,
+  backend_trd_url?: string,  // JoySpace; FE coding aid; do not overwrite TRD.md
   backend_context?: {
     git_url: string,
     local_path: string,
@@ -118,7 +120,7 @@ Do not append backend to `repos`. Executor uses `pipeline.repos.len() > 1` for m
 | `list_repo_branches` | Backend branch picker |
 | `list_demands` | Related-to-me page; `accepted_by_me` adds `receiver` |
 | `preview_demand_prd` | Wizard prefill via `resolvePrdLink` |
-| `submit_pipeline` | Replace link-only payload with structured input |
+| `submit_pipeline` | Structured input including `backendTrdUrl` |
 
 Keep `list_pipelines` / `get_pipeline` / human-loop / config / auth commands.
 
@@ -128,7 +130,7 @@ Events: `repo:updated`, existing `pipeline:created` / `pipeline:updated` / `auth
 
 - `Shell`: four tabs + header `AuthStatus`
 - `HomeBoard`: antd columns from `pipelines`; selected id shows `PipelineDetail`
-- `DemandListPage`: table; wizard is antd `Modal` + `Steps` (FE → BE+branch → PRD)
+- `DemandListPage`: table; wizard is antd `Modal` + `Steps` (FE → BE+branch → PRD + backend TRD)
 - `RepoListPage`: register input + grouped list + retry
 - `SettingsPage`: current `SettingsPanel` form without Modal chrome
 

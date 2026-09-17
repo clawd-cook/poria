@@ -144,6 +144,109 @@ Always sending `receiver` hides related-to-me rows. Stamping that ERP onto recor
 
 Default body omits `receiver` and `processor`. Checkbox 「由我受理」 / `acceptedByMe: true` is the only path that adds `"receiver": "<erp>"`. Unchecked rows with no receiver object render `—`.
 
+## Scenario: Start pipeline with backend TRD URL
+
+### 1. Scope / Trigger
+
+Use this spec when changing the demand 「开始」 wizard, `submit_pipeline`, `PipelineConfig.backend_trd_url`, or `gen_trd` / `gen_code` prompt injection. Cursor's browser tab on Vite cannot invoke submit.
+
+### 2. Signatures
+
+```typescript
+invoke<string>("submit_pipeline", {
+  demandId,          // number
+  frontendRepoId,    // registered ready repo id
+  backendRepoId,     // different ready repo id
+  backendBranch,     // local git branch after fetch
+  prdUrl,            // JoySpace
+  backendTrdUrl,     // JoySpace, required, must differ from prdUrl
+  demandCode?,
+  demandName?,
+});
+```
+
+Wizard last step fields (AX):
+
+| Control | AX role | AX name |
+| --- | --- | --- |
+| PRD URL | `AXTextField` | `JoySpace PRD` |
+| Backend TRD URL | `AXTextField` | `JoySpace 后端 TRD` |
+| Submit | `AXButton` | `创 建 流 水 线` (antd may insert spaces) |
+
+Rust persistence (snake_case in `pipelines.config` JSON):
+
+```ts
+{
+  repos: [/* frontend RepoConfig only */],
+  prd_url?: string,
+  backend_trd_url?: string,  // JoySpace; FE coding aid; not frontend TRD.md
+  backend_context?: { git_url, local_path, branch, scope, name }
+}
+```
+
+Prompt vars injected by `insert_backend_coding_aid_vars` into `trd_gen.md` / `code_impl.md`: `backend_trd_url`, `backend_trd_content` (optional `BACKEND_TRD.md`), `backend_repo_path`, `backend_branch`.
+
+### 3. Contracts
+
+| Layer | Owns |
+| --- | --- |
+| Wizard | Both URLs required + distinct; PRD prefill via `preview_demand_prd`; backend TRD is paste-only |
+| `submit_pipeline` | Persist `config.backend_trd_url`; `pipeline.repos` length 1 (frontend). Backend lives in `backend_context` only |
+| Feature artifacts | Frontend design is `TRD.md`. Optional export is `BACKEND_TRD.md`. Never overwrite `TRD.md` with backend TRD |
+| `gen_trd` / `gen_code` | Read `input.pipeline.config` + optional artifact; prompts are read-only FE coding aid; do not modify the backend repo |
+
+JoySpace live Markdown export may be missing (Init can stay NotImplemented). A non-empty `backend_trd_url` must still be injected so the agent can open the link.
+
+### 4. Validation & Error Matrix
+
+| Condition | What you see |
+| --- | --- |
+| Empty / non-JoySpace PRD | Wizard submit disabled; command `请填写 JoySpace PRD 链接` / `PRD 必须是 JoySpace 链接` |
+| Empty backend TRD | Wizard submit disabled; command `请填写 JoySpace 后端 TRD 链接` |
+| Backend TRD not JoySpace | `后端 TRD 必须是 JoySpace 链接` |
+| `backendTrdUrl` equals `prdUrl` (after trim) | `后端 TRD 不能与 PRD 使用相同链接` |
+| Frontend == backend repo | `前端仓库与后端仓库不能相同` |
+| Missing ready clone | `前端仓库尚未克隆完成` / `后端仓库尚未克隆完成` |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: two distinct ready repos → wizard step 文档 → paste different JoySpace PRD and backend TRD → 创建流水线 → home kanban selects the new id. SQLite config has `prd_url` + `backend_trd_url` + `backend_context`; `repos` is only the frontend. Design/dev prompts include the backend URL and `禁止修改后端仓`.
+- **Base**: layout-only in Cursor browser: last wizard step shows both URL fields; submit stays disabled until both are distinct JoySpace URLs.
+- **Bad**: put the backend repo into `pipeline.repos`; write backend TRD into `TRD.md`; omit `backendTrdUrl` from invoke; treat Vite-tab submit as proof.
+
+### 6. Tests Required
+
+- Unit: `cargo test -p poria-core -- pipeline_config`; `cargo test -p poria-core -- feature_context`; `cargo test -p poria-skills -- backend_aid`; `cargo test -p poria-desktop -- require_prd_and_backend_trd`.
+- Manual E2E (this spec): drive `poria-desktop`, not Cursor browser on 1420. Confirm no backend MR / backend feature branch.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+invoke("submit_pipeline", { prdUrl, frontendRepoId, backendRepoId, backendBranch });
+// backendTrdUrl missing; or repos: [frontend, backend]
+```
+
+```text
+write backend TRD into features/<id>/TRD.md
+```
+
+#### Correct
+
+```typescript
+invoke("submit_pipeline", {
+  prdUrl: "https://joyspace.jd.com/pages/prd",
+  backendTrdUrl: "https://joyspace.jd.com/pages/backend-trd",
+  frontendRepoId,
+  backendRepoId,
+  backendBranch,
+  demandId,
+});
+// config.backend_trd_url set; pipeline.repos = [frontend]
+// optional artifact BACKEND_TRD.md; frontend TRD.md unchanged
+```
+
 ## Common Mistake: Vite tab vs desktop window
 
 **Symptom**: 1420 shows the UI but 登记/登录/需求列表 fail or the store listener throws `transformCallback`.

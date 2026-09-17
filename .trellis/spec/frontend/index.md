@@ -26,7 +26,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 
 ## When to Use
 
-Load [Tauri Desktop Testing](./tauri-desktop-testing.md) before claiming clone, login, demand list, or pipeline submit works. Cursor browser on port 1420 cannot `invoke` / `listen`. Demand list default is related-to-me (omit JACP `receiver`); 「由我受理」 is `acceptedByMe` → `receiver` = ERP.
+Load [Tauri Desktop Testing](./tauri-desktop-testing.md) before claiming clone, login, demand list, or pipeline submit works. Cursor browser on port 1420 cannot `invoke` / `listen`. Demand list default is related-to-me (omit JACP `receiver`); 「由我受理」 is `acceptedByMe` → `receiver` = ERP. Start-pipeline submit must send `backendTrdUrl`; backend stays out of `pipeline.repos`.
 
 ---
 

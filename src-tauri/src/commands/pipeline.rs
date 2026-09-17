@@ -211,6 +211,7 @@ pub async fn get_pipeline_events(
 
 /// Submit a pipeline from the demand start wizard.
 /// Frontend repo is the only `repos` entry; backend is read-only `backend_context`.
+/// `backend_trd_url` is a required JoySpace URL stored on config (not frontend `TRD.md`).
 #[tauri::command]
 pub async fn submit_pipeline(
     demand_id: i64,
@@ -218,6 +219,7 @@ pub async fn submit_pipeline(
     backend_repo_id: String,
     backend_branch: String,
     prd_url: String,
+    backend_trd_url: String,
     demand_code: Option<String>,
     demand_name: Option<String>,
     app: tauri::AppHandle,
@@ -230,6 +232,7 @@ pub async fn submit_pipeline(
     let backend_repo_id = backend_repo_id.trim().to_string();
     let backend_branch = backend_branch.trim().to_string();
     let prd_url = prd_url.trim().to_string();
+    let backend_trd_url = backend_trd_url.trim().to_string();
     if frontend_repo_id.is_empty() {
         return Err("请选择前端仓库".into());
     }
@@ -242,12 +245,7 @@ pub async fn submit_pipeline(
     if backend_branch.is_empty() {
         return Err("请选择后端分支".into());
     }
-    if prd_url.is_empty() {
-        return Err("请填写 JoySpace PRD 链接".into());
-    }
-    if !is_joyspace_prd_link(&prd_url) {
-        return Err("PRD 必须是 JoySpace 链接".into());
-    }
+    require_prd_and_backend_trd_urls(&prd_url, &backend_trd_url)?;
 
     let frontend = require_ready_repo(&state, &frontend_repo_id, "前端仓库")?;
     let backend = require_ready_repo(&state, &backend_repo_id, "后端仓库")?;
@@ -320,6 +318,7 @@ pub async fn submit_pipeline(
         trd_scope: vec![],
         repos: vec![frontend_repo.clone()],
         prd_url: Some(prd_url),
+        backend_trd_url: Some(backend_trd_url),
         backend_context: Some(backend_context),
     };
 
@@ -370,6 +369,25 @@ pub async fn submit_pipeline(
         .map_err(|e| e.to_string())?;
 
     Ok(pipeline_id)
+}
+
+fn require_prd_and_backend_trd_urls(prd_url: &str, backend_trd_url: &str) -> Result<(), String> {
+    if prd_url.is_empty() {
+        return Err("请填写 JoySpace PRD 链接".into());
+    }
+    if !is_joyspace_prd_link(prd_url) {
+        return Err("PRD 必须是 JoySpace 链接".into());
+    }
+    if backend_trd_url.is_empty() {
+        return Err("请填写 JoySpace 后端 TRD 链接".into());
+    }
+    if !is_joyspace_prd_link(backend_trd_url) {
+        return Err("后端 TRD 必须是 JoySpace 链接".into());
+    }
+    if backend_trd_url == prd_url {
+        return Err("后端 TRD 不能与 PRD 使用相同链接".into());
+    }
+    Ok(())
 }
 
 fn require_ready_repo(state: &AppState, id: &str, label: &str) -> Result<RegisteredRepo, String> {
@@ -531,4 +549,40 @@ pub async fn skip_stage(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::require_prd_and_backend_trd_urls;
+
+    #[test]
+    fn require_prd_and_backend_trd_rejects_empty_or_non_joyspace() {
+        let prd = "https://joyspace.jd.com/pages/prd";
+        assert_eq!(
+            require_prd_and_backend_trd_urls(prd, "").unwrap_err(),
+            "请填写 JoySpace 后端 TRD 链接"
+        );
+        assert_eq!(
+            require_prd_and_backend_trd_urls(prd, "https://example.com/trd").unwrap_err(),
+            "后端 TRD 必须是 JoySpace 链接"
+        );
+    }
+
+    #[test]
+    fn require_prd_and_backend_trd_rejects_matching_prd() {
+        let url = "https://joyspace.jd.com/pages/same";
+        assert_eq!(
+            require_prd_and_backend_trd_urls(url, url).unwrap_err(),
+            "后端 TRD 不能与 PRD 使用相同链接"
+        );
+    }
+
+    #[test]
+    fn require_prd_and_backend_trd_accepts_distinct_urls() {
+        require_prd_and_backend_trd_urls(
+            "https://joyspace.jd.com/pages/prd",
+            "https://joyspace.jd.com/pages/backend-trd",
+        )
+        .unwrap();
+    }
 }

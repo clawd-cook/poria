@@ -146,6 +146,7 @@ export interface DemandPrdPreview {
 export interface SubmitPipelineInput {
   backendBranch: string;
   backendRepoId: string;
+  backendTrdUrl: string;
   demandCode?: string;
   demandId: number;
   demandName?: string;

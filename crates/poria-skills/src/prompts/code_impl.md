@@ -6,8 +6,12 @@
 
 - 项目根目录：`{{project_root}}`
 - Feature 目录：`{{feature_dir}}`
-- TRD 内容：{{trd_content}}
+- TRD 内容（前端交付设计文档 `TRD.md`）：{{trd_content}}
 - PRD 内容：{{prd_content}}
+- 后端 TRD URL（只读参考，**不是**前端 `TRD.md`）：{{backend_trd_url}}
+- 后端 TRD 导出内容（可能为空；URL 存在时仍须参考该链接）：{{backend_trd_content}}
+- 后端仓只读路径：`{{backend_repo_path}}`
+- 后端分支：`{{backend_branch}}`
 
 ## 核心规则
 
@@ -139,3 +143,6 @@
 - 不得编造仓库里不存在的命令
 - 未过 review + 门禁不得 `[x]`
 - review SubAgent 不得修改业务代码
+- 后端 TRD 与后端仓是**只读参考**，用于辅助前端接口/字段/流程实现；禁止修改后端仓任何文件，不创建后端 MR
+- 实现以前端 `TRD.md` 为准；后端 TRD 只用来对齐接口、字段与流程，不得覆盖前端 TRD
+- 若后端 TRD URL 非空，即使 Markdown 导出缺失也必须参考该 URL

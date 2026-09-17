@@ -25,6 +25,7 @@ export async function submitPipeline(input: SubmitPipelineInput): Promise<string
   return invoke<string>("submit_pipeline", {
     backendBranch: input.backendBranch,
     backendRepoId: input.backendRepoId,
+    backendTrdUrl: input.backendTrdUrl,
     demandCode: input.demandCode,
     demandId: input.demandId,
     demandName: input.demandName,

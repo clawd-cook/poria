@@ -302,6 +302,18 @@ When changing demand-list filters (`acceptedByMe`, `receiver`, `processor`):
 
 ---
 
+## Start Pipeline backend_trd_url
+
+When changing the demand start wizard, `submit_pipeline`, or design/dev prompt injection:
+
+- [ ] Does TS send `backendTrdUrl` and Rust persist `config.backend_trd_url` (JoySpace, required, ≠ `prd_url`)?
+- [ ] Is backend still out of `pipeline.repos` (`backend_context` only)?
+- [ ] Do `gen_trd` / `gen_code` inject URL + optional `BACKEND_TRD.md` without overwriting frontend `TRD.md`?
+
+→ Read [Tauri Desktop Testing](../frontend/tauri-desktop-testing.md) (start pipeline IPC).
+
+---
+
 ## When to Create Flow Documentation
 
 Create detailed flow docs when:

@@ -11,6 +11,7 @@ use poria_core::feature_context::{
 use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
+use crate::backend_aid::insert_backend_coding_aid_vars;
 use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
 use crate::prompt_templates::{render_prompt, TRD_GEN_PROMPT};
@@ -97,11 +98,12 @@ impl Skill for GenTrdSkill {
         vars.insert("project_root".into(), ctx.workdir.clone());
         vars.insert("prd_content".into(), prd_content);
         vars.insert("prd_review_content".into(), prd_review_content);
+        insert_backend_coding_aid_vars(&mut vars, &input.pipeline.config, &feature_ctx);
 
         let system_prompt = render_prompt(TRD_GEN_PROMPT, &vars);
 
         let agent_input = AgentTaskInput {
-            prompt: "基于 PRD 和 PRD_REVIEW 生成前端技术设计文档 TRD.md".into(),
+            prompt: "基于 PRD 和 PRD_REVIEW 生成前端技术设计文档 TRD.md。后端 TRD 与后端仓仅作只读参考，禁止改后端仓，不得覆盖前端 TRD.md。".into(),
             worktree_path: ctx.workdir.clone(),
             system_prompt: Some(system_prompt),
             model: None,

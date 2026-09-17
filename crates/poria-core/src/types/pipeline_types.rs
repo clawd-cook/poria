@@ -101,6 +101,9 @@ pub struct PipelineConfig {
     pub repos: Vec<RepoConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prd_url: Option<String>,
+    /// JoySpace URL for the backend TRD. Frontend coding aid only; do not overwrite `TRD.md`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_trd_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_context: Option<BackendContext>,
 }
@@ -159,6 +162,7 @@ mod tests {
         let config: PipelineConfig =
             serde_json::from_str(r#"{"gates":[],"trd_scope":[],"repos":[]}"#).unwrap();
         assert!(config.prd_url.is_none());
+        assert!(config.backend_trd_url.is_none());
         assert!(config.backend_context.is_none());
         assert!(config.repos.is_empty());
     }
@@ -170,6 +174,7 @@ mod tests {
             trd_scope: vec![],
             repos: vec![frontend_repo()],
             prd_url: Some("https://joyspace.jd.com/pages/abc".into()),
+            backend_trd_url: Some("https://joyspace.jd.com/pages/backend-trd".into()),
             backend_context: Some(BackendContext {
                 git_url: "git@coding.jd.com:ls/ls-api.git".into(),
                 local_path: "/tmp/.poria/repos/ls/ls-api".into(),
@@ -185,11 +190,28 @@ mod tests {
             parsed.prd_url.as_deref(),
             Some("https://joyspace.jd.com/pages/abc")
         );
+        assert_eq!(
+            parsed.backend_trd_url.as_deref(),
+            Some("https://joyspace.jd.com/pages/backend-trd")
+        );
         let backend = parsed.backend_context.expect("backend_context");
         assert_eq!(backend.branch, "release");
         assert_eq!(backend.name, "ls-api");
         assert_eq!(parsed.repos.len(), 1);
         assert_eq!(parsed.repos[0].name, "ls-entrance");
+    }
+
+    #[test]
+    fn pipeline_config_deserializes_json_with_backend_trd_url() {
+        let config: PipelineConfig = serde_json::from_str(
+            r#"{"gates":[],"trd_scope":[],"repos":[],"backend_trd_url":"https://joyspace.jd.com/pages/be"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.backend_trd_url.as_deref(),
+            Some("https://joyspace.jd.com/pages/be")
+        );
+        assert!(config.prd_url.is_none());
     }
 
     #[test]

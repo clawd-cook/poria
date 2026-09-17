@@ -37,14 +37,16 @@ These guides help you **ask the right questions before coding**.
 - [ ] You are adding an event kind, JSONL record, RPC payload, or config field
 - [ ] UI / command code starts casting raw payload fields directly
 - [ ] Xingyun demand list filter changes (`acceptedByMe` / `receiver` / `processor`)
+- [ ] Start-pipeline wizard / `submit_pipeline` / `backend_trd_url` / `BACKEND_TRD.md` vs frontend `TRD.md`
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)
 
 ### When verifying the desktop app
 
-- [ ] Does the flow call `invoke`, `listen`, git clone, Xingyun, or SSO?
+- [ ] Does the flow call `invoke`, `listen`, git clone, Xingyun, SSO, or `submit_pipeline`?
 - [ ] If yes, is this the `poria-desktop` window (not Cursor browser on port 1420)?
 - [ ] Is port 1420 free, and was the app started with `cargo tauri dev` (not `pnpm tauri` unless a `tauri` binary is on PATH)?
+- [ ] If starting a pipeline, does invoke include `backendTrdUrl`, and is backend still out of `pipeline.repos`?
 
 → Read [Tauri Desktop Testing](../frontend/tauri-desktop-testing.md)
 
