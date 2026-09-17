@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 poria-core = { path = "../poria-core" }
 poria-resources = { path = "../poria-resources" }
+poria-channels = { path = "../poria-channels" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

@@ -1,10 +1,13 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use serde_json::json;
 
+use poria_channels::joyspace::{export_page_markdown, JoySpaceAuth};
 use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
+use poria_core::feature_context::{FeatureContext, ARTIFACT_BACKEND_TRD, ARTIFACT_PRD};
 use poria_core::types::{SkillInput, SkillOutput};
 
-use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
 
 pub struct InitSkill {
@@ -17,8 +20,8 @@ impl InitSkill {
             metadata: CapabilityMetadata {
                 id: "skill:init".into(),
                 name: "Init".into(),
-                description: "Parse demand link and export PRD from JoySpace".into(),
-                version: "0.1.0".into(),
+                description: "Export JoySpace PRD and backend TRD into ~/.poria/projects".into(),
+                version: "0.2.0".into(),
             },
         }
     }
@@ -34,8 +37,10 @@ fn fixture_output() -> SkillOutput {
     SkillOutput {
         output: json!({
             "projectDir": "/tmp/poria-fixture/project",
-            "prdPath": "/tmp/poria-fixture/project/source/PRD.md",
+            "prdPath": "/tmp/poria-fixture/project/PRD.md",
             "prdTitle": "Fixture PRD",
+            "backendTrdPath": "/tmp/poria-fixture/project/BACKEND_TRD.md",
+            "backendTrdTitle": "Fixture Backend TRD",
             "demandMetadata": {
                 "demandId": 1,
                 "demandCode": "TEST",
@@ -49,6 +54,24 @@ fn fixture_output() -> SkillOutput {
     }
 }
 
+fn cookie_from_context(ctx: &SkillContext) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    ctx.credentials
+        .get("cookie")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "请先登录后再导出 JoySpace 文档".into())
+}
+
+fn require_url(value: Option<&str>, label: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let url = value.map(str::trim).unwrap_or("");
+    if url.is_empty() {
+        return Err(format!("缺少 {label}").into());
+    }
+    Ok(url.to_string())
+}
+
 #[async_trait]
 impl Skill for InitSkill {
     fn metadata(&self) -> &CapabilityMetadata {
@@ -57,12 +80,62 @@ impl Skill for InitSkill {
 
     async fn execute(
         &self,
-        _input: SkillInput,
-        _ctx: SkillContext,
+        input: SkillInput,
+        ctx: SkillContext,
     ) -> Result<SkillOutput, Box<dyn std::error::Error + Send + Sync>> {
         if is_fixture_mode() {
             return Ok(fixture_output());
         }
-        Err(Box::new(SkillError::NotImplemented("InitSkill".into())))
+
+        let workdir = ctx.workdir.trim();
+        if workdir.is_empty() {
+            return Err("InitSkill 需要项目目录 workdir".into());
+        }
+
+        let cookie = cookie_from_context(&ctx)?;
+        let team_id = ctx
+            .credentials
+            .get("team_id")
+            .and_then(|v| v.as_str());
+        let auth = JoySpaceAuth::new(cookie, team_id);
+
+        let prd_url = require_url(input.pipeline.config.prd_url.as_deref(), "JoySpace PRD 链接")?;
+        let backend_trd_url = require_url(
+            input.pipeline.config.backend_trd_url.as_deref(),
+            "JoySpace 后端 TRD 链接",
+        )?;
+
+        let feature = FeatureContext::create_at(
+            PathBuf::from(workdir),
+            &input.pipeline.id,
+            input.pipeline.demand_id,
+        )?;
+
+        let prd = export_page_markdown(&auth, &prd_url).await?;
+        feature.write_artifact(ARTIFACT_PRD, &prd.markdown)?;
+
+        let backend_trd = export_page_markdown(&auth, &backend_trd_url).await?;
+        feature.write_artifact(ARTIFACT_BACKEND_TRD, &backend_trd.markdown)?;
+
+        Ok(SkillOutput {
+            output: json!({
+                "projectDir": feature.root.to_string_lossy(),
+                "prdPath": feature.artifact_path(ARTIFACT_PRD).to_string_lossy(),
+                "prdTitle": prd.title,
+                "backendTrdPath": feature.artifact_path(ARTIFACT_BACKEND_TRD).to_string_lossy(),
+                "backendTrdTitle": backend_trd.title,
+                "prdWarnings": prd.warnings,
+                "backendTrdWarnings": backend_trd.warnings,
+                "demandMetadata": {
+                    "demandId": input.pipeline.demand_id,
+                    "demandCode": input.pipeline.demand_code,
+                    "name": input.pipeline.demand_name,
+                    "prdUrl": prd_url,
+                    "backendTrdUrl": backend_trd_url,
+                    "rawLink": input.pipeline.raw_link,
+                }
+            }),
+            gates_pass: None,
+        })
     }
 }
