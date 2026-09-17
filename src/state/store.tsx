@@ -8,7 +8,7 @@ import {
   type Dispatch,
 } from "react";
 
-import { listPipelines, getAuthStatus, getConfig } from "../lib/tauri";
+import { getAuthStatus, getConfig, listPipelines, listRepos } from "../lib/tauri";
 import type {
   PipelineSummary,
   PipelineDetail,
@@ -19,6 +19,7 @@ import type {
   ChannelInfo,
   StreamChunk,
   ViewType,
+  RegisteredRepo,
 } from "../lib/types";
 import type { Action } from "./actions";
 
@@ -39,7 +40,8 @@ export interface AppState {
   skills: SkillInfo[];
   channels: ChannelInfo[];
   streamOutput: Record<string, StreamChunk[]>;
-  ui: { filter: string | null; settingsOpen: boolean; view: ViewType };
+  repos: RegisteredRepo[];
+  ui: { filter: string | null; view: ViewType };
 }
 
 const initialState: AppState = {
@@ -54,7 +56,8 @@ const initialState: AppState = {
   skills: [],
   channels: [],
   streamOutput: {},
-  ui: { filter: null, settingsOpen: false, view: "pipeline" },
+  repos: [],
+  ui: { filter: null, view: "home" },
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -75,20 +78,24 @@ function reducer(state: AppState, action: Action): AppState {
           p.id === action.id
             ? {
                 ...p,
-                status: action.status as PipelineSummary["status"],
                 current_stage: action.currentStage,
+                status: action.status as PipelineSummary["status"],
+                updated_at: new Date().toISOString(),
               }
             : p,
         ),
       };
 
     case "pipelineSelected":
+      if (action.id === state.selectedPipelineId) {
+        return { ...state, humanRequest: null };
+      }
       return {
         ...state,
-        selectedPipelineId: action.id,
-        pipelineDetail: action.id === null ? null : state.pipelineDetail,
-        events: action.id === null ? [] : state.events,
+        events: [],
         humanRequest: null,
+        pipelineDetail: null,
+        selectedPipelineId: action.id,
       };
 
     case "detailLoaded":
@@ -130,9 +137,6 @@ function reducer(state: AppState, action: Action): AppState {
     case "filterChanged":
       return { ...state, ui: { ...state.ui, filter: action.filter } };
 
-    case "settingsToggled":
-      return { ...state, ui: { ...state.ui, settingsOpen: action.open } };
-
     case "skillsLoaded":
       return { ...state, skills: action.skills };
 
@@ -141,6 +145,9 @@ function reducer(state: AppState, action: Action): AppState {
 
     case "viewChanged":
       return { ...state, ui: { ...state.ui, view: action.view } };
+
+    case "reposHydrated":
+      return { ...state, repos: action.repos };
 
     case "streamChunkReceived": {
       const prev = state.streamOutput[action.pipelineId] ?? [];
@@ -184,11 +191,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     getConfig()
       .then((config) => dispatch({ type: "configLoaded", config }))
       .catch(() => {});
+    listRepos()
+      .then((repos) => dispatch({ type: "reposHydrated", repos }))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     const unlisten = Promise.all([
       listen("pipeline:list-changed", () => {
+        listPipelines()
+          .then((pipelines) => dispatch({ type: "hydrate", pipelines }))
+          .catch(() => {});
+      }),
+      listen<string>("pipeline:created", () => {
         listPipelines()
           .then((pipelines) => dispatch({ type: "hydrate", pipelines }))
           .catch(() => {});
@@ -212,6 +227,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }),
       listen<AuthStatus>("auth:status-changed", (e) => {
         dispatch({ type: "authChanged", auth: e.payload });
+      }),
+      listen("repo:updated", () => {
+        listRepos()
+          .then((repos) => dispatch({ type: "reposHydrated", repos }))
+          .catch(() => {});
       }),
       listen<{ pipeline_id: string; chunk_type: string; content: string; tool_name?: string }>(
         "agent:stream",

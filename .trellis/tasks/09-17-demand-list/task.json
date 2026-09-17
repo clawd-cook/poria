@@ -3,7 +3,7 @@
   "name": "demand-list",
   "title": "Xingyun assigned-to-me demand list",
   "description": "R3: SSO + listDemands + search/pagination",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

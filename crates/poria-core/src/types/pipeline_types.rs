@@ -85,11 +85,24 @@ pub struct Stage {
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackendContext {
+    pub git_url: String,
+    pub local_path: String,
+    pub branch: String,
+    pub scope: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PipelineConfig {
     pub gates: Vec<GateRule>,
     pub trd_scope: Vec<String>,
     pub repos: Vec<RepoConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prd_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_context: Option<BackendContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,4 +136,77 @@ pub struct SkillOutput {
     pub output: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gates_pass: Option<bool>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frontend_repo() -> RepoConfig {
+        RepoConfig {
+            name: "ls-entrance".into(),
+            git_url: "git@coding.jd.com:ls/ls-entrance.git".into(),
+            branch: "master".into(),
+            base_branch: "master".into(),
+            gitlab_project_path: "ls/ls-entrance".into(),
+            depends_on: None,
+            build_cmd: None,
+        }
+    }
+
+    #[test]
+    fn pipeline_config_deserializes_legacy_json_without_prd_or_backend() {
+        let config: PipelineConfig =
+            serde_json::from_str(r#"{"gates":[],"trd_scope":[],"repos":[]}"#).unwrap();
+        assert!(config.prd_url.is_none());
+        assert!(config.backend_context.is_none());
+        assert!(config.repos.is_empty());
+    }
+
+    #[test]
+    fn pipeline_config_round_trips_prd_and_backend_context() {
+        let config = PipelineConfig {
+            gates: vec![],
+            trd_scope: vec![],
+            repos: vec![frontend_repo()],
+            prd_url: Some("https://joyspace.jd.com/pages/abc".into()),
+            backend_context: Some(BackendContext {
+                git_url: "git@coding.jd.com:ls/ls-api.git".into(),
+                local_path: "/tmp/.poria/repos/ls/ls-api".into(),
+                branch: "release".into(),
+                scope: "ls".into(),
+                name: "ls-api".into(),
+            }),
+        };
+
+        let parsed: PipelineConfig =
+            serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(
+            parsed.prd_url.as_deref(),
+            Some("https://joyspace.jd.com/pages/abc")
+        );
+        let backend = parsed.backend_context.expect("backend_context");
+        assert_eq!(backend.branch, "release");
+        assert_eq!(backend.name, "ls-api");
+        assert_eq!(parsed.repos.len(), 1);
+        assert_eq!(parsed.repos[0].name, "ls-entrance");
+    }
+
+    #[test]
+    fn pipeline_config_does_not_require_backend_in_repos() {
+        let config = PipelineConfig {
+            repos: vec![frontend_repo()],
+            prd_url: Some("https://joyspace.jd.com/pages/abc".into()),
+            backend_context: Some(BackendContext {
+                git_url: "git@coding.jd.com:ls/ls-api.git".into(),
+                local_path: "/tmp/.poria/repos/ls/ls-api".into(),
+                branch: "release".into(),
+                scope: "ls".into(),
+                name: "ls-api".into(),
+            }),
+            ..Default::default()
+        };
+        assert_eq!(config.repos.len(), 1);
+        assert_ne!(config.repos[0].name, "ls-api");
+    }
 }

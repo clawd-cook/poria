@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const USER_DIR_NAME: &str = ".poria";
 const AUTH_FILE_NAME: &str = "auth.json";
+const REPOS_DIR_NAME: &str = "repos";
 const ERP_COOKIE_NAME: &str = "erp_erp";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,15 +26,68 @@ struct StoredAuth {
 }
 
 pub fn get_user_root(home: Option<&Path>) -> PathBuf {
-    let base = home.map(PathBuf::from).unwrap_or_else(|| {
-        dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
-    });
+    let base = home
+        .map(PathBuf::from)
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")));
     base.join(USER_DIR_NAME)
 }
 
 pub fn get_auth_file_path(user_root: Option<&Path>) -> PathBuf {
-    let root = user_root.map(PathBuf::from).unwrap_or_else(|| get_user_root(None));
+    let root = user_root
+        .map(PathBuf::from)
+        .unwrap_or_else(|| get_user_root(None));
     root.join(AUTH_FILE_NAME)
+}
+
+pub fn get_repos_root(home: Option<&Path>) -> PathBuf {
+    get_user_root(home).join(REPOS_DIR_NAME)
+}
+
+/// Build `~/.poria/repos/<scope>/<name>` from a parsed git URL path.
+///
+/// Rejects `.` / `..` / empty segments so clone + `remove_dir_all` cannot escape
+/// the managed repos root (`git@host:ls/../../.ssh` must not succeed).
+pub fn get_registered_repo_path(
+    home: Option<&Path>,
+    scope: &str,
+    name: &str,
+) -> Result<PathBuf, String> {
+    validate_path_segment(scope, "scope")?;
+    let mut path = get_repos_root(home).join(scope);
+    let mut pushed_name = false;
+    for segment in name.split(['/', '\\']) {
+        validate_path_segment(segment, "name")?;
+        path.push(segment);
+        pushed_name = true;
+    }
+    if !pushed_name {
+        return Err("无法从 git URL 解析仓库名".into());
+    }
+    Ok(path)
+}
+
+pub fn assert_path_under_repos_root(home: Option<&Path>, path: &Path) -> Result<(), String> {
+    let root = get_repos_root(home);
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err("克隆路径不合法".into());
+    }
+    if !path.starts_with(&root) {
+        return Err("克隆路径不在 ~/.poria/repos 下".into());
+    }
+    Ok(())
+}
+
+fn validate_path_segment(segment: &str, field: &str) -> Result<(), String> {
+    if segment.is_empty()
+        || segment == "."
+        || segment == ".."
+        || segment.contains('\0')
+        || segment.contains('/')
+        || segment.contains('\\')
+    {
+        return Err(format!("非法仓库{field}"));
+    }
+    Ok(())
 }
 
 pub fn redact_cookie(cookie: &str) -> String {
@@ -102,7 +156,9 @@ pub fn get_status(user_root: Option<&Path>) -> AuthStatus {
 }
 
 pub fn save_credentials(creds: &JacpCredentials, user_root: Option<&Path>) -> Result<(), String> {
-    let root = user_root.map(PathBuf::from).unwrap_or_else(|| get_user_root(None));
+    let root = user_root
+        .map(PathBuf::from)
+        .unwrap_or_else(|| get_user_root(None));
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
 
     let path = root.join(AUTH_FILE_NAME);
@@ -137,6 +193,51 @@ pub fn logout(user_root: Option<&Path>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_get_repos_root_under_poria() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = get_repos_root(Some(dir.path()));
+        assert_eq!(path, dir.path().join(".poria").join("repos"));
+    }
+
+    #[test]
+    fn registered_repo_path_uses_scope_and_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = get_registered_repo_path(Some(dir.path()), "ls", "ls-entrance").unwrap();
+        assert_eq!(
+            path,
+            dir.path()
+                .join(".poria")
+                .join("repos")
+                .join("ls")
+                .join("ls-entrance")
+        );
+        assert_path_under_repos_root(Some(dir.path()), &path).unwrap();
+    }
+
+    #[test]
+    fn registered_repo_path_nests_name_segments() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = get_registered_repo_path(Some(dir.path()), "group", "sub/repo").unwrap();
+        assert_eq!(
+            path,
+            dir.path()
+                .join(".poria")
+                .join("repos")
+                .join("group")
+                .join("sub")
+                .join("repo")
+        );
+    }
+
+    #[test]
+    fn registered_repo_path_rejects_parent_segments() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(get_registered_repo_path(Some(dir.path()), "..", "ls-entrance").is_err());
+        assert!(get_registered_repo_path(Some(dir.path()), "ls", "../evil").is_err());
+        assert!(get_registered_repo_path(Some(dir.path()), "ls", "foo/../bar").is_err());
+    }
 
     #[test]
     fn test_parse_username_from_cookie() {
@@ -190,7 +291,10 @@ mod tests {
     #[test]
     fn test_logout() {
         let dir = tempfile::tempdir().unwrap();
-        let creds = JacpCredentials { username: "u".into(), cookie: "c".into() };
+        let creds = JacpCredentials {
+            username: "u".into(),
+            cookie: "c".into(),
+        };
         save_credentials(&creds, Some(dir.path())).unwrap();
         logout(Some(dir.path())).unwrap();
         assert!(get_credentials(Some(dir.path())).is_none());

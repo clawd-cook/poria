@@ -1,9 +1,9 @@
-pub mod traits;
 pub mod exception_classifier;
-pub mod handle_error;
 pub mod executor;
-pub mod worker;
+pub mod handle_error;
 pub mod rollback;
+pub mod traits;
+pub mod worker;
 
 // Re-export primary public items for ergonomic use.
 pub use exception_classifier::classify;

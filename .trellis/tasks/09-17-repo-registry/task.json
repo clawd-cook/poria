@@ -3,7 +3,7 @@
   "name": "repo-registry",
   "title": "Register and clone repos under ~/.poria/repos/scope/name",
   "description": "R5: git URL register, clone, grouped repo list",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

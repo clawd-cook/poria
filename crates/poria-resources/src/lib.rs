@@ -7,24 +7,26 @@
 //! - `OutputGuard` -- validates agent output (file scope, diff size, dependencies)
 //! - `SessionTracker` -- tracks active agent sessions
 
+pub mod claude;
 pub mod error;
 pub mod terminal;
 pub mod worktree;
-pub mod claude;
 
 // Re-export primary types for convenience
 pub use error::ResourceError;
 
-pub use terminal::{TerminalResource, TerminalExecInput, TerminalExecResult};
-pub use worktree::{WorktreeResource, WorktreeCreateInput, WorktreeCreateResult};
+pub use terminal::{
+    git_clone, git_current_branch, git_fetch, git_list_branches, TerminalExecInput,
+    TerminalExecResult, TerminalResource,
+};
+pub use worktree::{WorktreeCreateInput, WorktreeCreateResult, WorktreeResource};
 
 pub use claude::agent_pool::{
-    ClaudeAgentPool, StageAgentConfig, AgentSdk, AgentQueryOptions, SdkMessage,
-    stage_agent_config,
+    stage_agent_config, AgentQueryOptions, AgentSdk, ClaudeAgentPool, SdkMessage, StageAgentConfig,
 };
 pub use claude::cli_sdk::ClaudeCliSdk;
 pub use claude::output_guard::{
-    OutputGuard, OutputGuardConfig, AgentOutput, GuardResult,
-    Violation, ViolationSeverity, ViolationType, DependencyEntry,
+    AgentOutput, DependencyEntry, GuardResult, OutputGuard, OutputGuardConfig, Violation,
+    ViolationSeverity, ViolationType,
 };
 pub use claude::session_tracker::SessionTracker;

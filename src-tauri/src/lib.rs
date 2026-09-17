@@ -5,6 +5,7 @@ mod commands;
 
 pub struct AppState {
     pub store: Arc<poria_infrastructure::store::SqlitePipelineStore>,
+    pub repo_store: Arc<poria_infrastructure::store::RegisteredRepoStore>,
     pub event_store: Arc<poria_infrastructure::store::EventStore>,
     pub agent_pool: Arc<poria_resources::ClaudeAgentPool>,
     pub session_tracker: Arc<poria_resources::SessionTracker>,
@@ -40,11 +41,20 @@ pub fn run() {
 
             let store = Arc::new(poria_infrastructure::store::SqlitePipelineStore::new(conn));
             let event_store = Arc::new(poria_infrastructure::store::EventStore::new(event_conn));
+            let repo_conn = poria_infrastructure::store::init_database(&db_path)
+                .expect("Failed to open repo database connection");
+            let repo_store = Arc::new(poria_infrastructure::store::RegisteredRepoStore::new(
+                repo_conn,
+            ));
+            if let Err(e) = repo_store.fail_interrupted_clones() {
+                tracing::warn!(error = %e, "failed to mark interrupted clones as failed");
+            }
             let agent_pool = Arc::new(poria_resources::ClaudeAgentPool::new_with_cli(3, None));
             let session_tracker = Arc::new(poria_resources::SessionTracker::new());
 
             app.manage(AppState {
                 store,
+                repo_store,
                 event_store,
                 agent_pool,
                 session_tracker,
@@ -64,10 +74,16 @@ pub fn run() {
             commands::auth::get_auth_status,
             commands::auth::start_login,
             commands::auth::logout,
+            commands::demands::list_demands,
+            commands::demands::preview_demand_prd,
             commands::config::get_config,
             commands::config::update_config,
             commands::skills::list_skills,
             commands::channels::list_channels,
+            commands::repos::register_repo,
+            commands::repos::list_repos,
+            commands::repos::retry_clone,
+            commands::repos::list_repo_branches,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -24,8 +24,7 @@ impl ReviewPrdSkill {
             metadata: CapabilityMetadata {
                 id: "skill:review-prd".into(),
                 name: "ReviewPRD".into(),
-                description: "Analyze PRD and produce PRD_REVIEW.md with P0/P1/P2 questions"
-                    .into(),
+                description: "Analyze PRD and produce PRD_REVIEW.md with P0/P1/P2 questions".into(),
                 version: "0.1.0".into(),
             },
             agent_pool: None,

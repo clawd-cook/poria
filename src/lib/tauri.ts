@@ -1,12 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type {
-  PipelineSummary,
-  PipelineDetail,
-  AuthStatus,
   AppConfig,
-  SkillInfo,
+  AuthStatus,
   ChannelInfo,
+  DemandPage,
+  DemandPrdPreview,
+  PipelineDetail,
+  PipelineSummary,
+  RegisteredRepo,
+  SkillInfo,
+  SubmitPipelineInput,
 } from "./types";
 
 export async function listPipelines(): Promise<PipelineSummary[]> {
@@ -17,8 +21,16 @@ export async function getPipeline(id: string): Promise<PipelineDetail> {
   return invoke<PipelineDetail>("get_pipeline", { id });
 }
 
-export async function submitPipeline(link: string): Promise<string> {
-  return invoke<string>("submit_pipeline", { link });
+export async function submitPipeline(input: SubmitPipelineInput): Promise<string> {
+  return invoke<string>("submit_pipeline", {
+    backendBranch: input.backendBranch,
+    backendRepoId: input.backendRepoId,
+    demandCode: input.demandCode,
+    demandId: input.demandId,
+    demandName: input.demandName,
+    frontendRepoId: input.frontendRepoId,
+    prdUrl: input.prdUrl,
+  });
 }
 
 export async function cancelPipeline(id: string): Promise<void> {
@@ -63,4 +75,36 @@ export async function executeStage(pipelineId: string): Promise<void> {
 
 export async function skipStage(pipelineId: string, stageName: string): Promise<void> {
   return invoke<void>("skip_stage", { pipelineId, stageName });
+}
+
+export async function listRepos(): Promise<RegisteredRepo[]> {
+  return invoke<RegisteredRepo[]>("list_repos");
+}
+
+export async function registerRepo(gitUrl: string): Promise<RegisteredRepo> {
+  return invoke<RegisteredRepo>("register_repo", { gitUrl });
+}
+
+export async function retryClone(id: string): Promise<RegisteredRepo> {
+  return invoke<RegisteredRepo>("retry_clone", { id });
+}
+
+export async function listDemands(input: {
+  current?: number;
+  keyword?: string;
+  pageSize?: number;
+}): Promise<DemandPage> {
+  return invoke<DemandPage>("list_demands", {
+    current: input.current,
+    keyword: input.keyword,
+    pageSize: input.pageSize,
+  });
+}
+
+export async function previewDemandPrd(demandId: number): Promise<DemandPrdPreview> {
+  return invoke<DemandPrdPreview>("preview_demand_prd", { demandId });
+}
+
+export async function listRepoBranches(id: string): Promise<string[]> {
+  return invoke<string[]>("list_repo_branches", { id });
 }

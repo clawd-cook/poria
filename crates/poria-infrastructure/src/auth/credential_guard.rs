@@ -1,4 +1,6 @@
-use super::credentials::{JacpCredentials, get_credentials, save_credentials, parse_username_from_cookie};
+use super::credentials::{
+    get_credentials, parse_username_from_cookie, save_credentials, JacpCredentials,
+};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -6,7 +8,11 @@ use std::pin::Pin;
 #[error("Authentication expired during pipeline execution")]
 pub struct AuthExpiredDuringPipelineError;
 
-pub type ApiProbe = Box<dyn Fn(&JacpCredentials) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync>;
+pub type ApiProbe = Box<
+    dyn Fn(&JacpCredentials) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>
+        + Send
+        + Sync,
+>;
 
 pub struct CredentialGuard {
     probe: ApiProbe,
@@ -18,15 +24,21 @@ impl CredentialGuard {
         Self { probe, user_root }
     }
 
-    pub async fn ensure_valid(&self, credentials: &JacpCredentials) -> Result<JacpCredentials, AuthExpiredDuringPipelineError> {
+    pub async fn ensure_valid(
+        &self,
+        credentials: &JacpCredentials,
+    ) -> Result<JacpCredentials, AuthExpiredDuringPipelineError> {
         if (self.probe)(credentials).await.is_ok() {
             return Ok(credentials.clone());
         }
 
-        let refreshed = self.try_refresh().await
+        let refreshed = self
+            .try_refresh()
+            .await
             .map_err(|_| AuthExpiredDuringPipelineError)?;
 
-        (self.probe)(&refreshed).await
+        (self.probe)(&refreshed)
+            .await
             .map_err(|_| AuthExpiredDuringPipelineError)?;
 
         Ok(refreshed)
@@ -36,8 +48,8 @@ impl CredentialGuard {
         let creds = get_credentials(self.user_root.as_deref())
             .ok_or_else(|| "No stored credentials".to_string())?;
 
-        let username = parse_username_from_cookie(&creds.cookie)
-            .unwrap_or_else(|| creds.username.clone());
+        let username =
+            parse_username_from_cookie(&creds.cookie).unwrap_or_else(|| creds.username.clone());
 
         let refreshed = JacpCredentials {
             username,

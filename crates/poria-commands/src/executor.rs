@@ -1,9 +1,10 @@
 use chrono::Utc;
-use poria_core::pipeline::{evaluate_gates, transition_pipeline, transition_stage, PipelineEvent, StageResult};
+use poria_core::pipeline::{
+    evaluate_gates, transition_pipeline, transition_stage, PipelineEvent, StageResult,
+};
 use poria_core::types::{
-    GateOnFail, GatePhase, Pipeline, PipelineStatus, RollbackCommand,
-    RollbackCommandType, RollbackInstruction, SkillInput, SkillOutput, Stage, StageEnum,
-    StageStatus, STAGE_ORDER,
+    GateOnFail, GatePhase, Pipeline, PipelineStatus, RollbackCommand, RollbackCommandType,
+    RollbackInstruction, SkillInput, SkillOutput, Stage, StageEnum, StageStatus, STAGE_ORDER,
 };
 
 use crate::handle_error::{handle_stage_error, ErrorAction};
@@ -130,7 +131,10 @@ where
     }
 
     /// Runs a pipeline to completion (or until it blocks/fails).
-    pub async fn run(&self, pipeline_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn run(
+        &self,
+        pipeline_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut pipeline = self.store.load(pipeline_id).await?;
 
         if pipeline.status == PipelineStatus::Created {
@@ -160,8 +164,7 @@ where
 
             // Check retry exhaustion
             if pipeline.stages[stage_idx].status == StageStatus::Failed
-                && pipeline.stages[stage_idx].retry_count
-                    >= pipeline.stages[stage_idx].max_retries
+                && pipeline.stages[stage_idx].retry_count >= pipeline.stages[stage_idx].max_retries
             {
                 transition_pipeline(&mut pipeline.status, PipelineStatus::Failed)?;
                 let stage_name = pipeline.stages[stage_idx].name;
@@ -211,21 +214,15 @@ where
                             ));
                         }
                         ErrorAction::Failed => {
-                            events.push(PipelineEvent::pipeline_failed(
-                                &pipeline.id,
-                                &error_message,
-                            ));
+                            events
+                                .push(PipelineEvent::pipeline_failed(&pipeline.id, &error_message));
                         }
                     }
 
-                    self.store.save_stage_tx(
-                        Some(&pipeline.stages[stage_idx]),
-                        &pipeline,
-                        &events,
-                    );
+                    self.store
+                        .save_stage_tx(Some(&pipeline.stages[stage_idx]), &pipeline, &events);
 
-                    if result.action == ErrorAction::Blocked
-                        || result.action == ErrorAction::Failed
+                    if result.action == ErrorAction::Blocked || result.action == ErrorAction::Failed
                     {
                         return Ok(());
                     }
@@ -246,10 +243,7 @@ where
         let credentials = self.credential_guard.ensure_valid().await?;
 
         // Transition stage to running
-        transition_stage(
-            &mut pipeline.stages[stage_idx].status,
-            StageStatus::Running,
-        )?;
+        transition_stage(&mut pipeline.stages[stage_idx].status, StageStatus::Running)?;
         pipeline.stages[stage_idx].started_at = Some(Utc::now());
         self.store.save_stage_tx(
             Some(&pipeline.stages[stage_idx]),
@@ -264,8 +258,7 @@ where
         let skill_id = stage_skill_id(stage_name);
         let skill = self.skill_loader.load(skill_id).await?;
 
-        let is_multi_repo =
-            pipeline.repos.len() > 1 && is_multi_repo_stage(stage_name);
+        let is_multi_repo = pipeline.repos.len() > 1 && is_multi_repo_stage(stage_name);
         let result: SkillOutput = if is_multi_repo {
             if let Some(ref orch) = self.multi_repo_orchestrator {
                 orch.execute(
@@ -333,19 +326,13 @@ where
             let action = self.handle_cr_gate(pipeline, stage_idx, &mut events);
             match action {
                 GateAction::Regress => {
-                    self.store.save_stage_tx(
-                        Some(&pipeline.stages[stage_idx]),
-                        pipeline,
-                        &events,
-                    );
+                    self.store
+                        .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &events);
                     return Ok(StageOutcome::Continue);
                 }
                 GateAction::Blocked => {
-                    self.store.save_stage_tx(
-                        Some(&pipeline.stages[stage_idx]),
-                        pipeline,
-                        &events,
-                    );
+                    self.store
+                        .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &events);
                     return Ok(StageOutcome::Return);
                 }
                 GateAction::Pass => {}
@@ -356,11 +343,8 @@ where
         if stage_name == StageEnum::Deploy {
             self.handle_deploy_gate(pipeline, stage_idx, &mut events);
             if pipeline.stages[stage_idx].status == StageStatus::Blocked {
-                self.store.save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &events,
-                );
+                self.store
+                    .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &events);
                 return Ok(StageOutcome::Return);
             }
         }
@@ -369,11 +353,8 @@ where
             &mut pipeline.stages[stage_idx].status,
             StageStatus::Completed,
         )?;
-        self.store.save_stage_tx(
-            Some(&pipeline.stages[stage_idx]),
-            pipeline,
-            &events,
-        );
+        self.store
+            .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &events);
 
         // Deploy complete -> waiting_merge
         if stage_name == StageEnum::Deploy {
@@ -416,8 +397,7 @@ where
             .as_ref()
             .and_then(|o| o.get("findings"))
             .cloned();
-        let evaluation =
-            evaluate_gates(&cr_result, &pipeline.config.gates, GatePhase::StageExit);
+        let evaluation = evaluate_gates(&cr_result, &pipeline.config.gates, GatePhase::StageExit);
         events.push(PipelineEvent::gate_evaluated(
             &pipeline.id,
             stage_name,
@@ -429,14 +409,19 @@ where
         }
 
         // Look for a regress rule that failed
-        let regress_rule_data = pipeline.config.gates.iter().find(|r| {
-            r.enabled
-                && r.on_fail == GateOnFail::Regress
-                && evaluation
-                    .details
-                    .iter()
-                    .any(|d| d.rule_id == r.id && !d.pass)
-        }).map(|r| (r.id.clone(), r.regress_to));
+        let regress_rule_data = pipeline
+            .config
+            .gates
+            .iter()
+            .find(|r| {
+                r.enabled
+                    && r.on_fail == GateOnFail::Regress
+                    && evaluation
+                        .details
+                        .iter()
+                        .any(|d| d.rule_id == r.id && !d.pass)
+            })
+            .map(|r| (r.id.clone(), r.regress_to));
 
         if let Some((rule_id, regress_to_opt)) = regress_rule_data {
             if !pipeline.has_regressed {
@@ -524,8 +509,7 @@ where
                 .and_then(|v| v.as_bool()),
             ..Default::default()
         };
-        let evaluation =
-            evaluate_gates(&deploy_result, &pipeline.config.gates, GatePhase::Deploy);
+        let evaluation = evaluate_gates(&deploy_result, &pipeline.config.gates, GatePhase::Deploy);
         events.push(PipelineEvent::gate_evaluated(
             &pipeline.id,
             stage_name,

@@ -121,9 +121,7 @@ impl Channel for JmeChannel {
                 let _ = &read.since; // Since timestamp
                 let _ = &read.chat_name;
                 // Placeholder -- reading replies requires JoyClaw agent
-                JmeChannelOutput::ReadReplies {
-                    replies: vec![],
-                }
+                JmeChannelOutput::ReadReplies { replies: vec![] }
             }
             JmeAction::EnsureGatewayAlive => {
                 let port = gateway_port(input.bridge_config.as_ref());

@@ -2,7 +2,8 @@ mod git_url;
 mod types;
 
 pub use git_url::{
-    normalize_git_url, repo_name_from_git_url, repo_search_path_from_git_url, same_git_url,
+    normalize_git_url, repo_name_from_git_url, repo_scope_and_name_from_git_url,
+    repo_search_path_from_git_url, same_git_url,
 };
 pub use types::*;
 
@@ -42,17 +43,24 @@ impl Channel for CodingChannel {
         let output = match input.action {
             CodingAction::SearchRepos => {
                 let query = input.search_repos.unwrap_or_default();
-                let repos =
-                    query_all_repos(&credentials, &query.name_like.unwrap_or_default(), query.size.unwrap_or(20))
-                        .await?;
+                let repos = query_all_repos(
+                    &credentials,
+                    &query.name_like.unwrap_or_default(),
+                    query.size.unwrap_or(20),
+                )
+                .await?;
                 CodingChannelOutput::SearchRepos { repos }
             }
             CodingAction::ListBranches => {
                 let params = input
                     .list_branches
                     .ok_or("listBranches requires listBranches input")?;
-                let branches =
-                    query_branches(&credentials, &params.git_url, &params.name_like.unwrap_or_default()).await?;
+                let branches = query_branches(
+                    &credentials,
+                    &params.git_url,
+                    &params.name_like.unwrap_or_default(),
+                )
+                .await?;
                 CodingChannelOutput::ListBranches { branches }
             }
             CodingAction::CreateMergeRequest => {
@@ -71,9 +79,7 @@ impl Channel for CodingChannel {
                 CodingChannelOutput::GetMrStatus { status }
             }
             CodingAction::FindMr => {
-                let query = input
-                    .find_mr
-                    .ok_or("findMr requires findMr input")?;
+                let query = input.find_mr.ok_or("findMr requires findMr input")?;
                 let mr = find_mr_live(&credentials, &query).await?;
                 CodingChannelOutput::FindMr { mr }
             }
@@ -104,7 +110,11 @@ fn coding_base_url() -> String {
         .ok()
         .and_then(|s| {
             let trimmed = s.trim().trim_end_matches('/').to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         })
         .unwrap_or_else(|| DEFAULT_CODING_BASE.to_string())
 }
@@ -162,10 +172,7 @@ async fn easyci_gql<T: serde::de::DeserializeOwned>(
         .map_err(|e| format!("{}: {}", error_label, e))?;
 
     if let Some(errors) = &gql.errors {
-        let msgs: Vec<String> = errors
-            .iter()
-            .filter_map(|e| e.message.clone())
-            .collect();
+        let msgs: Vec<String> = errors.iter().filter_map(|e| e.message.clone()).collect();
         if !msgs.is_empty() && gql.data.is_none() {
             return Err(format!("{}: {}", error_label, msgs.join("; ")).into());
         }
@@ -230,9 +237,14 @@ pub async fn query_all_repos(
         "query": { "page": 1, "nameLike": name_like, "size": page_size }
     });
 
-    let data: AllReposData =
-        easyci_gql(credentials, "Repo search failed", "queryAllRepos", QUERY_ALL_REPOS, variables)
-            .await?;
+    let data: AllReposData = easyci_gql(
+        credentials,
+        "Repo search failed",
+        "queryAllRepos",
+        QUERY_ALL_REPOS,
+        variables,
+    )
+    .await?;
 
     let repos = data
         .all_repositories
@@ -368,7 +380,10 @@ pub async fn create_merge_request_live(
         .unwrap_or("master");
 
     let encoded_project = urlencoding_encode(project_id);
-    let url = format!("{}/api/v4/projects/{}/merge_requests", base, encoded_project);
+    let url = format!(
+        "{}/api/v4/projects/{}/merge_requests",
+        base, encoded_project
+    );
 
     let body = serde_json::json!({
         "source_branch": source_branch,
@@ -465,11 +480,7 @@ pub async fn find_mr_live(
 ) -> Result<Option<MrInfo>, Box<dyn std::error::Error + Send + Sync>> {
     let base = coding_base_url();
     let encoded_path = urlencoding_encode(&query.project_path);
-    let state_str = query
-        .state
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or("opened");
+    let state_str = query.state.as_ref().map(|s| s.as_str()).unwrap_or("opened");
 
     let url = format!(
         "{}/api/v4/projects/{}/merge_requests?source_branch={}&target_branch={}&state={}",

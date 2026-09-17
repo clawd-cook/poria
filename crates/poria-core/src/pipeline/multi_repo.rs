@@ -9,9 +9,13 @@ pub struct CircularDependencyError {
 }
 
 pub fn topological_sort(repos: &[RepoConfig]) -> Result<Vec<RepoConfig>, CircularDependencyError> {
-    let name_to_repo: HashMap<&str, &RepoConfig> = repos.iter().map(|r| (r.name.as_str(), r)).collect();
+    let name_to_repo: HashMap<&str, &RepoConfig> =
+        repos.iter().map(|r| (r.name.as_str(), r)).collect();
     let mut in_degree: HashMap<&str, usize> = repos.iter().map(|r| (r.name.as_str(), 0)).collect();
-    let mut adjacency: HashMap<&str, Vec<&str>> = repos.iter().map(|r| (r.name.as_str(), Vec::new())).collect();
+    let mut adjacency: HashMap<&str, Vec<&str>> = repos
+        .iter()
+        .map(|r| (r.name.as_str(), Vec::new()))
+        .collect();
 
     for repo in repos {
         if let Some(deps) = &repo.depends_on {
@@ -19,13 +23,17 @@ pub fn topological_sort(repos: &[RepoConfig]) -> Result<Vec<RepoConfig>, Circula
                 if !name_to_repo.contains_key(dep.as_str()) {
                     continue;
                 }
-                adjacency.get_mut(dep.as_str()).unwrap().push(repo.name.as_str());
+                adjacency
+                    .get_mut(dep.as_str())
+                    .unwrap()
+                    .push(repo.name.as_str());
                 *in_degree.get_mut(repo.name.as_str()).unwrap() += 1;
             }
         }
     }
 
-    let mut queue: Vec<&str> = in_degree.iter()
+    let mut queue: Vec<&str> = in_degree
+        .iter()
         .filter(|(_, &deg)| deg == 0)
         .map(|(&name, _)| name)
         .collect();
@@ -46,7 +54,8 @@ pub fn topological_sort(repos: &[RepoConfig]) -> Result<Vec<RepoConfig>, Circula
     }
 
     if sorted.len() != repos.len() {
-        let remaining: Vec<String> = repos.iter()
+        let remaining: Vec<String> = repos
+            .iter()
             .filter(|r| !sorted.iter().any(|s| s.name == r.name))
             .map(|r| r.name.clone())
             .collect();
@@ -93,10 +102,7 @@ mod tests {
 
     #[test]
     fn test_circular_dependency() {
-        let repos = vec![
-            repo("a", Some(vec!["b"])),
-            repo("b", Some(vec!["a"])),
-        ];
+        let repos = vec![repo("a", Some(vec!["b"])), repo("b", Some(vec!["a"]))];
         let err = topological_sort(&repos).unwrap_err();
         assert!(!err.cycle.is_empty());
     }

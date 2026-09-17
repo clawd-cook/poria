@@ -17,9 +17,7 @@ mod workspace;
 pub use error::SkillError;
 pub use fixture::is_fixture_mode;
 
-pub use human_loop::{
-    parse_human_reply, HumanAction, HumanLoop, HumanLoopCoordinator, HumanReply,
-};
+pub use human_loop::{parse_human_reply, HumanAction, HumanLoop, HumanLoopCoordinator, HumanReply};
 
 pub use stage_skill_map::{stage_to_skill_id, STAGE_SKILL_MAP};
 

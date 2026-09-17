@@ -1,29 +1,33 @@
-import { Form, Input, InputNumber, Modal } from "antd";
+import { App, Button, Form, Input, InputNumber, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 import { updateConfig } from "../lib/tauri";
 import type { AppConfig } from "../lib/types";
 import { useStore } from "../state/store";
 
-export function SettingsPanel() {
+const { Title } = Typography;
+
+export function SettingsPage() {
   const { state, dispatch } = useStore();
+  const { message } = App.useApp();
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm<AppConfig>();
-
   const config = state.config;
-  const open = state.ui.settingsOpen;
 
   useEffect(() => {
-    if (config && open) {
+    if (config) {
       form.setFieldsValue(config);
     }
-  }, [config, open, form]);
+  }, [config, form]);
 
-  if (!config) return null;
-
-  function handleClose() {
-    form.resetFields();
-    dispatch({ type: "settingsToggled", open: false });
+  if (!config) {
+    return (
+      <div
+        style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center" }}
+      >
+        <Spin tip="加载设置..." />
+      </div>
+    );
   }
 
   async function handleSave() {
@@ -32,26 +36,28 @@ export function SettingsPanel() {
       setSaving(true);
       await updateConfig(values);
       dispatch({ type: "configLoaded", config: values });
-      dispatch({ type: "settingsToggled", open: false });
-    } catch {
-      /* validation error */
+      message.success("设置已保存");
+    } catch (error) {
+      if (!(error && typeof error === "object" && "errorFields" in error)) {
+        message.error("保存失败");
+      }
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Modal
-      title="设置"
-      open={open}
-      onCancel={handleClose}
-      onOk={handleSave}
-      okText="保存"
-      cancelText="取消"
-      confirmLoading={saving}
-      destroyOnClose
-    >
-      <Form form={form} layout="vertical" initialValues={config}>
+    <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
+      <Title level={4}>设置</Title>
+      <Form
+        form={form}
+        initialValues={config}
+        layout="vertical"
+        style={{ maxWidth: 480 }}
+        onFinish={() => {
+          void handleSave();
+        }}
+      >
         <Form.Item label="CR 评分阈值" name="cr_score_threshold">
           <Input />
         </Form.Item>
@@ -70,7 +76,12 @@ export function SettingsPanel() {
         <Form.Item label="数据目录" name="db_path">
           <Input />
         </Form.Item>
+        <Form.Item>
+          <Button htmlType="submit" loading={saving} type="primary">
+            保存
+          </Button>
+        </Form.Item>
       </Form>
-    </Modal>
+    </div>
   );
 }

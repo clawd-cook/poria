@@ -87,7 +87,10 @@ mod tests {
 
     #[test]
     fn same_git_url_returns_false_for_empty() {
-        assert!(!same_git_url(Some(""), Some("git@coding.jd.com:poria/demo.git")));
+        assert!(!same_git_url(
+            Some(""),
+            Some("git@coding.jd.com:poria/demo.git")
+        ));
         assert!(!same_git_url(None, None));
     }
 

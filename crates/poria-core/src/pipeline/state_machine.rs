@@ -9,20 +9,54 @@ pub struct InvalidTransitionError {
 }
 
 const PIPELINE_TRANSITIONS: &[(PipelineStatus, &[PipelineStatus])] = &[
-    (PipelineStatus::Created, &[PipelineStatus::Running, PipelineStatus::Cancelled]),
-    (PipelineStatus::Running, &[PipelineStatus::WaitingMerge, PipelineStatus::Blocked, PipelineStatus::Failed, PipelineStatus::Cancelled]),
-    (PipelineStatus::Blocked, &[PipelineStatus::Running, PipelineStatus::Cancelled]),
-    (PipelineStatus::WaitingMerge, &[PipelineStatus::Completed, PipelineStatus::Failed, PipelineStatus::Cancelled]),
+    (
+        PipelineStatus::Created,
+        &[PipelineStatus::Running, PipelineStatus::Cancelled],
+    ),
+    (
+        PipelineStatus::Running,
+        &[
+            PipelineStatus::WaitingMerge,
+            PipelineStatus::Blocked,
+            PipelineStatus::Failed,
+            PipelineStatus::Cancelled,
+        ],
+    ),
+    (
+        PipelineStatus::Blocked,
+        &[PipelineStatus::Running, PipelineStatus::Cancelled],
+    ),
+    (
+        PipelineStatus::WaitingMerge,
+        &[
+            PipelineStatus::Completed,
+            PipelineStatus::Failed,
+            PipelineStatus::Cancelled,
+        ],
+    ),
     (PipelineStatus::Completed, &[]),
     (PipelineStatus::Failed, &[PipelineStatus::Cancelled]),
     (PipelineStatus::Cancelled, &[]),
 ];
 
 const STAGE_TRANSITIONS: &[(StageStatus, &[StageStatus])] = &[
-    (StageStatus::Pending, &[StageStatus::Running, StageStatus::Skipped]),
-    (StageStatus::Running, &[StageStatus::Completed, StageStatus::Failed, StageStatus::Blocked]),
+    (
+        StageStatus::Pending,
+        &[StageStatus::Running, StageStatus::Skipped],
+    ),
+    (
+        StageStatus::Running,
+        &[
+            StageStatus::Completed,
+            StageStatus::Failed,
+            StageStatus::Blocked,
+        ],
+    ),
     (StageStatus::Completed, &[]),
-    (StageStatus::Failed, &[StageStatus::Running, StageStatus::Blocked]),
+    (
+        StageStatus::Failed,
+        &[StageStatus::Running, StageStatus::Blocked],
+    ),
     (StageStatus::Blocked, &[StageStatus::Running]),
     (StageStatus::Skipped, &[]),
 ];
@@ -89,63 +123,102 @@ mod tests {
 
     #[test]
     fn test_pipeline_created_to_running() {
-        assert!(can_pipeline_transition(PipelineStatus::Created, PipelineStatus::Running));
+        assert!(can_pipeline_transition(
+            PipelineStatus::Created,
+            PipelineStatus::Running
+        ));
     }
 
     #[test]
     fn test_pipeline_created_to_completed_invalid() {
-        assert!(!can_pipeline_transition(PipelineStatus::Created, PipelineStatus::Completed));
+        assert!(!can_pipeline_transition(
+            PipelineStatus::Created,
+            PipelineStatus::Completed
+        ));
     }
 
     #[test]
     fn test_pipeline_running_to_blocked() {
-        assert!(can_pipeline_transition(PipelineStatus::Running, PipelineStatus::Blocked));
+        assert!(can_pipeline_transition(
+            PipelineStatus::Running,
+            PipelineStatus::Blocked
+        ));
     }
 
     #[test]
     fn test_pipeline_completed_terminal() {
-        assert!(!can_pipeline_transition(PipelineStatus::Completed, PipelineStatus::Running));
-        assert!(!can_pipeline_transition(PipelineStatus::Completed, PipelineStatus::Cancelled));
+        assert!(!can_pipeline_transition(
+            PipelineStatus::Completed,
+            PipelineStatus::Running
+        ));
+        assert!(!can_pipeline_transition(
+            PipelineStatus::Completed,
+            PipelineStatus::Cancelled
+        ));
     }
 
     #[test]
     fn test_pipeline_cancelled_terminal() {
-        assert!(!can_pipeline_transition(PipelineStatus::Cancelled, PipelineStatus::Running));
+        assert!(!can_pipeline_transition(
+            PipelineStatus::Cancelled,
+            PipelineStatus::Running
+        ));
     }
 
     #[test]
     fn test_pipeline_failed_to_cancelled() {
-        assert!(can_pipeline_transition(PipelineStatus::Failed, PipelineStatus::Cancelled));
+        assert!(can_pipeline_transition(
+            PipelineStatus::Failed,
+            PipelineStatus::Cancelled
+        ));
     }
 
     #[test]
     fn test_stage_pending_to_running() {
-        assert!(can_stage_transition(StageStatus::Pending, StageStatus::Running));
+        assert!(can_stage_transition(
+            StageStatus::Pending,
+            StageStatus::Running
+        ));
     }
 
     #[test]
     fn test_stage_pending_to_skipped() {
-        assert!(can_stage_transition(StageStatus::Pending, StageStatus::Skipped));
+        assert!(can_stage_transition(
+            StageStatus::Pending,
+            StageStatus::Skipped
+        ));
     }
 
     #[test]
     fn test_stage_running_to_completed() {
-        assert!(can_stage_transition(StageStatus::Running, StageStatus::Completed));
+        assert!(can_stage_transition(
+            StageStatus::Running,
+            StageStatus::Completed
+        ));
     }
 
     #[test]
     fn test_stage_completed_terminal() {
-        assert!(!can_stage_transition(StageStatus::Completed, StageStatus::Running));
+        assert!(!can_stage_transition(
+            StageStatus::Completed,
+            StageStatus::Running
+        ));
     }
 
     #[test]
     fn test_stage_failed_can_retry() {
-        assert!(can_stage_transition(StageStatus::Failed, StageStatus::Running));
+        assert!(can_stage_transition(
+            StageStatus::Failed,
+            StageStatus::Running
+        ));
     }
 
     #[test]
     fn test_stage_blocked_to_running() {
-        assert!(can_stage_transition(StageStatus::Blocked, StageStatus::Running));
+        assert!(can_stage_transition(
+            StageStatus::Blocked,
+            StageStatus::Running
+        ));
     }
 
     #[test]

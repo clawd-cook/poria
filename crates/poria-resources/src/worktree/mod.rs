@@ -151,11 +151,7 @@ impl WorktreeResource {
     }
 
     /// Remove a worktree. Checks existence first, uses --force for locked worktrees.
-    pub async fn remove(
-        &self,
-        repo: &RepoConfig,
-        pipeline_id: &str,
-    ) -> Result<(), ResourceError> {
+    pub async fn remove(&self, repo: &RepoConfig, pipeline_id: &str) -> Result<(), ResourceError> {
         let worktree_path = self.path(repo, pipeline_id);
 
         if !worktree_path.exists() {

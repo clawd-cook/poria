@@ -1,9 +1,9 @@
 mod channel;
-mod resource;
 mod command;
+mod resource;
 mod skill;
 
 pub use channel::*;
-pub use resource::*;
 pub use command::*;
+pub use resource::*;
 pub use skill::*;

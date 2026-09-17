@@ -71,10 +71,7 @@ mod tests {
         let tracker = SessionTracker::new();
         tracker.record("pipeline-1", "dev", "session-abc".into());
 
-        assert_eq!(
-            tracker.get("pipeline-1", "dev"),
-            Some("session-abc".into())
-        );
+        assert_eq!(tracker.get("pipeline-1", "dev"), Some("session-abc".into()));
     }
 
     #[test]
@@ -121,9 +118,6 @@ mod tests {
         let tracker = SessionTracker::new();
         tracker.record("p1", "dev", "old-session".into());
         tracker.record("p1", "dev", "new-session".into());
-        assert_eq!(
-            tracker.get("p1", "dev"),
-            Some("new-session".into())
-        );
+        assert_eq!(tracker.get("p1", "dev"), Some("new-session".into()));
     }
 }

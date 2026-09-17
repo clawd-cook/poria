@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection};
-use std::sync::Mutex;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 pub struct PipelineQueue {
     conn: Mutex<Connection>,
@@ -8,7 +8,9 @@ pub struct PipelineQueue {
 
 impl PipelineQueue {
     pub fn new(conn: Connection) -> Self {
-        Self { conn: Mutex::new(conn) }
+        Self {
+            conn: Mutex::new(conn),
+        }
     }
 
     pub fn enqueue(&self, pipeline_id: &str, priority: i32) -> Result<(), String> {
@@ -24,11 +26,13 @@ impl PipelineQueue {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
 
-        let pipeline_id: Option<String> = tx.query_row(
-            "SELECT pipeline_id FROM queue ORDER BY priority DESC, enqueued_at ASC LIMIT 1",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let pipeline_id: Option<String> = tx
+            .query_row(
+                "SELECT pipeline_id FROM queue ORDER BY priority DESC, enqueued_at ASC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
         if let Some(ref id) = pipeline_id {
             tx.execute("DELETE FROM queue WHERE pipeline_id = ?1", params![id])
@@ -52,7 +56,9 @@ pub struct WorkerLock {
 
 impl WorkerLock {
     pub fn new(lock_dir: &Path) -> Self {
-        Self { lock_path: lock_dir.join("worker.lock") }
+        Self {
+            lock_path: lock_dir.join("worker.lock"),
+        }
     }
 
     pub fn acquire(&self) -> Result<bool, String> {
@@ -85,7 +91,11 @@ impl WorkerLock {
             return false;
         }
         let content = std::fs::read_to_string(&self.lock_path).unwrap_or_default();
-        content.trim().parse::<u32>().map(is_process_alive).unwrap_or(false)
+        content
+            .trim()
+            .parse::<u32>()
+            .map(is_process_alive)
+            .unwrap_or(false)
     }
 }
 

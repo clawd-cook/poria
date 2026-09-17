@@ -74,11 +74,14 @@ pub fn is_joyspace_fixture_mode() -> bool {
 ///
 /// Looks for patterns like `/pages/<pageId>` or `pageId=<id>` in the URL.
 pub fn extract_page_id_from_url(url: &str) -> Result<String, String> {
-    let parsed = url::Url::parse(url.trim())
-        .map_err(|_| format!("Invalid JoySpace URL: {}", url))?;
+    let parsed =
+        url::Url::parse(url.trim()).map_err(|_| format!("Invalid JoySpace URL: {}", url))?;
 
     // Try query param first
-    if let Some(page_id) = parsed.query_pairs().find(|(k, _)| k == "pageId" || k == "page_id") {
+    if let Some(page_id) = parsed
+        .query_pairs()
+        .find(|(k, _)| k == "pageId" || k == "page_id")
+    {
         let id = page_id.1.trim().to_string();
         if !id.is_empty() {
             return Ok(id);
@@ -127,14 +130,11 @@ impl Channel for JoySpaceChannel {
                 }
 
                 if is_joyspace_fixture_mode() {
-                    let output_dir = input
-                        .output_dir
-                        .unwrap_or_else(|| ".".to_string());
+                    let output_dir = input.output_dir.unwrap_or_else(|| ".".to_string());
                     let title = "JoySpace Fixture Page".to_string();
-                    let output_name = input
-                        .output_name
-                        .unwrap_or_else(|| title.clone());
-                    let output_path = format!("{}/{}.md", output_dir, sanitize_filename(&output_name));
+                    let output_name = input.output_name.unwrap_or_else(|| title.clone());
+                    let output_path =
+                        format!("{}/{}.md", output_dir, sanitize_filename(&output_name));
 
                     let result = ExportJoySpaceResult {
                         output_path,
@@ -157,8 +157,10 @@ impl Channel for JoySpaceChannel {
                 let _credentials: Option<JacpCredentials> =
                     serde_json::from_value(ctx.credentials.clone()).ok();
 
-                Err("JoySpace live export not yet implemented in Rust (requires vendor JS bridge)"
-                    .into())
+                Err(
+                    "JoySpace live export not yet implemented in Rust (requires vendor JS bridge)"
+                        .into(),
+                )
             }
         }
     }
@@ -167,13 +169,7 @@ impl Channel for JoySpaceChannel {
 fn sanitize_filename(value: &str) -> String {
     let cleaned: String = value
         .chars()
-        .map(|c| {
-            if "/\\:*?\"<>|".contains(c) {
-                '_'
-            } else {
-                c
-            }
-        })
+        .map(|c| if "/\\:*?\"<>|".contains(c) { '_' } else { c })
         .collect();
     let trimmed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
     if trimmed.is_empty() {

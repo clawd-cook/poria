@@ -94,10 +94,18 @@ impl OutputGuard {
         let mut violations = Vec::new();
 
         // 1. File scope check
-        Self::check_file_scope(&agent_output.changed_files, &config.allowed_paths, &mut violations);
+        Self::check_file_scope(
+            &agent_output.changed_files,
+            &config.allowed_paths,
+            &mut violations,
+        );
 
         // 2. Diff size check
-        Self::check_diff_size(agent_output.total_diff_lines, config.max_diff_lines, &mut violations);
+        Self::check_diff_size(
+            agent_output.total_diff_lines,
+            config.max_diff_lines,
+            &mut violations,
+        );
 
         // 3. Dependency safety check
         Self::check_dependencies(

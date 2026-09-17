@@ -37,12 +37,17 @@ pub struct AuditStore {
 
 impl AuditStore {
     pub fn new(conn: Connection) -> Self {
-        Self { conn: Mutex::new(conn) }
+        Self {
+            conn: Mutex::new(conn),
+        }
     }
 
     pub fn record(&self, entry: &AuditEntry) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let action_str = serde_json::to_string(&entry.action).unwrap().trim_matches('"').to_string();
+        let action_str = serde_json::to_string(&entry.action)
+            .unwrap()
+            .trim_matches('"')
+            .to_string();
         let detail_str = serde_json::to_string(&entry.detail).unwrap_or_default();
 
         conn.execute(
@@ -59,25 +64,28 @@ impl AuditStore {
             "SELECT id, pipeline_id, stage, action, operator, detail, created_at FROM audit_log WHERE pipeline_id = ?1 ORDER BY created_at ASC"
         ).map_err(|e| e.to_string())?;
 
-        let records = stmt.query_map(params![pipeline_id], |row| {
-            let action_str: String = row.get(3)?;
-            let detail_str: Option<String> = row.get(5)?;
-            Ok(AuditRecord {
-                id: row.get(0)?,
-                entry: AuditEntry {
-                    pipeline_id: row.get(1)?,
-                    stage: row.get(2)?,
-                    action: serde_json::from_str(&format!("\"{}\"", action_str)).unwrap_or(AuditAction::GitCommit),
-                    operator: row.get(4)?,
-                    detail: detail_str
-                        .and_then(|s| serde_json::from_str(&s).ok())
-                        .unwrap_or(serde_json::Value::Null),
-                },
-                created_at: row.get(6)?,
+        let records = stmt
+            .query_map(params![pipeline_id], |row| {
+                let action_str: String = row.get(3)?;
+                let detail_str: Option<String> = row.get(5)?;
+                Ok(AuditRecord {
+                    id: row.get(0)?,
+                    entry: AuditEntry {
+                        pipeline_id: row.get(1)?,
+                        stage: row.get(2)?,
+                        action: serde_json::from_str(&format!("\"{}\"", action_str))
+                            .unwrap_or(AuditAction::GitCommit),
+                        operator: row.get(4)?,
+                        detail: detail_str
+                            .and_then(|s| serde_json::from_str(&s).ok())
+                            .unwrap_or(serde_json::Value::Null),
+                    },
+                    created_at: row.get(6)?,
+                })
             })
-        }).map_err(|e| e.to_string())?
-          .filter_map(|r| r.ok())
-          .collect();
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(records)
     }

@@ -3,7 +3,7 @@
   "name": "start-pipeline",
   "title": "Start pipeline wizard: FE repo, BE repo+branch, JoySpace PRD",
   "description": "R4: structured submit; backend_context read-only",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

@@ -10,39 +10,51 @@ pub struct EventStore {
 
 impl EventStore {
     pub fn new(conn: Connection) -> Self {
-        Self { conn: Mutex::new(conn) }
+        Self {
+            conn: Mutex::new(conn),
+        }
     }
 
     pub fn query_by_pipeline(&self, pipeline_id: &str) -> Result<Vec<PipelineEvent>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let mut stmt = conn.prepare(
-            "SELECT payload FROM events WHERE pipeline_id = ?1 ORDER BY seq ASC"
-        ).map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT payload FROM events WHERE pipeline_id = ?1 ORDER BY seq ASC")
+            .map_err(|e| e.to_string())?;
 
-        let events: Vec<PipelineEvent> = stmt.query_map(params![pipeline_id], |row| {
-            let payload: String = row.get(0)?;
-            Ok(payload)
-        }).map_err(|e| e.to_string())?
-          .filter_map(|r| r.ok())
-          .filter_map(|payload| serde_json::from_str(&payload).ok())
-          .collect();
+        let events: Vec<PipelineEvent> = stmt
+            .query_map(params![pipeline_id], |row| {
+                let payload: String = row.get(0)?;
+                Ok(payload)
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .filter_map(|payload| serde_json::from_str(&payload).ok())
+            .collect();
 
         Ok(events)
     }
 
-    pub fn query_by_kind(&self, pipeline_id: &str, kind: &str) -> Result<Vec<PipelineEvent>, String> {
+    pub fn query_by_kind(
+        &self,
+        pipeline_id: &str,
+        kind: &str,
+    ) -> Result<Vec<PipelineEvent>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let mut stmt = conn.prepare(
-            "SELECT payload FROM events WHERE pipeline_id = ?1 AND kind = ?2 ORDER BY seq ASC"
-        ).map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT payload FROM events WHERE pipeline_id = ?1 AND kind = ?2 ORDER BY seq ASC",
+            )
+            .map_err(|e| e.to_string())?;
 
-        let events: Vec<PipelineEvent> = stmt.query_map(params![pipeline_id, kind], |row| {
-            let payload: String = row.get(0)?;
-            Ok(payload)
-        }).map_err(|e| e.to_string())?
-          .filter_map(|r| r.ok())
-          .filter_map(|payload| serde_json::from_str(&payload).ok())
-          .collect();
+        let events: Vec<PipelineEvent> = stmt
+            .query_map(params![pipeline_id, kind], |row| {
+                let payload: String = row.get(0)?;
+                Ok(payload)
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .filter_map(|payload| serde_json::from_str(&payload).ok())
+            .collect();
 
         Ok(events)
     }
@@ -58,7 +70,8 @@ impl EventStore {
         conn.execute(
             "INSERT INTO events (pipeline_id, kind, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![pipeline_id, kind, payload, Utc::now().to_rfc3339()],
-        ).map_err(|e| e.to_string())?;
+        )
+        .map_err(|e| e.to_string())?;
 
         Ok(())
     }

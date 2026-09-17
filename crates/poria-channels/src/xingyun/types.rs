@@ -57,6 +57,66 @@ pub struct DemandDetail {
     pub receiver: Option<UserVO>,
 }
 
+/// Query for assigned-to-me demand list. Receiver is always the current ERP.
+#[derive(Debug, Clone, Default)]
+pub struct DemandListQuery {
+    pub keyword: Option<String>,
+    pub current: i64,
+    pub page_size: i64,
+}
+
+impl DemandListQuery {
+    pub fn normalized(self) -> Self {
+        let keyword = self.keyword.and_then(|value| {
+            let trimmed = value.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+        Self {
+            keyword,
+            current: if self.current > 0 { self.current } else { 1 },
+            page_size: if self.page_size > 0 {
+                self.page_size
+            } else {
+                20
+            },
+        }
+    }
+}
+
+/// One row in the assigned-to-me demand table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DemandListItem {
+    pub id: i64,
+    pub demand_code: String,
+    pub name: String,
+    pub status: Option<i32>,
+    pub status_label: String,
+    pub receiver_erp: Option<String>,
+    pub receiver_name: Option<String>,
+}
+
+/// Paginated assigned-to-me demand list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DemandPage {
+    pub records: Vec<DemandListItem>,
+    pub total: i64,
+    pub current: i64,
+    pub page_size: i64,
+}
+
+/// Best-effort JoySpace PRD prefill for the start-pipeline wizard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DemandPrdPreview {
+    pub demand_id: i64,
+    pub demand_code: String,
+    pub demand_name: String,
+    pub url: Option<String>,
+}
+
 /// Result of a demand action (communicate / accept).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DemandActionResult {
@@ -77,6 +137,7 @@ pub struct DemandActionResult {
 #[serde(rename_all = "camelCase")]
 pub enum XingyunAction {
     GetDemand,
+    ListDemands,
     ListCardAttachments,
     ResolvePrdLink,
     BindBranch,
@@ -100,6 +161,12 @@ pub struct XingyunChannelInput {
     pub base_branch: Option<String>,
     #[serde(rename = "createLocal", skip_serializing_if = "Option::is_none")]
     pub create_local: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyword: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<i64>,
+    #[serde(rename = "pageSize", skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<i64>,
 }
 
 /// Output from the Xingyun channel.
@@ -108,6 +175,13 @@ pub struct XingyunChannelInput {
 pub enum XingyunChannelOutput {
     #[serde(rename = "getDemand")]
     GetDemand { demand: Box<DemandDetail> },
+    #[serde(rename = "listDemands")]
+    ListDemands {
+        records: Vec<DemandListItem>,
+        total: i64,
+        current: i64,
+        page_size: i64,
+    },
     #[serde(rename = "listCardAttachments")]
     ListCardAttachments { attachments: Vec<CardAttachment> },
     #[serde(rename = "resolvePrdLink")]

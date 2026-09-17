@@ -102,7 +102,56 @@ export interface ChannelInfo {
   version: string;
 }
 
-export type ViewType = "pipeline" | "skills" | "channels";
+export type ViewType = "home" | "demands" | "repos" | "settings";
+
+export type CloneStatus = "cloning" | "ready" | "failed";
+
+export interface RegisteredRepo {
+  clone_status: CloneStatus;
+  created_at: string;
+  error: string | null;
+  git_url: string;
+  id: string;
+  local_path: string;
+  name: string;
+  normalized_url: string;
+  scope: string;
+  updated_at: string;
+}
+
+export interface DemandListItem {
+  demand_code: string;
+  id: number;
+  name: string;
+  receiver_erp: string | null;
+  receiver_name: string | null;
+  status: number | null;
+  status_label: string;
+}
+
+export interface DemandPage {
+  current: number;
+  page_size: number;
+  records: DemandListItem[];
+  total: number;
+}
+
+export interface DemandPrdPreview {
+  demand_code: string;
+  demand_id: number;
+  demand_name: string;
+  url: string | null;
+}
+
+export interface SubmitPipelineInput {
+  backendBranch: string;
+  backendRepoId: string;
+  demandCode?: string;
+  demandId: number;
+  demandName?: string;
+  frontendRepoId: string;
+  prdUrl: string;
+}
 
 export interface StreamChunk {
   type: "text" | "tool_use" | "tool_result" | "result";

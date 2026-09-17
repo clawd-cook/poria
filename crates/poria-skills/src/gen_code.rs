@@ -87,9 +87,7 @@ impl Skill for GenCodeSkill {
             .read_artifact(ARTIFACT_TRD)?
             .ok_or("TRD.md not found")?;
 
-        let prd_content = feature_ctx
-            .read_artifact(ARTIFACT_PRD)?
-            .unwrap_or_default();
+        let prd_content = feature_ctx.read_artifact(ARTIFACT_PRD)?.unwrap_or_default();
 
         let mut vars = HashMap::new();
         vars.insert("feature_dir".into(), feature_dir.to_string());

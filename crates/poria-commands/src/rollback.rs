@@ -1,7 +1,5 @@
 use poria_core::pipeline::PipelineEvent;
-use poria_core::types::{
-    Pipeline, RollbackCommand, RollbackCommandType, Stage, StageEnum,
-};
+use poria_core::types::{Pipeline, RollbackCommand, RollbackCommandType, Stage, StageEnum};
 
 use crate::traits::{CodingChannel, FileSystem, Messenger, PipelineStore, Terminal};
 
@@ -118,7 +116,10 @@ impl PipelineRollback {
                 .and_then(|v| v.as_str())
                 .map(String::from);
 
-            match self.do_revert(pipeline, repo, &branch, worktree_path.as_deref()).await {
+            match self
+                .do_revert(pipeline, repo, &branch, worktree_path.as_deref())
+                .await
+            {
                 Ok(mr_url) => {
                     events.push(PipelineEvent::rollback_executed(
                         &pipeline.id,
@@ -170,11 +171,7 @@ impl PipelineRollback {
 
         self.deps
             .terminal
-            .exec(
-                &format!("git push origin {}", branch),
-                cwd,
-                Some(120_000),
-            )
+            .exec(&format!("git push origin {}", branch), cwd, Some(120_000))
             .await?;
 
         let title = pipeline
@@ -318,8 +315,7 @@ mod tests {
 
     #[test]
     fn test_parse_mr_url_valid() {
-        let (path, iid) =
-            parse_mr_url("https://coding.jd.com/group/project/-/merge_requests/123");
+        let (path, iid) = parse_mr_url("https://coding.jd.com/group/project/-/merge_requests/123");
         assert_eq!(path, "group/project");
         assert_eq!(iid, 123);
     }

@@ -3,7 +3,7 @@
   "name": "desktop-ia",
   "title": "Four-tab shell: home kanban, settings, header auth",
   "description": "R1 R2 R6: replace Pipeline/skills/channels nav with home/demands/repos/settings",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

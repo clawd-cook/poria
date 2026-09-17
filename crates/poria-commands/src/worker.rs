@@ -176,10 +176,7 @@ where
                     .human_loop
                     .escalate(
                         pipeline,
-                        &format!(
-                            "MR(s) pending merge for over 24h: {}",
-                            mr_urls.join(", ")
-                        ),
+                        &format!("MR(s) pending merge for over 24h: {}", mr_urls.join(", ")),
                     )
                     .await;
             }

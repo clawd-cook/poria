@@ -161,12 +161,9 @@ impl AgentSdk for ClaudeCliSdk {
             };
 
             if messages.is_empty() {
-                return Err(format!(
-                    "claude CLI exited with {}: {}",
-                    status,
-                    stderr_text.trim()
-                )
-                .into());
+                return Err(
+                    format!("claude CLI exited with {}: {}", status, stderr_text.trim()).into(),
+                );
             }
             warn!(
                 status = %status,

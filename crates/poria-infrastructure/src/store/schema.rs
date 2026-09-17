@@ -82,11 +82,9 @@ pub fn init_database(path: &Path) -> SqlResult<Connection> {
 
 fn apply_migrations(conn: &Connection) -> SqlResult<()> {
     let current: Option<i32> = conn
-        .query_row(
-            "SELECT MAX(version) FROM schema_version",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+            row.get(0)
+        })
         .unwrap_or(None);
 
     let version = current.unwrap_or(0);
@@ -96,6 +94,32 @@ fn apply_migrations(conn: &Connection) -> SqlResult<()> {
         tx.execute(
             "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
             rusqlite::params![1, chrono::Utc::now().to_rfc3339()],
+        )?;
+        tx.commit()?;
+    }
+
+    if version < 2 {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS registered_repos (
+              id TEXT PRIMARY KEY,
+              git_url TEXT NOT NULL,
+              normalized_url TEXT NOT NULL UNIQUE,
+              scope TEXT NOT NULL,
+              name TEXT NOT NULL,
+              local_path TEXT NOT NULL,
+              clone_status TEXT NOT NULL,
+              error TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE (scope, name)
+            );
+            ",
+        )?;
+        tx.execute(
+            "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
+            rusqlite::params![2, chrono::Utc::now().to_rfc3339()],
         )?;
         tx.commit()?;
     }
@@ -118,7 +142,7 @@ mod tests {
         let count: i32 = conn
             .query_row("SELECT COUNT(*) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 1);
+        assert_eq!(count, 2);
     }
 
     #[test]
@@ -140,5 +164,11 @@ mod tests {
         assert!(tables.contains(&"events".to_string()));
         assert!(tables.contains(&"audit_log".to_string()));
         assert!(tables.contains(&"queue".to_string()));
+        assert!(tables.contains(&"registered_repos".to_string()));
+
+        let version: i32 = conn
+            .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
     }
 }

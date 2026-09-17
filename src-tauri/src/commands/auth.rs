@@ -83,7 +83,13 @@ fn parse_payload(content_type: &str, body: &str) -> CallbackPayload {
     }
 }
 
-fn http_response(status: u16, status_text: &str, cors: &str, content_type: &str, body: &str) -> Vec<u8> {
+fn http_response(
+    status: u16,
+    status_text: &str,
+    cors: &str,
+    content_type: &str,
+    body: &str,
+) -> Vec<u8> {
     format!(
         "HTTP/1.1 {} {}\r\n{}\
          Content-Type: {}\r\n\
@@ -131,7 +137,10 @@ pub async fn start_login(app: tauri::AppHandle) -> Result<(), String> {
         .port();
 
     let redirect_url = format!("http://127.0.0.1:{port}/callback");
-    let sso_url = format!("{AUTH_URL}?state={state}&redirect={}", urlencoding::encode(&redirect_url));
+    let sso_url = format!(
+        "{AUTH_URL}?state={state}&redirect={}",
+        urlencoding::encode(&redirect_url)
+    );
 
     app.opener()
         .open_url(&sso_url, None::<&str>)
@@ -203,7 +212,8 @@ pub async fn start_login(app: tauri::AppHandle) -> Result<(), String> {
                     continue;
                 }
 
-                let resp = http_response(200, "OK", &cors, "text/html; charset=utf-8", SUCCESS_HTML);
+                let resp =
+                    http_response(200, "OK", &cors, "text/html; charset=utf-8", SUCCESS_HTML);
                 let _ = stream.write_all(&resp).await;
 
                 let creds = auth::JacpCredentials {

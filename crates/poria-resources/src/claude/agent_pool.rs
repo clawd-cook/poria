@@ -187,7 +187,10 @@ impl ClaudeAgentPool {
         };
         drop(sdk_guard);
 
-        let total_timeout_ms = input.timeout_ms.map(|ms| ms as u64).unwrap_or(DEFAULT_TIMEOUT_MS);
+        let total_timeout_ms = input
+            .timeout_ms
+            .map(|ms| ms as u64)
+            .unwrap_or(DEFAULT_TIMEOUT_MS);
         let timeout_duration = Duration::from_millis(total_timeout_ms);
 
         debug!(
@@ -208,10 +211,7 @@ impl ClaudeAgentPool {
         match tokio::time::timeout(timeout_duration, sdk.query(&input.prompt, options)).await {
             Ok(Ok((messages, session_id))) => {
                 // Find the last result-type message
-                let result_msg = messages
-                    .iter()
-                    .rev()
-                    .find(|m| m.msg_type == "result");
+                let result_msg = messages.iter().rev().find(|m| m.msg_type == "result");
 
                 let json_messages: Vec<serde_json::Value> = messages
                     .iter()
@@ -236,10 +236,7 @@ impl ClaudeAgentPool {
                 messages: vec![],
             },
             Err(_elapsed) => {
-                warn!(
-                    timeout_ms = total_timeout_ms,
-                    "agent dispatch timed out"
-                );
+                warn!(timeout_ms = total_timeout_ms, "agent dispatch timed out");
                 AgentTaskResult {
                     success: false,
                     result: None,

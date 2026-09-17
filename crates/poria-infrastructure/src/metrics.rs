@@ -38,7 +38,9 @@ impl InMemoryMetricsCollector {
 }
 
 impl Default for InMemoryMetricsCollector {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn encode_key(name: &str, labels: Option<&HashMap<String, String>>) -> String {
@@ -46,7 +48,10 @@ fn encode_key(name: &str, labels: Option<&HashMap<String, String>>) -> String {
         Some(m) if !m.is_empty() => {
             let mut pairs: Vec<_> = m.iter().collect();
             pairs.sort_by_key(|(k, _)| *k);
-            let label_str: Vec<_> = pairs.iter().map(|(k, v)| format!("{}=\"{}\"", k, v)).collect();
+            let label_str: Vec<_> = pairs
+                .iter()
+                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                .collect();
             format!("{}{{{}}}", name, label_str.join(","))
         }
         _ => name.to_string(),

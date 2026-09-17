@@ -6,21 +6,32 @@ use poria_core::types::{Pipeline, SkillOutput, Stage, StageEnum};
 /// Persistence layer for pipeline and stage records.
 #[async_trait]
 pub trait PipelineStore: Send + Sync {
-    async fn load(&self, pipeline_id: &str) -> Result<Pipeline, Box<dyn std::error::Error + Send + Sync>>;
+    async fn load(
+        &self,
+        pipeline_id: &str,
+    ) -> Result<Pipeline, Box<dyn std::error::Error + Send + Sync>>;
     fn save_stage_tx(&self, stage: Option<&Stage>, pipeline: &Pipeline, events: &[PipelineEvent]);
-    async fn find_by_status(&self, status: &str) -> Result<Vec<Pipeline>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn find_by_status(
+        &self,
+        status: &str,
+    ) -> Result<Vec<Pipeline>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Loads a skill implementation by its identifier.
 #[async_trait]
 pub trait SkillLoader: Send + Sync {
-    async fn load(&self, skill_id: &str) -> Result<Box<dyn Skill>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn load(
+        &self,
+        skill_id: &str,
+    ) -> Result<Box<dyn Skill>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Ensures credentials are valid before stage execution.
 #[async_trait]
 pub trait CredentialGuard: Send + Sync {
-    async fn ensure_valid(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
+    async fn ensure_valid(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Orchestrates skill execution across multiple repositories.
@@ -38,16 +49,35 @@ pub trait MultiRepoOrchestrator: Send + Sync {
 /// Human-in-the-loop notification for blocked stages.
 #[async_trait]
 pub trait HumanLoop: Send + Sync {
-    async fn notify(&self, pipeline: &Pipeline, stage: &Stage, issue_class: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn escalate(&self, pipeline: &Pipeline, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn notify(
+        &self,
+        pipeline: &Pipeline,
+        stage: &Stage,
+        issue_class: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn escalate(
+        &self,
+        pipeline: &Pipeline,
+        message: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Interaction with a coding platform (e.g. GitLab) for MR operations.
 #[async_trait]
 pub trait CodingChannel: Send + Sync {
-    async fn get_mr_status(&self, mr_url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
-    async fn close_mr(&self, project_path: &str, iid: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn create_merge_request(&self, opts: serde_json::Value) -> Result<MrCreateResult, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_mr_status(
+        &self,
+        mr_url: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
+    async fn close_mr(
+        &self,
+        project_path: &str,
+        iid: i64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn create_merge_request(
+        &self,
+        opts: serde_json::Value,
+    ) -> Result<MrCreateResult, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 #[derive(Debug, Clone)]
@@ -58,13 +88,22 @@ pub struct MrCreateResult {
 /// Executes shell commands.
 #[async_trait]
 pub trait Terminal: Send + Sync {
-    async fn exec(&self, command: &str, cwd: Option<&str>, timeout_ms: Option<i64>) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
+    async fn exec(
+        &self,
+        command: &str,
+        cwd: Option<&str>,
+        timeout_ms: Option<i64>,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Sends instant messages (e.g. JME).
 #[async_trait]
 pub trait Messenger: Send + Sync {
-    async fn send(&self, message: &str, target: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn send(
+        &self,
+        message: &str,
+        target: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// File-system queries.

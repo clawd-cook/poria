@@ -13,17 +13,24 @@ pub struct InMemoryPluginLoader {
 
 impl InMemoryPluginLoader {
     pub fn new() -> Self {
-        Self { plugins: std::sync::Mutex::new(HashMap::new()) }
+        Self {
+            plugins: std::sync::Mutex::new(HashMap::new()),
+        }
     }
 }
 
 impl Default for InMemoryPluginLoader {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemoryPluginLoader {
     pub fn register_plugin(&self, id: &str, instance: Box<dyn Any + Send + Sync>) {
-        self.plugins.lock().unwrap().insert(id.to_string(), instance);
+        self.plugins
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), instance);
     }
 
     pub fn has_plugin(&self, id: &str) -> bool {

@@ -87,10 +87,9 @@ fn urlencoding_decode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(val) = u8::from_str_radix(
-                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""),
-                16,
-            ) {
+            if let Ok(val) =
+                u8::from_str_radix(std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""), 16)
+            {
                 result.push(val);
                 i += 3;
                 continue;
@@ -100,6 +99,20 @@ fn urlencoding_decode(input: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&result).to_string()
+}
+
+/// Build a Xingyun demand view URL from id + optional code.
+pub fn xingyun_demand_view_url(demand_id: i64, demand_code: Option<&str>) -> String {
+    let segment = demand_code
+        .map(str::trim)
+        .filter(|code| !code.is_empty())
+        .unwrap_or("");
+    let path_code = if segment.is_empty() {
+        demand_id.to_string()
+    } else {
+        segment.to_string()
+    };
+    format!("http://xingyun.jd.com/demands/view/{path_code}/-1?demandId={demand_id}")
 }
 
 /// Generate feature branch name: `feature_<code>` or `feature_demand_<id>`.
@@ -152,10 +165,9 @@ mod tests {
 
     #[test]
     fn extracts_demand_id_from_id_param() {
-        let result = parse_xingyun_demand_url(
-            "http://xingyun.jd.com/demands/view/ABC123/-1?id=12345",
-        )
-        .unwrap();
+        let result =
+            parse_xingyun_demand_url("http://xingyun.jd.com/demands/view/ABC123/-1?id=12345")
+                .unwrap();
         assert_eq!(result.demand_id, 12345);
         assert_eq!(result.demand_code.as_deref(), Some("ABC123"));
     }
@@ -184,37 +196,31 @@ mod tests {
 
     #[test]
     fn throws_on_non_xingyun_host() {
-        let err = parse_xingyun_demand_url(
-            "http://example.com/demands/view/X/-1?demandId=1",
-        )
-        .unwrap_err();
+        let err = parse_xingyun_demand_url("http://example.com/demands/view/X/-1?demandId=1")
+            .unwrap_err();
         assert!(err.contains("Not a Xingyun demand host"));
     }
 
     #[test]
     fn throws_when_demand_id_missing() {
-        let err = parse_xingyun_demand_url(
-            "http://xingyun.jd.com/demands/view/CODE1/-1",
-        )
-        .unwrap_err();
+        let err =
+            parse_xingyun_demand_url("http://xingyun.jd.com/demands/view/CODE1/-1").unwrap_err();
         assert!(err.contains("missing demandId"));
     }
 
     #[test]
     fn throws_when_demand_id_not_a_number() {
-        let err = parse_xingyun_demand_url(
-            "http://xingyun.jd.com/demands/view/CODE1/-1?demandId=abc",
-        )
-        .unwrap_err();
+        let err =
+            parse_xingyun_demand_url("http://xingyun.jd.com/demands/view/CODE1/-1?demandId=abc")
+                .unwrap_err();
         assert!(err.contains("missing demandId"));
     }
 
     #[test]
     fn omits_demand_code_when_numeric() {
-        let result = parse_xingyun_demand_url(
-            "http://xingyun.jd.com/demands/view/123/-1?demandId=456",
-        )
-        .unwrap();
+        let result =
+            parse_xingyun_demand_url("http://xingyun.jd.com/demands/view/123/-1?demandId=456")
+                .unwrap();
         assert_eq!(result.demand_id, 456);
         assert!(result.demand_code.is_none());
     }
@@ -229,6 +235,26 @@ mod tests {
     }
 
     #[test]
+    fn builds_view_url_from_code() {
+        assert_eq!(
+            xingyun_demand_view_url(4840029, Some("JL3R4IV4")),
+            "http://xingyun.jd.com/demands/view/JL3R4IV4/-1?demandId=4840029"
+        );
+    }
+
+    #[test]
+    fn builds_view_url_without_code() {
+        assert_eq!(
+            xingyun_demand_view_url(4840029, None),
+            "http://xingyun.jd.com/demands/view/4840029/-1?demandId=4840029"
+        );
+        assert_eq!(
+            xingyun_demand_view_url(4840029, Some("  ")),
+            "http://xingyun.jd.com/demands/view/4840029/-1?demandId=4840029"
+        );
+    }
+
+    #[test]
     fn feature_branch_from_code() {
         assert_eq!(
             feature_branch_name(Some("JL3R4IV4"), 4840029),
@@ -238,10 +264,7 @@ mod tests {
 
     #[test]
     fn feature_branch_falls_back_to_id() {
-        assert_eq!(
-            feature_branch_name(None, 4840029),
-            "feature_demand_4840029"
-        );
+        assert_eq!(feature_branch_name(None, 4840029), "feature_demand_4840029");
     }
 
     #[test]

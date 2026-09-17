@@ -30,9 +30,9 @@ pub fn parse_reply(text: &str) -> ReplyAction {
 
     // Cancel patterns (checked first -- highest priority)
     let cancel_patterns: &[Regex] = &[
-        Regex::new(r"\x{53D6}\x{6D88}").unwrap(),  // 取消
+        Regex::new(r"\x{53D6}\x{6D88}").unwrap(), // 取消
         Regex::new(r"(?i)cancel").unwrap(),
-        Regex::new(r"\x{7EC8}\x{6B62}").unwrap(),  // 终止
+        Regex::new(r"\x{7EC8}\x{6B62}").unwrap(), // 终止
         Regex::new(r"(?i)abort").unwrap(),
         Regex::new(r"(?i)stop").unwrap(),
     ];
@@ -44,9 +44,9 @@ pub fn parse_reply(text: &str) -> ReplyAction {
 
     // Skip patterns
     let skip_patterns: &[Regex] = &[
-        Regex::new(r"\x{8DF3}\x{8FC7}").unwrap(),  // 跳过
+        Regex::new(r"\x{8DF3}\x{8FC7}").unwrap(), // 跳过
         Regex::new(r"(?i)skip").unwrap(),
-        Regex::new(r"\x{5FFD}\x{7565}").unwrap(),  // 忽略
+        Regex::new(r"\x{5FFD}\x{7565}").unwrap(), // 忽略
         Regex::new(r"(?i)ignore").unwrap(),
     ];
     for pat in skip_patterns {
@@ -57,12 +57,12 @@ pub fn parse_reply(text: &str) -> ReplyAction {
 
     // Resume patterns
     let resume_patterns: &[Regex] = &[
-        Regex::new(r"\x{4FEE}\x{590D}").unwrap(),  // 修复
+        Regex::new(r"\x{4FEE}\x{590D}").unwrap(), // 修复
         Regex::new(r"(?i)fix").unwrap(),
         Regex::new(r"(?i)resume").unwrap(),
-        Regex::new(r"\x{5DF2}\x{4FEE}\x{590D}").unwrap(),  // 已修复
-        Regex::new(r"\x{5DF2}\x{89E3}\x{51B3}").unwrap(),  // 已解决
-        Regex::new(r"\x{91CD}\x{8BD5}").unwrap(),  // 重试
+        Regex::new(r"\x{5DF2}\x{4FEE}\x{590D}").unwrap(), // 已修复
+        Regex::new(r"\x{5DF2}\x{89E3}\x{51B3}").unwrap(), // 已解决
+        Regex::new(r"\x{91CD}\x{8BD5}").unwrap(),         // 重试
         Regex::new(r"(?i)retry").unwrap(),
     ];
     for pat in resume_patterns {
@@ -103,10 +103,7 @@ mod tests {
 
     #[test]
     fn resume_retry_chinese() {
-        assert_eq!(
-            parse_reply("\u{8BF7}\u{91CD}\u{8BD5}"),
-            ReplyAction::Resume
-        );
+        assert_eq!(parse_reply("\u{8BF7}\u{91CD}\u{8BD5}"), ReplyAction::Resume);
     }
 
     #[test]

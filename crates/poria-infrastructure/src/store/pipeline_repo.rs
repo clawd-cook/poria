@@ -2,8 +2,10 @@ use chrono::Utc;
 use rusqlite::{params, Connection};
 use std::sync::Mutex;
 
-use poria_core::types::{Pipeline, PipelineConfig, PipelineStatus, Stage, StageStatus, StageEnum, STAGE_ORDER};
 use poria_core::pipeline::PipelineEvent;
+use poria_core::types::{
+    Pipeline, PipelineConfig, PipelineStatus, Stage, StageEnum, StageStatus, STAGE_ORDER,
+};
 
 pub struct SqlitePipelineStore {
     conn: Mutex<Connection>,
@@ -11,7 +13,9 @@ pub struct SqlitePipelineStore {
 
 impl SqlitePipelineStore {
     pub fn new(conn: Connection) -> Self {
-        Self { conn: Mutex::new(conn) }
+        Self {
+            conn: Mutex::new(conn),
+        }
     }
 
     pub fn create(&self, pipeline: &Pipeline) -> Result<(), String> {
@@ -102,29 +106,34 @@ impl SqlitePipelineStore {
 
     pub fn find_by_status(&self, status: PipelineStatus) -> Result<Vec<Pipeline>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let status_str = serde_json::to_string(&status).unwrap().trim_matches('"').to_string();
+        let status_str = serde_json::to_string(&status)
+            .unwrap()
+            .trim_matches('"')
+            .to_string();
 
         let mut stmt = conn.prepare(
             "SELECT id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at FROM pipelines WHERE status = ?1"
         ).map_err(|e| e.to_string())?;
 
-        let rows: Vec<PipelineRow> = stmt.query_map(params![status_str], |row| {
-            Ok(PipelineRow {
-                id: row.get(0)?,
-                demand_id: row.get(1)?,
-                demand_code: row.get(2)?,
-                demand_name: row.get(3)?,
-                status: row.get(4)?,
-                raw_link: row.get(5)?,
-                operator: row.get(6)?,
-                has_regressed: row.get(7)?,
-                config: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+        let rows: Vec<PipelineRow> = stmt
+            .query_map(params![status_str], |row| {
+                Ok(PipelineRow {
+                    id: row.get(0)?,
+                    demand_id: row.get(1)?,
+                    demand_code: row.get(2)?,
+                    demand_name: row.get(3)?,
+                    status: row.get(4)?,
+                    raw_link: row.get(5)?,
+                    operator: row.get(6)?,
+                    has_regressed: row.get(7)?,
+                    config: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
             })
-        }).map_err(|e| e.to_string())?
-          .filter_map(|r| r.ok())
-          .collect();
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
 
         let mut pipelines = Vec::new();
         for row in rows {
@@ -197,23 +206,25 @@ impl SqlitePipelineStore {
             "SELECT id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at FROM pipelines ORDER BY created_at DESC"
         ).map_err(|e| e.to_string())?;
 
-        let rows: Vec<PipelineRow> = stmt.query_map([], |row| {
-            Ok(PipelineRow {
-                id: row.get(0)?,
-                demand_id: row.get(1)?,
-                demand_code: row.get(2)?,
-                demand_name: row.get(3)?,
-                status: row.get(4)?,
-                raw_link: row.get(5)?,
-                operator: row.get(6)?,
-                has_regressed: row.get(7)?,
-                config: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+        let rows: Vec<PipelineRow> = stmt
+            .query_map([], |row| {
+                Ok(PipelineRow {
+                    id: row.get(0)?,
+                    demand_id: row.get(1)?,
+                    demand_code: row.get(2)?,
+                    demand_name: row.get(3)?,
+                    status: row.get(4)?,
+                    raw_link: row.get(5)?,
+                    operator: row.get(6)?,
+                    has_regressed: row.get(7)?,
+                    config: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
             })
-        }).map_err(|e| e.to_string())?
-          .filter_map(|r| r.ok())
-          .collect();
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
 
         let mut pipelines = Vec::new();
         for row in rows {
@@ -228,37 +239,49 @@ impl SqlitePipelineStore {
             "SELECT id, pipeline_id, name, status, skill_id, retry_count, max_retries, input, output, gate_results, issue, rollback, agent_session_id, started_at, completed_at FROM stages WHERE pipeline_id = ?1 ORDER BY id ASC"
         ).map_err(|e| e.to_string())?;
 
-        let stages = stmt.query_map(params![pipeline_id], |row| {
-            let name_str: String = row.get(2)?;
-            let status_str: String = row.get(3)?;
-            let input_str: Option<String> = row.get(7)?;
-            let output_str: Option<String> = row.get(8)?;
-            let gate_str: Option<String> = row.get(9)?;
-            let issue_str: Option<String> = row.get(10)?;
-            let rollback_str: Option<String> = row.get(11)?;
-            let started_str: Option<String> = row.get(13)?;
-            let completed_str: Option<String> = row.get(14)?;
+        let stages = stmt
+            .query_map(params![pipeline_id], |row| {
+                let name_str: String = row.get(2)?;
+                let status_str: String = row.get(3)?;
+                let input_str: Option<String> = row.get(7)?;
+                let output_str: Option<String> = row.get(8)?;
+                let gate_str: Option<String> = row.get(9)?;
+                let issue_str: Option<String> = row.get(10)?;
+                let rollback_str: Option<String> = row.get(11)?;
+                let started_str: Option<String> = row.get(13)?;
+                let completed_str: Option<String> = row.get(14)?;
 
-            Ok(Stage {
-                id: Some(row.get(0)?),
-                pipeline_id: row.get(1)?,
-                name: serde_json::from_str(&format!("\"{}\"", name_str)).unwrap_or(StageEnum::Init),
-                status: serde_json::from_str(&format!("\"{}\"", status_str)).unwrap_or(StageStatus::Pending),
-                skill_id: row.get(4)?,
-                retry_count: row.get(5)?,
-                max_retries: row.get(6)?,
-                input: input_str.and_then(|s| serde_json::from_str(&s).ok()),
-                output: output_str.and_then(|s| serde_json::from_str(&s).ok()),
-                gate_results: gate_str.and_then(|s| serde_json::from_str(&s).ok()),
-                issue: issue_str.and_then(|s| serde_json::from_str(&s).ok()),
-                rollback: rollback_str.and_then(|s| serde_json::from_str(&s).ok()),
-                agent_session_id: row.get(12)?,
-                started_at: started_str.and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&chrono::Utc))),
-                completed_at: completed_str.and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&chrono::Utc))),
+                Ok(Stage {
+                    id: Some(row.get(0)?),
+                    pipeline_id: row.get(1)?,
+                    name: serde_json::from_str(&format!("\"{}\"", name_str))
+                        .unwrap_or(StageEnum::Init),
+                    status: serde_json::from_str(&format!("\"{}\"", status_str))
+                        .unwrap_or(StageStatus::Pending),
+                    skill_id: row.get(4)?,
+                    retry_count: row.get(5)?,
+                    max_retries: row.get(6)?,
+                    input: input_str.and_then(|s| serde_json::from_str(&s).ok()),
+                    output: output_str.and_then(|s| serde_json::from_str(&s).ok()),
+                    gate_results: gate_str.and_then(|s| serde_json::from_str(&s).ok()),
+                    issue: issue_str.and_then(|s| serde_json::from_str(&s).ok()),
+                    rollback: rollback_str.and_then(|s| serde_json::from_str(&s).ok()),
+                    agent_session_id: row.get(12)?,
+                    started_at: started_str.and_then(|s| {
+                        chrono::DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|d| d.with_timezone(&chrono::Utc))
+                    }),
+                    completed_at: completed_str.and_then(|s| {
+                        chrono::DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|d| d.with_timezone(&chrono::Utc))
+                    }),
+                })
             })
-        }).map_err(|e| e.to_string())?
-          .filter_map(|r| r.ok())
-          .collect();
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(stages)
     }
@@ -279,13 +302,14 @@ struct PipelineRow {
 }
 
 fn row_to_pipeline(row: PipelineRow, stages: Vec<Stage>) -> Pipeline {
-    let config: PipelineConfig = row.config
+    let config: PipelineConfig = row
+        .config
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or(PipelineConfig { gates: vec![], trd_scope: vec![], repos: vec![] });
+        .unwrap_or_default();
 
-    let status: PipelineStatus = serde_json::from_str(&format!("\"{}\"", row.status))
-        .unwrap_or(PipelineStatus::Created);
+    let status: PipelineStatus =
+        serde_json::from_str(&format!("\"{}\"", row.status)).unwrap_or(PipelineStatus::Created);
 
     let repos = config.repos.clone();
 
@@ -326,9 +350,8 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "journal_mode", "WAL").unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        conn.execute_batch(
-            &std::fs::read_to_string("/dev/null").unwrap_or_default()
-        ).ok();
+        conn.execute_batch(&std::fs::read_to_string("/dev/null").unwrap_or_default())
+            .ok();
         // Use init DDL directly
         conn.execute_batch("
             CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL);
@@ -351,7 +374,7 @@ mod tests {
             raw_link: "https://xingyun.jd.com/demand/42".into(),
             operator: "test_user".into(),
             has_regressed: false,
-            config: PipelineConfig { gates: vec![], trd_scope: vec![], repos: vec![] },
+            config: PipelineConfig::default(),
             stages: vec![],
             repos: vec![],
             created_at: Utc::now(),

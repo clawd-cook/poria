@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::path::Path;
+use std::process::Stdio;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -33,6 +35,9 @@ pub struct TerminalExecResult {
 // ---------- Defaults ----------
 
 const DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const GIT_CLONE_TIMEOUT_MS: u64 = 600_000;
+const GIT_FETCH_TIMEOUT_MS: u64 = 60_000;
+const GIT_QUERY_TIMEOUT_MS: u64 = 15_000;
 
 // ---------- Terminal Resource ----------
 
@@ -147,6 +152,195 @@ pub async fn exec(input: TerminalExecInput) -> Result<TerminalExecResult, Resour
     }
 }
 
+/// Clone a git repository into `dest` using argv (not a shell) to avoid injection.
+///
+/// `dest` must not already exist; callers should remove leftover directories first.
+pub async fn git_clone(git_url: &str, dest: &Path) -> Result<(), ResourceError> {
+    git_clone_with_timeout(git_url, dest, GIT_CLONE_TIMEOUT_MS).await
+}
+
+pub async fn git_clone_with_timeout(
+    git_url: &str,
+    dest: &Path,
+    timeout_ms: u64,
+) -> Result<(), ResourceError> {
+    let dest_str = dest.to_string_lossy().into_owned();
+    let command = format!("git clone -- {git_url} {dest_str}");
+
+    debug!(git_url, dest = %dest_str, timeout_ms, "cloning git repository");
+
+    let mut cmd = Command::new("git");
+    cmd.arg("clone")
+        .arg("--")
+        .arg(git_url)
+        .arg(&dest_str)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let child = cmd.spawn()?;
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(timeout_ms),
+        child.wait_with_output(),
+    )
+    .await
+    {
+        Ok(Ok(output)) => {
+            if output.status.success() {
+                Ok(())
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let detail = if !stderr.trim().is_empty() {
+                    stderr.trim().to_string()
+                } else {
+                    stdout.trim().to_string()
+                };
+                Err(ResourceError::Other(format!("git clone failed: {detail}")))
+            }
+        }
+        Ok(Err(e)) => Err(ResourceError::SpawnError(e)),
+        Err(_elapsed) => {
+            warn!(git_url, dest = %dest_str, timeout_ms, "git clone timed out");
+            Err(ResourceError::Timeout {
+                command,
+                timeout_ms,
+            })
+        }
+    }
+}
+
+async fn run_git(
+    args: &[&str],
+    cwd: Option<&Path>,
+    timeout_ms: u64,
+) -> Result<std::process::Output, ResourceError> {
+    let command = format!("git {}", args.join(" "));
+    let mut cmd = Command::new("git");
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    if let Some(dir) = cwd {
+        cmd.current_dir(dir);
+    }
+
+    let child = cmd.spawn()?;
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(timeout_ms),
+        child.wait_with_output(),
+    )
+    .await
+    {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(e)) => Err(ResourceError::SpawnError(e)),
+        Err(_elapsed) => {
+            warn!(command = %command, timeout_ms, "git command timed out");
+            Err(ResourceError::Timeout {
+                command,
+                timeout_ms,
+            })
+        }
+    }
+}
+
+fn git_failure(action: &str, output: &std::process::Output) -> ResourceError {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let detail = if !stderr.trim().is_empty() {
+        stderr.trim().to_string()
+    } else {
+        stdout.trim().to_string()
+    };
+    ResourceError::Other(format!("{action} failed: {detail}"))
+}
+
+/// Fetch remotes in a managed clone. Callers should ignore offline failures.
+pub async fn git_fetch(repo_path: &Path) -> Result<(), ResourceError> {
+    let output = run_git(
+        &["fetch", "--all", "--prune"],
+        Some(repo_path),
+        GIT_FETCH_TIMEOUT_MS,
+    )
+    .await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(git_failure("git fetch", &output))
+    }
+}
+
+/// Current checkout of a managed clone (`git rev-parse --abbrev-ref HEAD`).
+pub async fn git_current_branch(repo_path: &Path) -> Result<String, ResourceError> {
+    let output = run_git(
+        &["rev-parse", "--abbrev-ref", "HEAD"],
+        Some(repo_path),
+        GIT_QUERY_TIMEOUT_MS,
+    )
+    .await?;
+    if !output.status.success() {
+        return Err(git_failure("git rev-parse", &output));
+    }
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if branch.is_empty() {
+        return Err(ResourceError::Other(
+            "git rev-parse returned empty branch".into(),
+        ));
+    }
+    Ok(branch)
+}
+
+/// Normalize `git for-each-ref` names into unique short branch names.
+pub fn normalize_git_ref_names<I, S>(refs: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut seen = std::collections::BTreeSet::new();
+    for raw in refs {
+        let name = raw.as_ref().trim();
+        if name.is_empty() {
+            continue;
+        }
+        let branch = if let Some(rest) = name.strip_prefix("refs/heads/") {
+            rest
+        } else if let Some(rest) = name.strip_prefix("refs/remotes/") {
+            match rest.split_once('/') {
+                Some((_, "HEAD")) => continue,
+                Some((_, branch)) => branch,
+                None => continue,
+            }
+        } else if name == "HEAD" || name.ends_with("/HEAD") {
+            continue;
+        } else if let Some(rest) = name.strip_prefix("origin/") {
+            rest
+        } else {
+            name
+        };
+        if branch.is_empty() || branch == "HEAD" {
+            continue;
+        }
+        seen.insert(branch.to_string());
+    }
+    seen.into_iter().collect()
+}
+
+/// List unique local + remote branch names in a managed clone.
+pub async fn git_list_branches(repo_path: &Path) -> Result<Vec<String>, ResourceError> {
+    let output = run_git(
+        &[
+            "for-each-ref",
+            "--format=%(refname)",
+            "refs/heads",
+            "refs/remotes",
+        ],
+        Some(repo_path),
+        GIT_QUERY_TIMEOUT_MS,
+    )
+    .await?;
+    if !output.status.success() {
+        return Err(git_failure("git for-each-ref", &output));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(normalize_git_ref_names(stdout.lines()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +436,60 @@ mod tests {
         let result = exec(input).await.unwrap();
         assert_eq!(result.code, 0);
         assert_eq!(result.stderr.trim(), "err");
+    }
+
+    #[tokio::test]
+    async fn test_git_clone_local_repo() {
+        let root = std::env::temp_dir().join(format!(
+            "poria-git-clone-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let src = root.join("src");
+        let dest = root.join("dest");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("README"), "hi").unwrap();
+
+        let init = exec(TerminalExecInput {
+            command: "git init && git config user.email test@example.com && git config user.name test && git add README && git -c commit.gpgsign=false commit -m init".into(),
+            cwd: Some(src.to_string_lossy().into_owned()),
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(init.code, 0, "git init failed: {}", init.stderr);
+
+        git_clone_with_timeout(&src.to_string_lossy(), &dest, 15_000)
+            .await
+            .unwrap();
+        assert!(dest.join("README").exists());
+
+        let branch = git_current_branch(&dest).await.unwrap();
+        assert!(!branch.is_empty());
+        let branches = git_list_branches(&dest).await.unwrap();
+        assert!(
+            branches.iter().any(|name| name == &branch),
+            "expected {branch} in {branches:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn normalize_git_ref_names_strips_remotes_and_head() {
+        let names = normalize_git_ref_names([
+            "refs/heads/main",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+            "refs/remotes/origin/feat/foo",
+            "HEAD",
+            "origin/HEAD",
+            "  ",
+        ]);
+        assert_eq!(names, vec!["feat/foo".to_string(), "main".to_string()]);
     }
 }

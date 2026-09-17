@@ -35,50 +35,155 @@ pub struct IssuePolicy {
 
 pub static ISSUE_POLICIES: Lazy<HashMap<IssueClass, IssuePolicy>> = Lazy::new(|| {
     let mut m = HashMap::new();
-    m.insert(IssueClass::CompilationError, IssuePolicy {
-        auto_retry: 3, notify_roles: vec!["developer".into()], escalate_at: Some("2h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::TestFailure, IssuePolicy {
-        auto_retry: 3, notify_roles: vec!["developer".into()], escalate_at: Some("2h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::AgentTimeout, IssuePolicy {
-        auto_retry: 1, notify_roles: vec!["developer".into()], escalate_at: Some("1h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::LlmRateLimit, IssuePolicy {
-        auto_retry: 5, notify_roles: vec![], escalate_at: None, retry_delay: Some("5m".into()), note: None,
-    });
-    m.insert(IssueClass::RequirementAmbiguous, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["product".into()], escalate_at: Some("4h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::PrdInvalid, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["product".into()], escalate_at: Some("4h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::MergeConflict, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["developer".into()], escalate_at: Some("2h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::LowCrScore, IssuePolicy {
-        auto_retry: 1, notify_roles: vec!["developer".into()], escalate_at: Some("4h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::DiffTooLarge, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["developer".into()], escalate_at: Some("4h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::PermissionDenied, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["ops".into()], escalate_at: Some("1h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::InfraFailure, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["ops".into()], escalate_at: Some("1h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::SecurityViolation, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["developer".into(), "security".into()], escalate_at: Some("1h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::OutOfScopeChange, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["developer".into()], escalate_at: Some("2h".into()), retry_delay: None, note: None,
-    });
-    m.insert(IssueClass::AuthExpired, IssuePolicy {
-        auto_retry: 1, notify_roles: vec!["developer".into()], escalate_at: Some("1h".into()), retry_delay: None, note: Some("自动尝试刷新浏览器 cookie".into()),
-    });
-    m.insert(IssueClass::Unknown, IssuePolicy {
-        auto_retry: 0, notify_roles: vec!["developer".into()], escalate_at: Some("2h".into()), retry_delay: None, note: None,
-    });
+    m.insert(
+        IssueClass::CompilationError,
+        IssuePolicy {
+            auto_retry: 3,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("2h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::TestFailure,
+        IssuePolicy {
+            auto_retry: 3,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("2h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::AgentTimeout,
+        IssuePolicy {
+            auto_retry: 1,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("1h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::LlmRateLimit,
+        IssuePolicy {
+            auto_retry: 5,
+            notify_roles: vec![],
+            escalate_at: None,
+            retry_delay: Some("5m".into()),
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::RequirementAmbiguous,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["product".into()],
+            escalate_at: Some("4h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::PrdInvalid,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["product".into()],
+            escalate_at: Some("4h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::MergeConflict,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("2h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::LowCrScore,
+        IssuePolicy {
+            auto_retry: 1,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("4h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::DiffTooLarge,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("4h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::PermissionDenied,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["ops".into()],
+            escalate_at: Some("1h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::InfraFailure,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["ops".into()],
+            escalate_at: Some("1h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::SecurityViolation,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["developer".into(), "security".into()],
+            escalate_at: Some("1h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::OutOfScopeChange,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("2h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
+    m.insert(
+        IssueClass::AuthExpired,
+        IssuePolicy {
+            auto_retry: 1,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("1h".into()),
+            retry_delay: None,
+            note: Some("自动尝试刷新浏览器 cookie".into()),
+        },
+    );
+    m.insert(
+        IssueClass::Unknown,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("2h".into()),
+            retry_delay: None,
+            note: None,
+        },
+    );
     m
 });

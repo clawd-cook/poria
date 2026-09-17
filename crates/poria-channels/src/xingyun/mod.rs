@@ -1,8 +1,13 @@
+mod demand_list;
+mod demand_status;
 mod demand_url;
 mod git_url;
 mod types;
 
-pub use demand_url::{feature_branch_name, feature_slug, parse_xingyun_demand_url};
+pub use demand_status::format_demand_status;
+pub use demand_url::{
+    feature_branch_name, feature_slug, parse_xingyun_demand_url, xingyun_demand_view_url,
+};
 pub use git_url::{normalize_git_url, repo_search_path_from_git_url, same_git_url};
 pub use types::*;
 
@@ -41,11 +46,28 @@ impl Channel for XingyunChannel {
 
         let output = match input.action {
             XingyunAction::GetDemand => {
-                let demand_id = input
-                    .demand_id
-                    .ok_or("getDemand requires demandId")?;
+                let demand_id = input.demand_id.ok_or("getDemand requires demandId")?;
                 let demand = get_demand_by_id(&credentials, demand_id).await?;
-                XingyunChannelOutput::GetDemand { demand: Box::new(demand) }
+                XingyunChannelOutput::GetDemand {
+                    demand: Box::new(demand),
+                }
+            }
+            XingyunAction::ListDemands => {
+                let page = list_demands(
+                    &credentials,
+                    DemandListQuery {
+                        keyword: input.keyword,
+                        current: input.current.unwrap_or(0),
+                        page_size: input.page_size.unwrap_or(0),
+                    },
+                )
+                .await?;
+                XingyunChannelOutput::ListDemands {
+                    records: page.records,
+                    total: page.total,
+                    current: page.current,
+                    page_size: page.page_size,
+                }
             }
             XingyunAction::ListCardAttachments => {
                 let demand_code = match input.demand_code {
@@ -62,9 +84,7 @@ impl Channel for XingyunChannel {
                 XingyunChannelOutput::ListCardAttachments { attachments }
             }
             XingyunAction::ResolvePrdLink => {
-                let demand_id = input
-                    .demand_id
-                    .ok_or("resolvePrdLink requires demandId")?;
+                let demand_id = input.demand_id.ok_or("resolvePrdLink requires demandId")?;
                 let demand = get_demand_by_id(&credentials, demand_id).await?;
                 let code = demand.demand_code.trim().to_string();
                 let attachments = if code.is_empty() {
@@ -81,9 +101,7 @@ impl Channel for XingyunChannel {
                 }
             }
             XingyunAction::Communicate => {
-                let demand_id = input
-                    .demand_id
-                    .ok_or("communicate requires demandId")?;
+                let demand_id = input.demand_id.ok_or("communicate requires demandId")?;
                 let result = communicate_demand(&credentials, demand_id).await?;
                 XingyunChannelOutput::Communicate {
                     demand_id,
@@ -91,9 +109,7 @@ impl Channel for XingyunChannel {
                 }
             }
             XingyunAction::Accept => {
-                let demand_id = input
-                    .demand_id
-                    .ok_or("accept requires demandId")?;
+                let demand_id = input.demand_id.ok_or("accept requires demandId")?;
                 let result = accept_demand(&credentials, demand_id).await?;
                 XingyunChannelOutput::Accept {
                     demand_id,
@@ -104,7 +120,10 @@ impl Channel for XingyunChannel {
                 // BindBranch requires git operations and EasyCI integration.
                 // Full implementation deferred -- returns an error for now since
                 // it depends on local git context.
-                return Err("bindBranch action requires local git context (not yet supported in Rust)".into());
+                return Err(
+                    "bindBranch action requires local git context (not yet supported in Rust)"
+                        .into(),
+                );
             }
         };
 
@@ -134,7 +153,11 @@ fn jacp_base_url() -> String {
         .ok()
         .and_then(|s| {
             let trimmed = s.trim().trim_end_matches('/').to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         })
         .unwrap_or_else(|| DEFAULT_JACP_BASE_URL.to_string())
 }
@@ -144,7 +167,11 @@ fn jacp_app_id() -> String {
         .ok()
         .and_then(|s| {
             let trimmed = s.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         })
         .unwrap_or_else(|| DEFAULT_JACP_APP_ID.to_string())
 }
@@ -181,9 +208,10 @@ async fn jacp_fetch(
             .json(&json_body);
     }
 
-    let response = req.send().await.map_err(|e| {
-        format!("{}: {}", error_label, e)
-    })?;
+    let response = req
+        .send()
+        .await
+        .map_err(|e| format!("{}: {}", error_label, e))?;
 
     if response.status().as_u16() == 401 {
         return Err("Auth expired, please re-login (poria auth login)".into());
@@ -192,9 +220,10 @@ async fn jacp_fetch(
         return Err(format!("{}: HTTP {}", error_label, response.status()).into());
     }
 
-    let envelope: JacpEnvelope = response.json().await.map_err(|e| {
-        format!("{}: failed to parse response: {}", error_label, e)
-    })?;
+    let envelope: JacpEnvelope = response
+        .json()
+        .await
+        .map_err(|e| format!("{}: failed to parse response: {}", error_label, e))?;
 
     if envelope.code != Some(200) {
         let msg = envelope
@@ -213,12 +242,51 @@ async fn jacp_fetch(
 // Demand API
 // ---------------------------------------------------------------------------
 
-async fn get_demand_by_id(
+/// List demands assigned to the current ERP (Xingyun `receiver`).
+pub async fn list_demands(
+    credentials: &JacpCredentials,
+    query: DemandListQuery,
+) -> Result<DemandPage, Box<dyn std::error::Error + Send + Sync>> {
+    if credentials.cookie.trim().is_empty() {
+        return Err("AuthRequired: please run poria auth login".into());
+    }
+    let receiver = credentials.username.trim();
+    if receiver.is_empty() {
+        return Err("AuthRequired: missing ERP username".into());
+    }
+
+    let query = query.normalized();
+    let body = demand_list::demand_list_query_body(&query, receiver);
+    let data = jacp_fetch(
+        credentials,
+        "/openapi/v3/demands/query",
+        reqwest::Method::POST,
+        Some(body),
+        "Demand list query failed",
+    )
+    .await?;
+    Ok(demand_list::parse_demand_page(
+        data,
+        query.current,
+        query.page_size,
+        receiver,
+    ))
+}
+
+/// Fetch a demand by numeric id.
+pub async fn get_demand_by_id(
     credentials: &JacpCredentials,
     demand_id: i64,
 ) -> Result<DemandDetail, Box<dyn std::error::Error + Send + Sync>> {
     let path = format!("/openapi/v3/demands/{}", demand_id);
-    let data = jacp_fetch(credentials, &path, reqwest::Method::GET, None, "Demand query failed").await?;
+    let data = jacp_fetch(
+        credentials,
+        &path,
+        reqwest::Method::GET,
+        None,
+        "Demand query failed",
+    )
+    .await?;
     let detail: DemandDetail = serde_json::from_value(data)?;
     Ok(detail)
 }
@@ -285,11 +353,15 @@ async fn get_card_attachments(
     if code.is_empty() {
         return Err("Missing card code".into());
     }
-    let path = format!(
-        "/openapi/v3/cards/code/{}",
-        urlencoding::encode(code)
-    );
-    let data = jacp_fetch(credentials, &path, reqwest::Method::GET, None, "Card query failed").await?;
+    let path = format!("/openapi/v3/cards/code/{}", urlencoding::encode(code));
+    let data = jacp_fetch(
+        credentials,
+        &path,
+        reqwest::Method::GET,
+        None,
+        "Card query failed",
+    )
+    .await?;
 
     // Extract attachments array from the card response
     let attachments_val = data
@@ -332,8 +404,8 @@ async fn get_card_attachments(
 pub fn is_joyspace_prd_link(raw: &str) -> bool {
     match url::Url::parse(raw.trim()) {
         Ok(parsed) => {
-            let host = parsed.host_str().unwrap_or("");
-            host.ends_with("joyspace.jd.com")
+            let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+            host == "joyspace.jd.com" || host.ends_with(".joyspace.jd.com")
         }
         Err(_) => false,
     }
@@ -350,6 +422,44 @@ pub enum PrdResolveError {
     NoPrd,
     #[error("Multiple JoySpace PRD candidates; resolve manually")]
     AmbiguousPrd,
+}
+
+/// Best-effort PRD URL for the start wizard (`getDemand` + `resolvePrdLink`).
+pub async fn preview_demand_prd(
+    credentials: &JacpCredentials,
+    demand_id: i64,
+) -> Result<DemandPrdPreview, Box<dyn std::error::Error + Send + Sync>> {
+    if demand_id <= 0 {
+        return Err("demandId 无效".into());
+    }
+    let demand = get_demand_by_id(credentials, demand_id).await?;
+    let demand_code = demand.demand_code.trim().to_string();
+    let attachments = if demand_code.is_empty() {
+        Vec::new()
+    } else {
+        get_card_attachments(credentials, &demand_code)
+            .await
+            .unwrap_or_default()
+    };
+    let mut url = resolve_prd_from_attachments(&attachments)
+        .ok()
+        .map(|result| result.url);
+    if url.is_none() {
+        if let Some(link) = demand
+            .demand_desc_link
+            .as_deref()
+            .map(str::trim)
+            .filter(|link| !link.is_empty() && is_joyspace_prd_link(link))
+        {
+            url = Some(link.to_string());
+        }
+    }
+    Ok(DemandPrdPreview {
+        demand_id: demand.id,
+        demand_code,
+        demand_name: demand.name,
+        url,
+    })
 }
 
 /// Resolve the single best PRD attachment from a list.
@@ -420,5 +530,61 @@ mod urlencoding {
             }
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn list_demand_rejects_missing_cookie() {
+        let creds = JacpCredentials {
+            cookie: String::new(),
+            username: "heyongqi10".into(),
+        };
+        let err = list_demands(&creds, DemandListQuery::default())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("AuthRequired"));
+    }
+
+    #[tokio::test]
+    async fn list_demand_rejects_missing_erp() {
+        let creds = JacpCredentials {
+            cookie: "erp_erp=x".into(),
+            username: "  ".into(),
+        };
+        let err = list_demands(&creds, DemandListQuery::default())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("AuthRequired"));
+    }
+
+    #[tokio::test]
+    async fn preview_demand_prd_rejects_invalid_id() {
+        let creds = JacpCredentials {
+            cookie: "erp_erp=x".into(),
+            username: "heyongqi10".into(),
+        };
+        let err = preview_demand_prd(&creds, 0).await.unwrap_err();
+        assert!(err.to_string().contains("demandId"));
+    }
+
+    #[test]
+    fn joyspace_prd_link_accepts_apex_and_subdomain() {
+        assert!(is_joyspace_prd_link("https://joyspace.jd.com/pages/abc"));
+        assert!(is_joyspace_prd_link(
+            "https://doc.joyspace.jd.com/pages/abc"
+        ));
+    }
+
+    #[test]
+    fn joyspace_prd_link_rejects_lookalike_hosts() {
+        assert!(!is_joyspace_prd_link(
+            "https://eviljoyspace.jd.com/pages/abc"
+        ));
+        assert!(!is_joyspace_prd_link("https://example.com/pages/abc"));
+        assert!(!is_joyspace_prd_link("not-a-url"));
     }
 }

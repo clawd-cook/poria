@@ -1,5 +1,5 @@
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -11,33 +11,41 @@ pub enum RiskLevel {
     Critical,
 }
 
-static CONFIG_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| vec![
-    Regex::new(r"^\.env").unwrap(),
-    Regex::new(r"package\.json$").unwrap(),
-    Regex::new(r"tsconfig.*\.json$").unwrap(),
-    Regex::new(r"pnpm-workspace\.yaml$").unwrap(),
-    Regex::new(r"\.eslintrc").unwrap(),
-    Regex::new(r"vite\.config").unwrap(),
-    Regex::new(r"next\.config").unwrap(),
-    Regex::new(r"webpack\.config").unwrap(),
-]);
+static CONFIG_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    vec![
+        Regex::new(r"^\.env").unwrap(),
+        Regex::new(r"package\.json$").unwrap(),
+        Regex::new(r"tsconfig.*\.json$").unwrap(),
+        Regex::new(r"pnpm-workspace\.yaml$").unwrap(),
+        Regex::new(r"\.eslintrc").unwrap(),
+        Regex::new(r"vite\.config").unwrap(),
+        Regex::new(r"next\.config").unwrap(),
+        Regex::new(r"webpack\.config").unwrap(),
+    ]
+});
 
-static CRITICAL_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| vec![
-    Regex::new(r"^\.github/").unwrap(),
-    Regex::new(r"^\.gitlab-ci").unwrap(),
-    Regex::new(r"Dockerfile").unwrap(),
-    Regex::new(r"docker-compose").unwrap(),
-    Regex::new(r"^deploy/").unwrap(),
-    Regex::new(r"^infra/").unwrap(),
-]);
+static CRITICAL_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    vec![
+        Regex::new(r"^\.github/").unwrap(),
+        Regex::new(r"^\.gitlab-ci").unwrap(),
+        Regex::new(r"Dockerfile").unwrap(),
+        Regex::new(r"docker-compose").unwrap(),
+        Regex::new(r"^deploy/").unwrap(),
+        Regex::new(r"^infra/").unwrap(),
+    ]
+});
 
 pub fn classify_risk(changed_files: &[String], diff_lines: i32) -> RiskLevel {
-    let has_critical = changed_files.iter().any(|f| CRITICAL_PATTERNS.iter().any(|p| p.is_match(f)));
+    let has_critical = changed_files
+        .iter()
+        .any(|f| CRITICAL_PATTERNS.iter().any(|p| p.is_match(f)));
     if has_critical {
         return RiskLevel::Critical;
     }
 
-    let has_config = changed_files.iter().any(|f| CONFIG_PATTERNS.iter().any(|p| p.is_match(f)));
+    let has_config = changed_files
+        .iter()
+        .any(|f| CONFIG_PATTERNS.iter().any(|p| p.is_match(f)));
     if has_config && diff_lines > 100 {
         return RiskLevel::High;
     }
@@ -61,22 +69,34 @@ mod tests {
 
     #[test]
     fn test_critical_dockerfile() {
-        assert_eq!(classify_risk(&["Dockerfile".into()], 10), RiskLevel::Critical);
+        assert_eq!(
+            classify_risk(&["Dockerfile".into()], 10),
+            RiskLevel::Critical
+        );
     }
 
     #[test]
     fn test_critical_github_actions() {
-        assert_eq!(classify_risk(&[".github/workflows/ci.yml".into()], 5), RiskLevel::Critical);
+        assert_eq!(
+            classify_risk(&[".github/workflows/ci.yml".into()], 5),
+            RiskLevel::Critical
+        );
     }
 
     #[test]
     fn test_config_high() {
-        assert_eq!(classify_risk(&["package.json".into()], 150), RiskLevel::High);
+        assert_eq!(
+            classify_risk(&["package.json".into()], 150),
+            RiskLevel::High
+        );
     }
 
     #[test]
     fn test_config_medium() {
-        assert_eq!(classify_risk(&["package.json".into()], 50), RiskLevel::Medium);
+        assert_eq!(
+            classify_risk(&["package.json".into()], 50),
+            RiskLevel::Medium
+        );
     }
 
     #[test]
@@ -86,7 +106,10 @@ mod tests {
 
     #[test]
     fn test_medium_diff() {
-        assert_eq!(classify_risk(&["src/app.ts".into()], 300), RiskLevel::Medium);
+        assert_eq!(
+            classify_risk(&["src/app.ts".into()], 300),
+            RiskLevel::Medium
+        );
     }
 
     #[test]

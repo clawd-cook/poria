@@ -23,7 +23,10 @@ impl DatabaseBackup {
         let entries = std::fs::read_dir(backup_dir).map_err(|e| e.to_string())?;
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(date_str) = name.strip_prefix("poria-").and_then(|s| s.strip_suffix(".db")) {
+            if let Some(date_str) = name
+                .strip_prefix("poria-")
+                .and_then(|s| s.strip_suffix(".db"))
+            {
                 if date_str < cutoff_str.as_str() {
                     std::fs::remove_file(entry.path()).ok();
                     removed += 1;

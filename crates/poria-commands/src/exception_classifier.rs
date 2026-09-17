@@ -39,16 +39,13 @@ pub fn classify(error_message: &str) -> IssueClass {
     if msg.contains("ECONNREFUSED") || msg.contains("ENOTFOUND") || msg.contains("infra") {
         return IssueClass::InfraFailure;
     }
-    if msg.contains("security") || msg.contains("malicious") || msg.contains("blocked_dependency")
-    {
+    if msg.contains("security") || msg.contains("malicious") || msg.contains("blocked_dependency") {
         return IssueClass::SecurityViolation;
     }
     if msg.contains("out_of_scope") || msg.contains("OutputGuardError") {
         return IssueClass::OutOfScopeChange;
     }
-    if msg.contains("auth expired")
-        || msg.contains("cookie expired")
-        || msg.contains("AuthExpired")
+    if msg.contains("auth expired") || msg.contains("cookie expired") || msg.contains("AuthExpired")
     {
         return IssueClass::AuthExpired;
     }
@@ -62,9 +59,15 @@ mod tests {
 
     #[test]
     fn test_classify_compilation() {
-        assert_eq!(classify("compilation error on line 5"), IssueClass::CompilationError);
+        assert_eq!(
+            classify("compilation error on line 5"),
+            IssueClass::CompilationError
+        );
         assert_eq!(classify("build failed"), IssueClass::CompilationError);
-        assert_eq!(classify("tsc exited with code 1"), IssueClass::CompilationError);
+        assert_eq!(
+            classify("tsc exited with code 1"),
+            IssueClass::CompilationError
+        );
     }
 
     #[test]
@@ -76,7 +79,10 @@ mod tests {
     #[test]
     fn test_classify_timeout() {
         assert_eq!(classify("AGENT_TIMEOUT reached"), IssueClass::AgentTimeout);
-        assert_eq!(classify("timeout waiting for response"), IssueClass::AgentTimeout);
+        assert_eq!(
+            classify("timeout waiting for response"),
+            IssueClass::AgentTimeout
+        );
     }
 
     #[test]
@@ -88,7 +94,10 @@ mod tests {
 
     #[test]
     fn test_classify_requirement() {
-        assert_eq!(classify("requirement is ambiguous"), IssueClass::RequirementAmbiguous);
+        assert_eq!(
+            classify("requirement is ambiguous"),
+            IssueClass::RequirementAmbiguous
+        );
         assert_eq!(classify("P0 unanswered"), IssueClass::RequirementAmbiguous);
     }
 
@@ -100,7 +109,10 @@ mod tests {
 
     #[test]
     fn test_classify_merge_conflict() {
-        assert_eq!(classify("merge conflict in file.ts"), IssueClass::MergeConflict);
+        assert_eq!(
+            classify("merge conflict in file.ts"),
+            IssueClass::MergeConflict
+        );
         assert_eq!(classify("CONFLICT detected"), IssueClass::MergeConflict);
     }
 
@@ -130,8 +142,14 @@ mod tests {
 
     #[test]
     fn test_classify_security() {
-        assert_eq!(classify("security violation"), IssueClass::SecurityViolation);
-        assert_eq!(classify("blocked_dependency found"), IssueClass::SecurityViolation);
+        assert_eq!(
+            classify("security violation"),
+            IssueClass::SecurityViolation
+        );
+        assert_eq!(
+            classify("blocked_dependency found"),
+            IssueClass::SecurityViolation
+        );
     }
 
     #[test]

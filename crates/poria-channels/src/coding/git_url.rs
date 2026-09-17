@@ -29,6 +29,28 @@ pub fn repo_name_from_git_url(git_url: &str) -> Option<String> {
     segments.last().map(|s| s.to_string())
 }
 
+/// Split a git URL into `(scope, name)` using the search path.
+///
+/// `git@coding.jd.com:ls/ls-entrance.git` → `Some(("ls", "ls-entrance"))`.
+/// Nested paths keep the remainder as `name`: `group/sub/repo` → `("group", "sub/repo")`.
+pub fn repo_scope_and_name_from_git_url(git_url: &str) -> Option<(String, String)> {
+    let path = repo_search_path_from_git_url(git_url)?;
+    if path
+        .split(['/', '\\'])
+        .any(|s| s.is_empty() || s == "." || s == "..")
+    {
+        return None;
+    }
+    let (scope, name) = path.split_once('/')?;
+    let scope = scope.trim();
+    let name = name.trim().trim_matches('/');
+    if scope.is_empty() || name.is_empty() {
+        None
+    } else {
+        Some((scope.to_string(), name.to_string()))
+    }
+}
+
 /// Extract the full path portion from a git URL for repo search.
 pub fn repo_search_path_from_git_url(git_url: &str) -> Option<String> {
     let cleaned = git_url.trim();
@@ -107,6 +129,56 @@ mod tests {
         assert_eq!(
             repo_search_path_from_git_url("git@coding.jd.com:poria/demo.git"),
             Some("poria/demo".to_string())
+        );
+    }
+
+    #[test]
+    fn scope_and_name_from_ls_entrance() {
+        assert_eq!(
+            repo_scope_and_name_from_git_url("git@coding.jd.com:ls/ls-entrance.git"),
+            Some(("ls".to_string(), "ls-entrance".to_string()))
+        );
+        assert_eq!(
+            repo_search_path_from_git_url("git@coding.jd.com:ls/ls-entrance.git"),
+            Some("ls/ls-entrance".to_string())
+        );
+    }
+
+    #[test]
+    fn scope_and_name_from_https() {
+        assert_eq!(
+            repo_scope_and_name_from_git_url("https://coding.jd.com/ls/ls-entrance.git"),
+            Some(("ls".to_string(), "ls-entrance".to_string()))
+        );
+    }
+
+    #[test]
+    fn scope_and_name_nested_keeps_rest_as_name() {
+        assert_eq!(
+            repo_scope_and_name_from_git_url("https://coding.jd.com/group/sub/repo.git"),
+            Some(("group".to_string(), "sub/repo".to_string()))
+        );
+    }
+
+    #[test]
+    fn scope_and_name_rejects_missing_or_single_segment() {
+        assert_eq!(repo_scope_and_name_from_git_url(""), None);
+        assert_eq!(repo_scope_and_name_from_git_url("git@coding.jd.com:"), None);
+        assert_eq!(
+            repo_scope_and_name_from_git_url("git@coding.jd.com:onlyname.git"),
+            None
+        );
+    }
+
+    #[test]
+    fn scope_and_name_rejects_parent_directory_segments() {
+        assert_eq!(
+            repo_scope_and_name_from_git_url("git@coding.jd.com:ls/../evil.git"),
+            None
+        );
+        assert_eq!(
+            repo_scope_and_name_from_git_url("git@coding.jd.com:../ls-entrance.git"),
+            None
         );
     }
 

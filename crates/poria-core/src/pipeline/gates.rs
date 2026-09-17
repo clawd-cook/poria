@@ -51,41 +51,151 @@ pub struct StageResult {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-pub static DEFAULT_GATES: Lazy<Vec<GateRule>> = Lazy::new(|| vec![
-    GateRule { id: "ci_build".into(), name: "CI 构建".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::Deploy, regress_to: None },
-    GateRule { id: "test_coverage".into(), name: "测试覆盖率".into(), enabled: true, threshold: serde_json::json!(80), on_fail: GateOnFail::Block, gate_phase: GatePhase::Deploy, regress_to: None },
-    GateRule { id: "security_scan".into(), name: "安全扫描".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::StageExit, regress_to: None },
-    GateRule { id: "diff_size".into(), name: "变更量".into(), enabled: true, threshold: serde_json::json!(500), on_fail: GateOnFail::Warn, gate_phase: GatePhase::Deploy, regress_to: None },
-    GateRule { id: "merge_conflict".into(), name: "合并冲突".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::Deploy, regress_to: None },
-    GateRule { id: "cr_score".into(), name: "CR 评分".into(), enabled: true, threshold: serde_json::json!("B+"), on_fail: GateOnFail::Regress, gate_phase: GatePhase::StageExit, regress_to: Some(StageEnum::Dev) },
-    GateRule { id: "prd_review_p0".into(), name: "PRD 澄清 P0 完成".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::StageEntry, regress_to: None },
-    GateRule { id: "trd_exists".into(), name: "TRD 文档存在".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::StageEntry, regress_to: None },
-    GateRule { id: "code_changes_exist".into(), name: "代码变更存在".into(), enabled: true, threshold: serde_json::Value::Null, on_fail: GateOnFail::Block, gate_phase: GatePhase::StageEntry, regress_to: None },
-]);
+pub static DEFAULT_GATES: Lazy<Vec<GateRule>> = Lazy::new(|| {
+    vec![
+        GateRule {
+            id: "ci_build".into(),
+            name: "CI 构建".into(),
+            enabled: true,
+            threshold: serde_json::Value::Null,
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::Deploy,
+            regress_to: None,
+        },
+        GateRule {
+            id: "test_coverage".into(),
+            name: "测试覆盖率".into(),
+            enabled: true,
+            threshold: serde_json::json!(80),
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::Deploy,
+            regress_to: None,
+        },
+        GateRule {
+            id: "security_scan".into(),
+            name: "安全扫描".into(),
+            enabled: true,
+            threshold: serde_json::Value::Null,
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::StageExit,
+            regress_to: None,
+        },
+        GateRule {
+            id: "diff_size".into(),
+            name: "变更量".into(),
+            enabled: true,
+            threshold: serde_json::json!(500),
+            on_fail: GateOnFail::Warn,
+            gate_phase: GatePhase::Deploy,
+            regress_to: None,
+        },
+        GateRule {
+            id: "merge_conflict".into(),
+            name: "合并冲突".into(),
+            enabled: true,
+            threshold: serde_json::Value::Null,
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::Deploy,
+            regress_to: None,
+        },
+        GateRule {
+            id: "cr_score".into(),
+            name: "CR 评分".into(),
+            enabled: true,
+            threshold: serde_json::json!("B+"),
+            on_fail: GateOnFail::Regress,
+            gate_phase: GatePhase::StageExit,
+            regress_to: Some(StageEnum::Dev),
+        },
+        GateRule {
+            id: "prd_review_p0".into(),
+            name: "PRD 澄清 P0 完成".into(),
+            enabled: true,
+            threshold: serde_json::Value::Null,
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::StageEntry,
+            regress_to: None,
+        },
+        GateRule {
+            id: "trd_exists".into(),
+            name: "TRD 文档存在".into(),
+            enabled: true,
+            threshold: serde_json::Value::Null,
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::StageEntry,
+            regress_to: None,
+        },
+        GateRule {
+            id: "code_changes_exist".into(),
+            name: "代码变更存在".into(),
+            enabled: true,
+            threshold: serde_json::Value::Null,
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::StageEntry,
+            regress_to: None,
+        },
+    ]
+});
 
 fn evaluate_one(rule: &GateRule, result: &StageResult) -> GateResult {
     match rule.id.as_str() {
-        "ci_build" => gate_result(rule, result.ci_build_pass == Some(true), &serde_json::json!(result.ci_build_pass)),
+        "ci_build" => gate_result(
+            rule,
+            result.ci_build_pass == Some(true),
+            &serde_json::json!(result.ci_build_pass),
+        ),
         "test_coverage" => {
             let threshold = rule.threshold.as_f64().unwrap_or(0.0);
             let actual = result.test_coverage.unwrap_or(0.0);
-            gate_result(rule, actual >= threshold, &serde_json::json!(result.test_coverage))
+            gate_result(
+                rule,
+                actual >= threshold,
+                &serde_json::json!(result.test_coverage),
+            )
         }
-        "security_scan" => gate_result(rule, result.security_pass == Some(true), &serde_json::json!(result.security_pass)),
+        "security_scan" => gate_result(
+            rule,
+            result.security_pass == Some(true),
+            &serde_json::json!(result.security_pass),
+        ),
         "diff_size" => {
             let threshold = rule.threshold.as_i64().unwrap_or(0) as i32;
             let actual = result.diff_lines.unwrap_or(0);
-            gate_result(rule, actual <= threshold, &serde_json::json!(result.diff_lines))
+            gate_result(
+                rule,
+                actual <= threshold,
+                &serde_json::json!(result.diff_lines),
+            )
         }
-        "merge_conflict" => gate_result(rule, result.has_conflict != Some(true), &serde_json::json!(result.has_conflict)),
+        "merge_conflict" => gate_result(
+            rule,
+            result.has_conflict != Some(true),
+            &serde_json::json!(result.has_conflict),
+        ),
         "cr_score" => {
             let threshold = rule.threshold.as_str().unwrap_or("");
             let actual = result.cr_score.as_deref().unwrap_or("");
-            gate_result(rule, cr_score_meets_threshold(actual, threshold), &serde_json::json!(result.cr_score))
+            gate_result(
+                rule,
+                cr_score_meets_threshold(actual, threshold),
+                &serde_json::json!(result.cr_score),
+            )
         }
-        "prd_review_p0" => gate_result(rule, result.prd_review_p0_done == Some(true), &serde_json::json!(result.prd_review_p0_done)),
-        "trd_exists" => gate_result(rule, result.trd_exists == Some(true), &serde_json::json!(result.trd_exists)),
-        "code_changes_exist" => gate_result(rule, result.code_changes_exist == Some(true), &serde_json::json!(result.code_changes_exist)),
+        "prd_review_p0" => gate_result(
+            rule,
+            result.prd_review_p0_done == Some(true),
+            &serde_json::json!(result.prd_review_p0_done),
+        ),
+        "trd_exists" => gate_result(
+            rule,
+            result.trd_exists == Some(true),
+            &serde_json::json!(result.trd_exists),
+        ),
+        "code_changes_exist" => gate_result(
+            rule,
+            result.code_changes_exist == Some(true),
+            &serde_json::json!(result.code_changes_exist),
+        ),
         _ => gate_result(rule, true, &serde_json::Value::Null),
     }
 }
@@ -94,7 +204,10 @@ fn gate_result(rule: &GateRule, pass: bool, actual: &serde_json::Value) -> GateR
     let message = if pass {
         format!("{}: 通过", rule.name)
     } else {
-        format!("{}: 未通过 (actual={}, threshold={})", rule.name, actual, rule.threshold)
+        format!(
+            "{}: 未通过 (actual={}, threshold={})",
+            rule.name, actual, rule.threshold
+        )
     };
     GateResult {
         rule_id: rule.id.clone(),
@@ -105,23 +218,51 @@ fn gate_result(rule: &GateRule, pass: bool, actual: &serde_json::Value) -> GateR
     }
 }
 
-pub fn evaluate_gates(result: &StageResult, rules: &[GateRule], phase: GatePhase) -> GateEvaluation {
-    let applicable: Vec<_> = rules.iter().filter(|r| r.enabled && r.gate_phase == phase).collect();
-    let details: Vec<GateResult> = applicable.iter().map(|rule| evaluate_one(rule, result)).collect();
+pub fn evaluate_gates(
+    result: &StageResult,
+    rules: &[GateRule],
+    phase: GatePhase,
+) -> GateEvaluation {
+    let applicable: Vec<_> = rules
+        .iter()
+        .filter(|r| r.enabled && r.gate_phase == phase)
+        .collect();
+    let details: Vec<GateResult> = applicable
+        .iter()
+        .map(|rule| evaluate_one(rule, result))
+        .collect();
 
-    let blocking_failures: Vec<GateResult> = details.iter().filter(|r| {
-        if r.pass { return false; }
-        rules.iter().find(|rule| rule.id == r.rule_id)
-            .map(|rule| rule.on_fail == GateOnFail::Block || rule.on_fail == GateOnFail::Regress)
-            .unwrap_or(false)
-    }).cloned().collect();
+    let blocking_failures: Vec<GateResult> = details
+        .iter()
+        .filter(|r| {
+            if r.pass {
+                return false;
+            }
+            rules
+                .iter()
+                .find(|rule| rule.id == r.rule_id)
+                .map(|rule| {
+                    rule.on_fail == GateOnFail::Block || rule.on_fail == GateOnFail::Regress
+                })
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
 
-    let warn_failures: Vec<GateResult> = details.iter().filter(|r| {
-        if r.pass { return false; }
-        rules.iter().find(|rule| rule.id == r.rule_id)
-            .map(|rule| rule.on_fail == GateOnFail::Warn)
-            .unwrap_or(false)
-    }).cloned().collect();
+    let warn_failures: Vec<GateResult> = details
+        .iter()
+        .filter(|r| {
+            if r.pass {
+                return false;
+            }
+            rules
+                .iter()
+                .find(|rule| rule.id == r.rule_id)
+                .map(|rule| rule.on_fail == GateOnFail::Warn)
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
 
     GateEvaluation {
         all_pass: blocking_failures.is_empty(),
@@ -199,7 +340,10 @@ mod tests {
         };
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageExit);
         assert!(!eval.all_pass);
-        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "cr_score"));
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "cr_score"));
     }
 
     #[test]
@@ -222,7 +366,10 @@ mod tests {
         };
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
         assert!(!eval.all_pass);
-        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "prd_review_p0"));
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "prd_review_p0"));
     }
 
     #[test]
@@ -230,7 +377,10 @@ mod tests {
         let result = StageResult::default();
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
         assert!(!eval.all_pass);
-        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "prd_review_p0"));
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "prd_review_p0"));
     }
 
     #[test]
@@ -255,7 +405,10 @@ mod tests {
         };
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
         assert!(!eval.all_pass);
-        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "trd_exists"));
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "trd_exists"));
     }
 
     #[test]
@@ -280,7 +433,10 @@ mod tests {
         };
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
         assert!(!eval.all_pass);
-        assert!(eval.blocking_failures.iter().any(|r| r.rule_id == "code_changes_exist"));
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "code_changes_exist"));
     }
 
     #[test]
@@ -300,7 +456,10 @@ mod tests {
     #[test]
     fn test_default_gates_count() {
         assert_eq!(DEFAULT_GATES.len(), 9);
-        let entry_gates: Vec<_> = DEFAULT_GATES.iter().filter(|g| g.gate_phase == GatePhase::StageEntry).collect();
+        let entry_gates: Vec<_> = DEFAULT_GATES
+            .iter()
+            .filter(|g| g.gate_phase == GatePhase::StageEntry)
+            .collect();
         assert_eq!(entry_gates.len(), 3);
     }
 }

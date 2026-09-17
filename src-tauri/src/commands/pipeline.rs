@@ -1,13 +1,22 @@
+use std::path::PathBuf;
+
 use chrono::Utc;
 use serde::Serialize;
 use tauri::Emitter;
 use tauri::State;
 
-use poria_channels::xingyun::parse_xingyun_demand_url;
+use poria_channels::coding::repo_search_path_from_git_url;
+use poria_channels::xingyun::{
+    feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url,
+};
 use poria_core::pipeline::{create_pipeline_id, PipelineEvent as CorePipelineEvent};
 use poria_core::types::{
-    Pipeline, PipelineConfig, PipelineStatus, Stage, StageStatus, STAGE_ORDER,
+    BackendContext, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, Stage, StageStatus,
+    STAGE_ORDER,
 };
+use poria_infrastructure::auth::{assert_path_under_repos_root, get_credentials};
+use poria_infrastructure::store::{CloneStatus, RegisteredRepo};
+use poria_resources::git_current_branch;
 
 use crate::AppState;
 
@@ -152,9 +161,7 @@ fn pipeline_to_detail(p: &Pipeline) -> PipelineDetail {
 }
 
 #[tauri::command]
-pub async fn list_pipelines(
-    state: State<'_, AppState>,
-) -> Result<Vec<PipelineSummary>, String> {
+pub async fn list_pipelines(state: State<'_, AppState>) -> Result<Vec<PipelineSummary>, String> {
     let pipelines = state.store.list_all()?;
     Ok(pipelines.iter().map(pipeline_to_summary).collect())
 }
@@ -204,36 +211,130 @@ pub async fn get_pipeline_events(
         .collect())
 }
 
-/// Submit a new pipeline from a xingyun demand link.
-/// Validates the link, creates a Pipeline struct via poria-core types,
-/// stores via SqlitePipelineStore, and emits a Tauri event.
+/// Submit a pipeline from the demand start wizard.
+/// Frontend repo is the only `repos` entry; backend is read-only `backend_context`.
 #[tauri::command]
 pub async fn submit_pipeline(
-    link: String,
+    demand_id: i64,
+    frontend_repo_id: String,
+    backend_repo_id: String,
+    backend_branch: String,
+    prd_url: String,
+    demand_code: Option<String>,
+    demand_name: Option<String>,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    // Parse and validate the xingyun demand URL
-    let parsed = parse_xingyun_demand_url(&link)?;
+    if demand_id <= 0 {
+        return Err("需求无效".into());
+    }
+    let frontend_repo_id = frontend_repo_id.trim().to_string();
+    let backend_repo_id = backend_repo_id.trim().to_string();
+    let backend_branch = backend_branch.trim().to_string();
+    let prd_url = prd_url.trim().to_string();
+    if frontend_repo_id.is_empty() {
+        return Err("请选择前端仓库".into());
+    }
+    if backend_repo_id.is_empty() {
+        return Err("请选择后端仓库".into());
+    }
+    if frontend_repo_id == backend_repo_id {
+        return Err("前端仓库与后端仓库不能相同".into());
+    }
+    if backend_branch.is_empty() {
+        return Err("请选择后端分支".into());
+    }
+    if prd_url.is_empty() {
+        return Err("请填写 JoySpace PRD 链接".into());
+    }
+    if !is_joyspace_prd_link(&prd_url) {
+        return Err("PRD 必须是 JoySpace 链接".into());
+    }
+
+    let frontend = require_ready_repo(&state, &frontend_repo_id, "前端仓库")?;
+    let backend = require_ready_repo(&state, &backend_repo_id, "后端仓库")?;
+
+    let frontend_path = PathBuf::from(&frontend.local_path);
+    let base_branch = git_current_branch(&frontend_path)
+        .await
+        .map_err(|e| format!("无法读取前端仓库当前分支: {e}"))?;
+    if base_branch.is_empty() || base_branch == "HEAD" {
+        return Err("前端仓库未检出分支，请先在托管副本中检出一个分支".into());
+    }
+
+    let demand_code = demand_code
+        .as_deref()
+        .map(str::trim)
+        .filter(|code| !code.is_empty())
+        .unwrap_or("")
+        .to_string();
+    let demand_name = demand_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| name.to_string());
+    let feature_branch = feature_branch_name(
+        if demand_code.is_empty() {
+            None
+        } else {
+            Some(demand_code.as_str())
+        },
+        demand_id,
+    );
+
+    let gitlab_project_path = repo_search_path_from_git_url(&frontend.git_url)
+        .unwrap_or_else(|| format!("{}/{}", frontend.scope, frontend.name));
+
+    let frontend_repo = RepoConfig {
+        name: frontend.name.clone(),
+        git_url: frontend.git_url.clone(),
+        branch: feature_branch,
+        base_branch,
+        gitlab_project_path,
+        depends_on: None,
+        build_cmd: None,
+    };
+
+    let backend_context = BackendContext {
+        git_url: backend.git_url.clone(),
+        local_path: backend.local_path.clone(),
+        branch: backend_branch,
+        scope: backend.scope.clone(),
+        name: backend.name.clone(),
+    };
+    let raw_link = xingyun_demand_view_url(
+        demand_id,
+        if demand_code.is_empty() {
+            None
+        } else {
+            Some(demand_code.as_str())
+        },
+    );
+    let operator = get_credentials(None)
+        .map(|creds| creds.username.trim().to_string())
+        .filter(|username| !username.is_empty())
+        .ok_or_else(|| "请先登录".to_string())?;
 
     let pipeline_id = create_pipeline_id();
     let now = Utc::now();
+    let config = PipelineConfig {
+        gates: vec![],
+        trd_scope: vec![],
+        repos: vec![frontend_repo.clone()],
+        prd_url: Some(prd_url),
+        backend_context: Some(backend_context),
+    };
 
-    // Build initial pipeline with all stages in pending
     let pipeline = Pipeline {
         id: pipeline_id.clone(),
-        demand_id: parsed.demand_id,
-        demand_code: parsed.demand_code.clone().unwrap_or_default(),
-        demand_name: None,
+        demand_id,
+        demand_code,
+        demand_name,
         status: PipelineStatus::Created,
-        raw_link: parsed.url.clone(),
-        operator: String::new(),
+        raw_link,
+        operator,
         has_regressed: false,
-        config: PipelineConfig {
-            gates: vec![],
-            trd_scope: vec![],
-            repos: vec![],
-        },
+        config: config.clone(),
         stages: STAGE_ORDER
             .iter()
             .map(|stage_enum| Stage {
@@ -254,19 +355,35 @@ pub async fn submit_pipeline(
                 completed_at: None,
             })
             .collect(),
-        repos: vec![],
+        repos: config.repos.clone(),
         created_at: now,
         updated_at: now,
     };
 
-    // Persist to database
+    if pipeline.repos.len() != 1 {
+        return Err("流水线只能包含前端仓库".into());
+    }
+
     state.store.create(&pipeline)?;
 
-    // Emit Tauri event so the UI can react
     app.emit("pipeline:created", &pipeline_id)
+        .map_err(|e| e.to_string())?;
+    app.emit("pipeline:list-changed", &pipeline_id)
         .map_err(|e| e.to_string())?;
 
     Ok(pipeline_id)
+}
+
+fn require_ready_repo(state: &AppState, id: &str, label: &str) -> Result<RegisteredRepo, String> {
+    let repo = state
+        .repo_store
+        .load(id)?
+        .ok_or_else(|| format!("{label}不存在"))?;
+    if repo.clone_status != CloneStatus::Ready {
+        return Err(format!("{label}尚未克隆完成"));
+    }
+    assert_path_under_repos_root(None, PathBuf::from(&repo.local_path).as_path())?;
+    Ok(repo)
 }
 
 /// Cancel a running pipeline.
@@ -412,10 +529,7 @@ pub async fn skip_stage(
         )
         .map_err(|e| e.to_string())?;
     } else {
-        return Err(format!(
-            "Stage '{}' not found or not pending",
-            stage_name
-        ));
+        return Err(format!("Stage '{}' not found or not pending", stage_name));
     }
 
     Ok(())

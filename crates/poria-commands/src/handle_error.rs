@@ -64,9 +64,7 @@ pub async fn handle_stage_error(
         });
         *pipeline_status = PipelineStatus::Blocked;
         if let (Some(hl), Some(pl)) = (human_loop, pipeline_for_notify) {
-            let _ = hl
-                .notify(pl, stage, &format!("{:?}", issue_class))
-                .await;
+            let _ = hl.notify(pl, stage, &format!("{:?}", issue_class)).await;
         }
         return HandleErrorResult {
             issue_class,
@@ -123,11 +121,7 @@ mod tests {
             raw_link: String::new(),
             operator: "dev".into(),
             has_regressed: false,
-            config: PipelineConfig {
-                gates: vec![],
-                trd_scope: vec![],
-                repos: vec![],
-            },
+            config: PipelineConfig::default(),
             stages: vec![],
             repos: vec![],
             created_at: chrono::Utc::now(),
