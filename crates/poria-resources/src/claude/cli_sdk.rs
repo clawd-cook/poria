@@ -63,8 +63,11 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
         args.push(tools.clone());
         args.push("--allowedTools".into());
         args.push(tools);
-        args.push("--disallowedTools".into());
-        args.push("Agent,Task,Bash,Glob,WebFetch,WebSearch".into());
+        let disallowed = disallowed_tools(&options.allowed_tools);
+        if !disallowed.is_empty() {
+            args.push("--disallowedTools".into());
+            args.push(disallowed);
+        }
     }
 
     if let Some(max_turns) = options.max_turns {
@@ -73,6 +76,28 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
     }
 
     args
+}
+
+const DEFAULT_DISALLOWED_TOOLS: &[&str] = &[
+    "Agent",
+    "Task",
+    "Bash",
+    "Glob",
+    "WebFetch",
+    "WebSearch",
+];
+
+fn disallowed_tools(allowed: &[String]) -> String {
+    DEFAULT_DISALLOWED_TOOLS
+        .iter()
+        .copied()
+        .filter(|name| {
+            !allowed
+                .iter()
+                .any(|allowed_name| allowed_name.eq_ignore_ascii_case(name))
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn parse_stream_event(event: &StreamJsonEvent) -> SdkMessage {
@@ -239,6 +264,12 @@ mod tests {
         assert!(args.contains(&"Agent,Task,Bash,Glob,WebFetch,WebSearch".to_string()));
         assert!(args.contains(&"--max-turns".to_string()));
         assert!(args.contains(&"20".to_string()));
+    }
+
+    #[test]
+    fn test_disallowed_tools_keeps_allowed_bash_and_glob() {
+        let allowed = vec!["Read".into(), "Write".into(), "Bash".into(), "Glob".into()];
+        assert_eq!(disallowed_tools(&allowed), "Agent,Task,WebFetch,WebSearch");
     }
 
     #[test]

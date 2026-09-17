@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use serde::Serialize;
 use tauri::Emitter;
 use tauri::State;
 
-use poria_channels::coding::repo_search_path_from_git_url;
+use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
 use poria_core::contracts::{Skill, SkillContext};
 use poria_core::pipeline::{create_pipeline_id, PipelineEvent as CorePipelineEvent};
@@ -15,11 +15,11 @@ use poria_core::types::{
 };
 use poria_infrastructure::auth::{
     assert_path_under_projects_root, assert_path_under_repos_root, demand_project_folder_name,
-    get_credentials, get_demand_project_dir,
+    get_credentials, get_demand_project_dir, get_user_root,
 };
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
 use poria_resources::git_current_branch;
-use poria_skills::{GenTrdSkill, InitSkill, ReviewPrdSkill};
+use poria_skills::{GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill, WorkspaceSkill};
 
 use crate::AppState;
 
@@ -512,6 +512,12 @@ pub async fn execute_stage(
         StageEnum::Design => {
             run_design_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
         }
+        StageEnum::Workspace => {
+            run_workspace_stage(&mut pipeline, stage_idx, &app, &store, &state.repo_store).await
+        }
+        StageEnum::Dev => {
+            run_dev_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
+        }
         _ => {
             let stage_label = serde_json::to_string(&stage_name)
                 .unwrap_or_default()
@@ -867,6 +873,295 @@ async fn run_design_stage(
                     &[CorePipelineEvent::stage_failed(
                         &pipeline.id,
                         StageEnum::Design,
+                        &message,
+                        pipeline.stages[stage_idx].retry_count,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Err(message)
+        }
+    }
+}
+
+fn resolve_frontend_clone(
+    repo_store: &poria_infrastructure::store::RegisteredRepoStore,
+    repo: &RepoConfig,
+) -> Result<PathBuf, String> {
+    let wanted = normalize_git_url(&repo.git_url);
+    repo_store
+        .list_all()?
+        .into_iter()
+        .find(|registered| {
+            registered.clone_status == CloneStatus::Ready
+                && (normalize_git_url(&registered.git_url) == wanted
+                    || registered.name == repo.name)
+        })
+        .map(|registered| PathBuf::from(registered.local_path))
+        .ok_or_else(|| format!("未找到已就绪的前端仓库 {}", repo.name))
+}
+
+fn assert_path_under_worktrees_root(path: &Path) -> Result<(), String> {
+    let root = get_user_root(None).join("worktrees");
+    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return Err("工作区路径不合法".into());
+    }
+    if !path.starts_with(&root) {
+        return Err("工作区路径不在 ~/.poria/worktrees 下".into());
+    }
+    Ok(())
+}
+
+fn resolve_frontend_worktree(pipeline: &Pipeline) -> Result<PathBuf, String> {
+    if let Some(workspace) = pipeline
+        .stages
+        .iter()
+        .find(|stage| stage.name == StageEnum::Workspace)
+    {
+        if workspace.status != StageStatus::Completed {
+            return Err("请先完成工作区".into());
+        }
+        if let Some(path) = workspace
+            .output
+            .as_ref()
+            .and_then(|output| output.get("repos"))
+            .and_then(|repos| repos.as_array())
+            .and_then(|repos| repos.first())
+            .and_then(|repo| repo.get("worktreePath"))
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let worktree = PathBuf::from(path);
+            assert_path_under_worktrees_root(&worktree)?;
+            if worktree.exists() {
+                return Ok(worktree);
+            }
+        }
+    } else {
+        return Err("请先完成工作区".into());
+    }
+
+    let repo = pipeline
+        .config
+        .repos
+        .first()
+        .ok_or("缺少前端仓库，无法进入开发")?;
+    let worktree = get_user_root(None)
+        .join("worktrees")
+        .join(&pipeline.id)
+        .join(&repo.name);
+    assert_path_under_worktrees_root(&worktree)?;
+    if !worktree.exists() {
+        return Err(format!("前端工作区不存在: {}", worktree.display()));
+    }
+    Ok(worktree)
+}
+
+async fn run_dev_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &tauri::AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
+) -> Result<(), String> {
+    let project_dir = resolve_demand_project_dir(pipeline)?;
+    if !project_dir.join("TRD.md").is_file() {
+        return Err("请先完成技术设计，生成 TRD.md".into());
+    }
+    let worktree = resolve_frontend_worktree(pipeline)?;
+    if !worktree.join(".git").exists() {
+        return Err(format!("前端工作区无效: {}", worktree.display()));
+    }
+
+    pipeline.status = PipelineStatus::Running;
+    pipeline.stages[stage_idx].status = StageStatus::Running;
+    pipeline.stages[stage_idx].skill_id = Some("skill:gen-code".into());
+    pipeline.stages[stage_idx].started_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = None;
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_started(&pipeline.id, StageEnum::Dev)],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+
+    let project_dir_str = project_dir.to_string_lossy().into_owned();
+    let worktree_str = worktree.to_string_lossy().into_owned();
+    let mut extra = serde_json::Map::new();
+    extra.insert(
+        "feature_dir".into(),
+        serde_json::Value::String(project_dir_str),
+    );
+    extra.insert(
+        "worktree_path".into(),
+        serde_json::Value::String(worktree_str.clone()),
+    );
+
+    let ctx = SkillContext {
+        pipeline_id: pipeline.id.clone(),
+        workdir: worktree_str,
+        credentials: serde_json::json!({}),
+    };
+    let input = SkillInput {
+        stage: pipeline.stages[stage_idx].clone(),
+        pipeline: pipeline.clone(),
+        extra,
+    };
+
+    match GenCodeSkill::new()
+        .with_agent_pool(agent_pool)
+        .execute(input, ctx)
+        .await
+    {
+        Ok(output) => {
+            pipeline.stages[stage_idx].status = StageStatus::Completed;
+            pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_completed(
+                        &pipeline.id,
+                        StageEnum::Dev,
+                        output.output,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Ok(())
+        }
+        Err(err) => {
+            let message = err.to_string();
+            pipeline.status = PipelineStatus::Failed;
+            pipeline.stages[stage_idx].status = StageStatus::Failed;
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.stages[stage_idx].issue = Some(StageIssue {
+                class: "dev_failed".into(),
+                message: message.clone(),
+                retryable: true,
+            });
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_failed(
+                        &pipeline.id,
+                        StageEnum::Dev,
+                        &message,
+                        pipeline.stages[stage_idx].retry_count,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Err(message)
+        }
+    }
+}
+
+async fn run_workspace_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &tauri::AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    repo_store: &std::sync::Arc<poria_infrastructure::store::RegisteredRepoStore>,
+) -> Result<(), String> {
+    let frontend = pipeline
+        .config
+        .repos
+        .first()
+        .cloned()
+        .ok_or("缺少前端仓库，无法创建工作区")?;
+    let git_root = resolve_frontend_clone(repo_store, &frontend)?;
+    assert_path_under_repos_root(None, &git_root)?;
+    if !git_root.join(".git").exists() {
+        return Err(format!("前端托管副本无效: {}", git_root.display()));
+    }
+
+    pipeline.status = PipelineStatus::Running;
+    pipeline.stages[stage_idx].status = StageStatus::Running;
+    pipeline.stages[stage_idx].skill_id = Some("skill:workspace".into());
+    pipeline.stages[stage_idx].started_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = None;
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_started(
+                &pipeline.id,
+                StageEnum::Workspace,
+            )],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+
+    let workspace_root = get_user_root(None).join("worktrees");
+    let mut extra = serde_json::Map::new();
+    extra.insert(
+        "repo_root".into(),
+        serde_json::Value::String(git_root.to_string_lossy().into_owned()),
+    );
+    extra.insert(
+        "workspace_root".into(),
+        serde_json::Value::String(workspace_root.to_string_lossy().into_owned()),
+    );
+
+    let ctx = SkillContext {
+        pipeline_id: pipeline.id.clone(),
+        workdir: workspace_root.to_string_lossy().into_owned(),
+        credentials: serde_json::json!({}),
+    };
+    let input = SkillInput {
+        stage: pipeline.stages[stage_idx].clone(),
+        pipeline: pipeline.clone(),
+        extra,
+    };
+
+    match WorkspaceSkill::new().execute(input, ctx).await {
+        Ok(output) => {
+            pipeline.stages[stage_idx].status = StageStatus::Completed;
+            pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_completed(
+                        &pipeline.id,
+                        StageEnum::Workspace,
+                        output.output,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Ok(())
+        }
+        Err(err) => {
+            let message = err.to_string();
+            pipeline.status = PipelineStatus::Failed;
+            pipeline.stages[stage_idx].status = StageStatus::Failed;
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.stages[stage_idx].issue = Some(StageIssue {
+                class: "workspace_failed".into(),
+                message: message.clone(),
+                retryable: true,
+            });
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_failed(
+                        &pipeline.id,
+                        StageEnum::Workspace,
                         &message,
                         pipeline.stages[stage_idx].retry_count,
                     )],

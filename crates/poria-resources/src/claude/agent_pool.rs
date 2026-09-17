@@ -46,6 +46,7 @@ pub fn stage_agent_config() -> Vec<(StageEnum, StageAgentConfig)> {
             StageAgentConfig {
                 allowed_tools: vec![
                     "Read".into(),
+                    "Write".into(),
                     "Edit".into(),
                     "Bash".into(),
                     "Glob".into(),

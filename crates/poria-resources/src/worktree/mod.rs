@@ -17,6 +17,8 @@ pub struct WorktreeCreateInput {
     pub repo: RepoConfig,
     pub pipeline_id: String,
     pub base_branch: String,
+    #[serde(default)]
+    pub git_root: String,
 }
 
 /// Result of creating a git worktree.
@@ -72,40 +74,82 @@ impl WorktreeResource {
         self.workspace_root.join(pipeline_id).join(&repo.name)
     }
 
-    /// Create a new git worktree for a repo branch.
-    /// Runs `git worktree add <path> -b <branch> <baseBranch>` from the repo's git root.
+    /// Create a git worktree, or reuse it when the path already has `repo.branch`.
     pub async fn create(
         &self,
         repo: &RepoConfig,
         pipeline_id: &str,
         base_branch: &str,
+        git_root: &Path,
     ) -> Result<WorktreeCreateResult, ResourceError> {
         let worktree_path = self.path(repo, pipeline_id);
         let branch = &repo.branch;
-        let worktree_str = worktree_path.to_string_lossy();
+        let worktree_str = worktree_path.to_string_lossy().into_owned();
+        let git_root_str = git_root.to_string_lossy().into_owned();
+
+        if worktree_path.exists() {
+            let existing = terminal::git_current_branch(&worktree_path).await?;
+            if existing == *branch {
+                info!(
+                    repo = %repo.name,
+                    branch = %branch,
+                    worktree_path = %worktree_str,
+                    "reusing existing git worktree"
+                );
+                return Ok(WorktreeCreateResult {
+                    worktree_path: worktree_str,
+                    branch: branch.clone(),
+                });
+            }
+            return Err(ResourceError::Other(format!(
+                "worktree already exists at {worktree_str} on branch {existing}, expected {branch}"
+            )));
+        }
+
+        if let Some(parent) = worktree_path.parent() {
+            std::fs::create_dir_all(parent).map_err(ResourceError::SpawnError)?;
+        }
 
         info!(
             repo = %repo.name,
             branch = %branch,
             worktree_path = %worktree_str,
+            git_root = %git_root_str,
             "creating git worktree"
         );
 
-        let command = format!(
-            "git worktree add \"{}\" -b \"{}\" \"{}\"",
-            worktree_str, branch, base_branch
-        );
+        let local_ref = format!("refs/heads/{branch}");
+        let remote_ref = format!("refs/remotes/origin/{branch}");
+        let has_local = git_ref_exists(&git_root_str, &local_ref).await?;
+        let has_remote = git_ref_exists(&git_root_str, &remote_ref).await?;
+        let command = if has_local {
+            format!("git worktree add \"{worktree_str}\" \"{branch}\"")
+        } else if has_remote {
+            format!("git worktree add -b \"{branch}\" \"{worktree_str}\" \"origin/{branch}\"")
+        } else {
+            format!("git worktree add -b \"{branch}\" \"{worktree_str}\" \"{base_branch}\"")
+        };
 
-        terminal::exec(terminal::TerminalExecInput {
-            command,
-            cwd: Some(self.resolve_repo_root().to_string()),
+        let result = terminal::exec(terminal::TerminalExecInput {
+            command: command.clone(),
+            cwd: Some(git_root_str),
             env: None,
             timeout_ms: Some(GIT_MEDIUM_TIMEOUT),
         })
         .await?;
+        if result.code != 0 {
+            let detail = if result.stderr.trim().is_empty() {
+                result.stdout.trim().to_string()
+            } else {
+                result.stderr.trim().to_string()
+            };
+            return Err(ResourceError::Other(format!(
+                "git worktree add failed: {detail}"
+            )));
+        }
 
         Ok(WorktreeCreateResult {
-            worktree_path: worktree_str.into_owned(),
+            worktree_path: worktree_str,
             branch: branch.clone(),
         })
     }
@@ -182,11 +226,20 @@ impl WorktreeResource {
         Ok(())
     }
 
-    /// Resolve the root directory of a repo.
-    /// In the current architecture, the caller provides cwd.
     fn resolve_repo_root(&self) -> &str {
         "."
     }
+}
+
+async fn git_ref_exists(git_root: &str, spec: &str) -> Result<bool, ResourceError> {
+    let result = terminal::exec(terminal::TerminalExecInput {
+        command: format!("git show-ref --verify --quiet {spec}"),
+        cwd: Some(git_root.to_string()),
+        env: None,
+        timeout_ms: Some(GIT_MEDIUM_TIMEOUT),
+    })
+    .await?;
+    Ok(result.code == 0)
 }
 
 #[async_trait]
@@ -201,8 +254,16 @@ impl poria_core::contracts::Resource for WorktreeResource {
         _ctx: ResourceContext,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         let input: WorktreeCreateInput = serde_json::from_value(input)?;
+        if input.git_root.trim().is_empty() {
+            return Err("missing git_root for worktree create".into());
+        }
         let result = self
-            .create(&input.repo, &input.pipeline_id, &input.base_branch)
+            .create(
+                &input.repo,
+                &input.pipeline_id,
+                &input.base_branch,
+                Path::new(&input.git_root),
+            )
             .await?;
         Ok(serde_json::to_value(result)?)
     }
