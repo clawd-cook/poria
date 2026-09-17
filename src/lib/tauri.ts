@@ -33,6 +33,14 @@ export async function getAuthStatus(): Promise<AuthStatus> {
   return invoke<AuthStatus>("get_auth_status");
 }
 
+export async function startLogin(): Promise<void> {
+  return invoke<void>("start_login");
+}
+
+export async function logout(): Promise<void> {
+  return invoke<void>("logout");
+}
+
 export async function getConfig(): Promise<AppConfig> {
   return invoke<AppConfig>("get_config");
 }

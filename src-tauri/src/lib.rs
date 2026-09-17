@@ -62,6 +62,8 @@ pub fn run() {
             commands::pipeline::execute_stage,
             commands::pipeline::skip_stage,
             commands::auth::get_auth_status,
+            commands::auth::start_login,
+            commands::auth::logout,
             commands::config::get_config,
             commands::config::update_config,
             commands::skills::list_skills,
