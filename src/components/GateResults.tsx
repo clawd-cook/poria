@@ -1,11 +1,21 @@
-import type { StageDetail } from "../lib/types";
+import { Table, Tag, Typography } from "antd";
+import type { ColumnsType } from "antd/es/table";
+
+import type { StageDetail, StageEnum } from "../lib/types";
 import { STAGE_LABELS } from "../lib/types";
+
+const { Title } = Typography;
 
 interface GateResult {
   gate: string;
   passed: boolean;
   actual: string;
   threshold: string;
+}
+
+interface GateRow extends GateResult {
+  stage: StageEnum;
+  key: string;
 }
 
 function parseGateResults(raw: string | null): GateResult[] {
@@ -17,47 +27,59 @@ function parseGateResults(raw: string | null): GateResult[] {
   }
 }
 
+const columns: ColumnsType<GateRow> = [
+  {
+    title: "阶段",
+    dataIndex: "stage",
+    key: "stage",
+    render: (stage: StageEnum) => STAGE_LABELS[stage],
+  },
+  {
+    title: "门禁",
+    dataIndex: "gate",
+    key: "gate",
+  },
+  {
+    title: "结果",
+    dataIndex: "passed",
+    key: "passed",
+    render: (passed: boolean) => (
+      <Tag color={passed ? "success" : "error"}>{passed ? "通过" : "未通过"}</Tag>
+    ),
+  },
+  {
+    title: "实际值",
+    dataIndex: "actual",
+    key: "actual",
+  },
+  {
+    title: "阈值",
+    dataIndex: "threshold",
+    key: "threshold",
+  },
+];
+
 export function GateResults({ stages }: { stages: StageDetail[] }) {
-  const allGates = stages.flatMap((s) => {
+  const allGates: GateRow[] = stages.flatMap((s) => {
     const results = parseGateResults(s.gate_results);
-    return results.map((g) => ({ ...g, stage: s.name }));
+    return results.map((g, i) => ({
+      ...g,
+      stage: s.name,
+      key: `${s.name}-${i}`,
+    }));
   });
 
   if (allGates.length === 0) return null;
 
   return (
-    <div className="rounded-lg bg-slate-800/50 p-3">
-      <h4 className="mb-2 text-sm font-medium text-slate-300">门禁结果</h4>
-      <table className="w-full text-left text-xs">
-        <thead>
-          <tr className="border-b border-slate-700 text-slate-500">
-            <th className="pr-4 pb-1">阶段</th>
-            <th className="pr-4 pb-1">门禁</th>
-            <th className="pr-4 pb-1">结果</th>
-            <th className="pr-4 pb-1">实际值</th>
-            <th className="pb-1">阈值</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allGates.map((g, i) => (
-            <tr key={i} className="border-b border-slate-700/50">
-              <td className="py-1 pr-4 text-slate-400">{STAGE_LABELS[g.stage]}</td>
-              <td className="py-1 pr-4 text-slate-300">{g.gate}</td>
-              <td className="py-1 pr-4">
-                <span
-                  className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                    g.passed ? "bg-emerald-600/30 text-emerald-300" : "bg-red-600/30 text-red-300"
-                  }`}
-                >
-                  {g.passed ? "通过" : "未通过"}
-                </span>
-              </td>
-              <td className="py-1 pr-4 text-slate-400">{g.actual}</td>
-              <td className="py-1 text-slate-500">{g.threshold}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ marginTop: 16 }}>
+      <Title level={5}>门禁结果</Title>
+      <Table<GateRow>
+        columns={columns}
+        dataSource={allGates}
+        size="small"
+        pagination={false}
+      />
     </div>
   );
 }

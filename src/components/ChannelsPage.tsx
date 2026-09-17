@@ -1,30 +1,33 @@
-import { Radio } from "lucide-react";
+import { NodeIndexOutlined } from "@ant-design/icons";
+import { Badge, Card, Col, Empty, Row, Tag, Typography } from "antd";
 import { useEffect } from "react";
 
 import { listChannels } from "../lib/tauri";
 import type { ChannelInfo } from "../lib/types";
 import { useStore } from "../state/store";
 
+const { Title, Text, Paragraph } = Typography;
+
 function ChannelCard({ channel }: { channel: ChannelInfo }) {
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 transition-colors hover:bg-slate-800">
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Radio className="h-4 w-4 shrink-0 text-emerald-400" />
-          <span className="text-sm font-medium text-slate-200">{channel.name}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-xs text-slate-400">
-            v{channel.version}
-          </span>
+    <Card hoverable size="small">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+        <Text strong>
+          <NodeIndexOutlined style={{ marginRight: 6, color: "#52c41a" }} />
+          {channel.name}
+        </Text>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <Badge status="success" />
+          <Tag>v{channel.version}</Tag>
         </div>
       </div>
-      <p className="mb-3 text-xs leading-relaxed text-slate-400">
+      <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 4 }}>
         {channel.description || "暂无描述"}
-      </p>
-      <div className="text-xs text-slate-500">ID: {channel.id}</div>
-    </div>
+      </Paragraph>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        ID: {channel.id}
+      </Text>
+    </Card>
   );
 }
 
@@ -38,22 +41,20 @@ export function ChannelsPage() {
   }, [dispatch]);
 
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-slate-100">渠道管理</h2>
-        <p className="mt-1 text-sm text-slate-400">已注册 {state.channels.length} 个渠道</p>
-      </div>
+    <div style={{ padding: 24, height: "100%", overflow: "auto" }}>
+      <Title level={4}>渠道管理</Title>
+      <Text type="secondary">已注册 {state.channels.length} 个渠道</Text>
 
       {state.channels.length === 0 ? (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-500">
-          暂无已注册的渠道
-        </div>
+        <Empty description="暂无已注册的渠道" style={{ marginTop: 64 }} />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           {state.channels.map((channel) => (
-            <ChannelCard key={channel.id} channel={channel} />
+            <Col key={channel.id} xs={24} md={12} xl={8}>
+              <ChannelCard channel={channel} />
+            </Col>
           ))}
-        </div>
+        </Row>
       )}
     </div>
   );

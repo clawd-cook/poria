@@ -1,25 +1,23 @@
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ExclamationCircleOutlined,
+  InfoCircleOutlined,
+  PlayCircleOutlined,
+} from "@ant-design/icons";
+import { Empty, Tag, Timeline } from "antd";
 import { useEffect, useRef } from "react";
 
 import type { PipelineEvent } from "../lib/types";
 
-function EventKindBadge({ kind }: { kind: string }) {
-  const colors: Record<string, string> = {
-    stage_started: "bg-blue-600/30 text-blue-300",
-    stage_completed: "bg-emerald-600/30 text-emerald-300",
-    stage_failed: "bg-red-600/30 text-red-300",
-    gate_passed: "bg-emerald-600/30 text-emerald-300",
-    gate_failed: "bg-red-600/30 text-red-300",
-    human_loop: "bg-amber-600/30 text-amber-300",
-  };
-
-  return (
-    <span
-      className={`rounded px-1.5 py-0.5 text-xs font-medium ${colors[kind] ?? "bg-slate-700 text-slate-400"}`}
-    >
-      {kind}
-    </span>
-  );
-}
+const KIND_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
+  stage_started: { color: "processing", icon: <PlayCircleOutlined /> },
+  stage_completed: { color: "success", icon: <CheckCircleOutlined /> },
+  stage_failed: { color: "error", icon: <CloseCircleOutlined /> },
+  gate_passed: { color: "success", icon: <CheckCircleOutlined /> },
+  gate_failed: { color: "error", icon: <CloseCircleOutlined /> },
+  human_loop: { color: "warning", icon: <ExclamationCircleOutlined /> },
+};
 
 function formatTime(dateStr: string): string {
   try {
@@ -41,21 +39,30 @@ export function EventStream({ events }: { events: PipelineEvent[] }) {
   }, [events.length]);
 
   if (events.length === 0) {
-    return <div className="py-8 text-center text-sm text-slate-500">暂无事件</div>;
+    return <Empty description="暂无事件" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
 
+  const items = events.map((event) => {
+    const cfg = KIND_CONFIG[event.kind] ?? { color: "default", icon: <InfoCircleOutlined /> };
+    return {
+      dot: cfg.icon,
+      color: cfg.color as string,
+      children: (
+        <div>
+          <Tag color={cfg.color as string} style={{ marginRight: 8 }}>{event.kind}</Tag>
+          <span style={{ fontSize: 12, opacity: 0.45, marginRight: 8 }}>
+            {formatTime(event.created_at)}
+          </span>
+          <span style={{ fontSize: 13 }}>{event.payload}</span>
+        </div>
+      ),
+    };
+  });
+
   return (
-    <div className="max-h-64 overflow-y-auto rounded-lg bg-slate-800/50 p-3">
-      <div className="space-y-2">
-        {events.map((event) => (
-          <div key={event.seq} className="flex items-start gap-2 text-sm">
-            <span className="shrink-0 text-xs text-slate-600">{formatTime(event.created_at)}</span>
-            <EventKindBadge kind={event.kind} />
-            <span className="min-w-0 truncate text-slate-300">{event.payload}</span>
-          </div>
-        ))}
-        <div ref={endRef} />
-      </div>
+    <div style={{ maxHeight: 256, overflowY: "auto" }}>
+      <Timeline items={items} />
+      <div ref={endRef} />
     </div>
   );
 }

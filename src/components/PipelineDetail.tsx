@@ -1,4 +1,5 @@
-import { ExternalLink } from "lucide-react";
+import { LinkOutlined, WarningOutlined } from "@ant-design/icons";
+import { Card, Descriptions, Divider, Empty, Spin, Space, Tag, Typography } from "antd";
 
 import { usePipeline } from "../hooks/usePipeline";
 import { useStore } from "../state/store";
@@ -8,48 +9,50 @@ import { HumanLoopCard } from "./HumanLoopCard";
 import { StageProgress } from "./StageProgress";
 import { StatusBadge } from "./StatusBadge";
 
+const { Title, Text } = Typography;
+
 export function PipelineDetail() {
   const { state } = useStore();
   const { detail, events, humanRequest } = usePipeline();
 
   if (!state.selectedPipelineId) {
     return (
-      <div className="flex h-full items-center justify-center text-slate-500">
-        选择一个 Pipeline 查看详情
+      <div style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center" }}>
+        <Empty description="选择一个 Pipeline 查看详情" />
       </div>
     );
   }
 
   if (!detail) {
-    return <div className="flex h-full items-center justify-center text-slate-500">加载中...</div>;
+    return (
+      <div style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center" }}>
+        <Spin tip="加载中..." />
+      </div>
+    );
   }
 
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="mb-6">
-        <div className="mb-2 flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-slate-100">{detail.demand_name}</h2>
-          <StatusBadge status={detail.status} />
-        </div>
-        <div className="flex flex-wrap gap-4 text-sm text-slate-400">
-          <span>需求: {detail.demand_code}</span>
-          <span>操作人: {detail.operator}</span>
-          {detail.has_regressed && <span className="text-amber-400">已回退</span>}
-          <a
-            href={detail.raw_link}
-            className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
-            target="_blank"
-            rel="noreferrer"
-          >
-            行云链接 <ExternalLink className="h-3.5 w-3.5" />
+    <div style={{ height: "100%", overflowY: "auto", padding: 24 }}>
+      <Space align="center" style={{ marginBottom: 8 }}>
+        <Title level={4} style={{ margin: 0 }}>{detail.demand_name}</Title>
+        <StatusBadge status={detail.status} />
+        {detail.has_regressed && <Tag icon={<WarningOutlined />} color="warning">已回退</Tag>}
+      </Space>
+
+      <Descriptions size="small" column={4} style={{ marginBottom: 16 }}>
+        <Descriptions.Item label="需求">{detail.demand_code}</Descriptions.Item>
+        <Descriptions.Item label="操作人">{detail.operator || "-"}</Descriptions.Item>
+        <Descriptions.Item label="行云链接">
+          <a href={detail.raw_link} target="_blank" rel="noreferrer">
+            <Space size={4}><LinkOutlined />查看</Space>
           </a>
-        </div>
-      </div>
+        </Descriptions.Item>
+      </Descriptions>
 
       <StageProgress stages={detail.stages} pipelineId={detail.id} />
 
       {humanRequest && humanRequest.pipelineId === detail.id && (
-        <div className="my-4">
+        <div style={{ margin: "16px 0" }}>
           <HumanLoopCard
             pipelineId={humanRequest.pipelineId}
             stage={humanRequest.stage}
@@ -59,37 +62,42 @@ export function PipelineDetail() {
         </div>
       )}
 
-      <div className="mt-6 space-y-6">
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-slate-300">事件流</h3>
-          <EventStream events={events} />
-        </div>
+      <Divider />
 
-        <GateResults stages={detail.stages} />
+      <Title level={5}>事件流</Title>
+      <EventStream events={events} />
 
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-slate-300">阶段详情</h3>
-          <div className="space-y-2">
-            {detail.stages.map((stage) => (
-              <div key={stage.name} className="rounded-lg bg-slate-800/50 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-200">{stage.name}</span>
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
-                    {stage.retry_count > 0 && <span>重试 {stage.retry_count} 次</span>}
-                    {stage.started_at && (
-                      <span>{new Date(stage.started_at).toLocaleTimeString("zh-CN")}</span>
-                    )}
-                  </div>
-                </div>
-                {stage.output_summary && (
-                  <p className="mt-1 text-xs text-slate-400">{stage.output_summary}</p>
+      <GateResults stages={detail.stages} />
+
+      <Divider />
+      <Title level={5}>阶段详情</Title>
+      <Space direction="vertical" style={{ width: "100%" }} size={8}>
+        {detail.stages.map((stage) => (
+          <Card key={stage.name} size="small">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <Text strong>{stage.name}</Text>
+              <Space size={12}>
+                {stage.retry_count > 0 && <Text type="secondary">重试 {stage.retry_count} 次</Text>}
+                {stage.started_at && (
+                  <Text type="secondary">
+                    {new Date(stage.started_at).toLocaleTimeString("zh-CN")}
+                  </Text>
                 )}
-                {stage.issue && <p className="mt-1 text-xs text-red-400">{stage.issue}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+              </Space>
+            </div>
+            {stage.output_summary && (
+              <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 4 }}>
+                {stage.output_summary}
+              </Text>
+            )}
+            {stage.issue && (
+              <Text type="danger" style={{ fontSize: 12, display: "block", marginTop: 4 }}>
+                {stage.issue}
+              </Text>
+            )}
+          </Card>
+        ))}
+      </Space>
     </div>
   );
 }

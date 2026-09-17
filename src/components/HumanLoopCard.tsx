@@ -1,4 +1,10 @@
-import { AlertTriangle, RotateCcw, SkipForward, XCircle } from "lucide-react";
+import {
+  CloseCircleOutlined,
+  ForwardOutlined,
+  ReloadOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
+import { Alert, Button, Descriptions, Flex, Space, Typography } from "antd";
 import { useState } from "react";
 
 import { humanLoopRespond } from "../lib/tauri";
@@ -28,50 +34,51 @@ export function HumanLoopCard({ pipelineId, stage, issueClass, detail }: HumanLo
   }
 
   return (
-    <div className="rounded-lg border border-amber-600/50 bg-amber-950/30 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <AlertTriangle className="h-5 w-5 text-amber-400" />
-        <span className="font-medium text-amber-300">Pipeline 需要协助</span>
-      </div>
-
-      <div className="mb-4 space-y-1 text-sm">
-        <div className="flex gap-2">
-          <span className="text-slate-500">问题:</span>
-          <span className="text-slate-300">{issueClass}</span>
-        </div>
-        <div className="flex gap-2">
-          <span className="text-slate-500">阶段:</span>
-          <span className="text-slate-300">{stage}</span>
-        </div>
-        <div className="mt-2 rounded bg-slate-800 p-2 text-xs text-slate-400">{detail}</div>
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => handleAction("resume")}
-          disabled={loading !== null}
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          修复并重试
-        </button>
-        <button
-          onClick={() => handleAction("skip")}
-          disabled={loading !== null}
-          className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-500 disabled:opacity-50"
-        >
-          <SkipForward className="h-3.5 w-3.5" />
-          跳过
-        </button>
-        <button
-          onClick={() => handleAction("cancel")}
-          disabled={loading !== null}
-          className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50"
-        >
-          <XCircle className="h-3.5 w-3.5" />
-          取消 Pipeline
-        </button>
-      </div>
-    </div>
+    <Alert
+      type="warning"
+      showIcon
+      icon={<WarningOutlined />}
+      message="Pipeline 需要协助"
+      description={
+        <Space direction="vertical" style={{ width: "100%" }}>
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="问题">{issueClass}</Descriptions.Item>
+            <Descriptions.Item label="阶段">{stage}</Descriptions.Item>
+          </Descriptions>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {detail}
+          </Typography.Text>
+          <Flex gap={8}>
+            <Button
+              type="primary"
+              icon={<ReloadOutlined />}
+              loading={loading === "resume"}
+              disabled={loading !== null}
+              onClick={() => handleAction("resume")}
+              style={{ backgroundColor: "#52c41a", borderColor: "#52c41a" }}
+            >
+              修复并重试
+            </Button>
+            <Button
+              icon={<ForwardOutlined />}
+              loading={loading === "skip"}
+              disabled={loading !== null}
+              onClick={() => handleAction("skip")}
+            >
+              跳过
+            </Button>
+            <Button
+              danger
+              icon={<CloseCircleOutlined />}
+              loading={loading === "cancel"}
+              disabled={loading !== null}
+              onClick={() => handleAction("cancel")}
+            >
+              取消 Pipeline
+            </Button>
+          </Flex>
+        </Space>
+      }
+    />
   );
 }

@@ -13,6 +13,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@ant-design/icons": "6.3.4",
     "@ant-design/x": "2.9.0",
     "@ant-design/x-card": "2.9.0",
     "@ant-design/x-markdown": "2.9.0",
@@ -22,17 +23,14 @@
     "@tauri-apps/plugin-opener": "2.5.5",
     "@tauri-apps/plugin-shell": "2.3.6",
     "antd": "6.6.4",
-    "lucide-react": "1.46.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
     "oxfmt": "0.68.0",
-    "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
     "vite": "8.3.0"
   },

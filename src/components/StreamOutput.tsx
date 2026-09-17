@@ -1,7 +1,11 @@
+import { CheckCircleOutlined, FileTextOutlined, ToolOutlined } from "@ant-design/icons";
+import { Collapse, Spin, Typography } from "antd";
 import { useEffect, useRef } from "react";
 
 import type { StreamChunk } from "../lib/types";
 import { useStore } from "../state/store";
+
+const { Text, Paragraph } = Typography;
 
 export function StreamOutput({ pipelineId }: { pipelineId: string }) {
   const { state } = useStore();
@@ -13,11 +17,16 @@ export function StreamOutput({ pipelineId }: { pipelineId: string }) {
   }, [chunks.length]);
 
   if (chunks.length === 0) {
-    return <div className="py-4 text-sm italic text-slate-500">等待 Claude 输出...</div>;
+    return (
+      <div style={{ padding: "16px 0", textAlign: "center" }}>
+        <Spin size="small" />
+        <Text type="secondary" style={{ marginLeft: 8 }}>等待 Claude 输出...</Text>
+      </div>
+    );
   }
 
   return (
-    <div className="max-h-96 space-y-1 overflow-y-auto font-mono text-sm">
+    <div style={{ maxHeight: 384, overflowY: "auto", fontFamily: "monospace", fontSize: 13 }}>
       {chunks.map((chunk, i) => (
         <ChunkLine key={i} chunk={chunk} />
       ))}
@@ -29,24 +38,57 @@ export function StreamOutput({ pipelineId }: { pipelineId: string }) {
 function ChunkLine({ chunk }: { chunk: StreamChunk }) {
   switch (chunk.type) {
     case "text":
-      return <div className="whitespace-pre-wrap text-slate-200">{chunk.content}</div>;
+      return <Paragraph style={{ margin: "2px 0", whiteSpace: "pre-wrap" }}>{chunk.content}</Paragraph>;
     case "tool_use":
       return (
-        <details className="text-blue-400">
-          <summary className="cursor-pointer">{"🔧"} {chunk.tool_name ?? "tool"}</summary>
-          <pre className="overflow-x-auto pl-4 text-xs text-slate-400">{chunk.content}</pre>
-        </details>
+        <Collapse
+          size="small"
+          items={[
+            {
+              key: "1",
+              label: (
+                <Text type="secondary">
+                  <ToolOutlined style={{ marginRight: 4 }} />
+                  {chunk.tool_name ?? "tool"}
+                </Text>
+              ),
+              children: (
+                <pre style={{ margin: 0, fontSize: 12, overflowX: "auto" }}>{chunk.content}</pre>
+              ),
+            },
+          ]}
+          style={{ marginBottom: 4 }}
+        />
       );
     case "tool_result":
       return (
-        <details className="text-green-400">
-          <summary className="cursor-pointer">{"📋"} Result</summary>
-          <pre className="overflow-x-auto pl-4 text-xs text-slate-400">{chunk.content}</pre>
-        </details>
+        <Collapse
+          size="small"
+          items={[
+            {
+              key: "1",
+              label: (
+                <Text type="success">
+                  <FileTextOutlined style={{ marginRight: 4 }} />
+                  Result
+                </Text>
+              ),
+              children: (
+                <pre style={{ margin: 0, fontSize: 12, overflowX: "auto" }}>{chunk.content}</pre>
+              ),
+            },
+          ]}
+          style={{ marginBottom: 4 }}
+        />
       );
     case "result":
-      return <div className="font-semibold text-emerald-400">{"✓"} {chunk.content}</div>;
+      return (
+        <Text type="success" strong style={{ display: "block", margin: "4px 0" }}>
+          <CheckCircleOutlined style={{ marginRight: 4 }} />
+          {chunk.content}
+        </Text>
+      );
     default:
-      return <div className="text-slate-500">{chunk.content}</div>;
+      return <Text type="secondary" style={{ display: "block" }}>{chunk.content}</Text>;
   }
 }

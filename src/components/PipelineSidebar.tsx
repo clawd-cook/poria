@@ -1,9 +1,12 @@
-import { Filter } from "lucide-react";
+import { FilterOutlined } from "@ant-design/icons";
+import { List, Segmented, Tag, Typography } from "antd";
 import { useMemo } from "react";
 
 import type { PipelineStatus, PipelineSummary } from "../lib/types";
 import { useStore } from "../state/store";
 import { StatusBadge } from "./StatusBadge";
+
+const { Text } = Typography;
 
 const STATUS_GROUPS: { label: string; statuses: PipelineStatus[] }[] = [
   { label: "运行中", statuses: ["running"] },
@@ -14,8 +17,8 @@ const STATUS_GROUPS: { label: string; statuses: PipelineStatus[] }[] = [
   { label: "其他", statuses: ["created", "cancelled"] },
 ];
 
-const FILTER_TABS: { label: string; value: string | null }[] = [
-  { label: "全部", value: null },
+const FILTER_OPTIONS = [
+  { label: "全部", value: "all" },
   { label: "运行中", value: "running" },
   { label: "已阻塞", value: "blocked" },
   { label: "已完成", value: "completed" },
@@ -30,36 +33,6 @@ function timeAgo(dateStr: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}小时前`;
   return `${Math.floor(hours / 24)}天前`;
-}
-
-function PipelineItem({
-  pipeline,
-  selected,
-  onSelect,
-}: {
-  pipeline: PipelineSummary;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      onClick={onSelect}
-      className={`w-full border-b border-slate-700 px-4 py-3 text-left transition-colors hover:bg-slate-700/50 ${
-        selected ? "bg-slate-700" : ""
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <span className="truncate text-sm font-medium text-slate-200">{pipeline.demand_name}</span>
-        <StatusBadge status={pipeline.status} />
-      </div>
-      <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-        {pipeline.current_stage && (
-          <span className="rounded bg-slate-700 px-1.5 py-0.5">{pipeline.current_stage}</span>
-        )}
-        <span>{timeAgo(pipeline.created_at)}</span>
-      </div>
-    </button>
-  );
 }
 
 export function PipelineSidebar() {
@@ -79,41 +52,103 @@ export function PipelineSidebar() {
   }, [filtered]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-1 border-b border-slate-700 px-2 py-2">
-        <Filter className="h-3.5 w-3.5 text-slate-500" />
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.label}
-            onClick={() => dispatch({ type: "filterChanged", filter: tab.value })}
-            className={`rounded px-2 py-1 text-xs transition-colors ${
-              ui.filter === tab.value
-                ? "bg-slate-600 text-slate-200"
-                : "text-slate-400 hover:text-slate-300"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div
+        style={{
+          padding: "8px 12px",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <FilterOutlined style={{ fontSize: 12, opacity: 0.45 }} />
+        <Segmented
+          size="small"
+          value={ui.filter ?? "all"}
+          onChange={(val) =>
+            dispatch({ type: "filterChanged", filter: val === "all" ? null : (val as string) })
+          }
+          options={FILTER_OPTIONS}
+        />
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div style={{ flex: 1, overflow: "auto" }}>
         {grouped.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-500">暂无 Pipeline</div>
+          <div style={{ padding: "32px 16px", textAlign: "center" }}>
+            <Text type="secondary">暂无 Pipeline</Text>
+          </div>
         )}
         {grouped.map((group) => (
           <div key={group.label}>
-            <div className="sticky top-0 bg-slate-800 px-4 py-1.5 text-xs font-medium text-slate-500">
-              {group.label} ({group.items.length})
+            <div
+              style={{
+                padding: "6px 16px",
+                fontSize: 12,
+                position: "sticky",
+                top: 0,
+                zIndex: 1,
+                background: "inherit",
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {group.label} ({group.items.length})
+              </Text>
             </div>
-            {group.items.map((p) => (
-              <PipelineItem
-                key={p.id}
-                pipeline={p}
-                selected={p.id === selectedPipelineId}
-                onSelect={() => dispatch({ type: "pipelineSelected", id: p.id })}
-              />
-            ))}
+            <List
+              dataSource={group.items}
+              split
+              size="small"
+              renderItem={(pipeline: PipelineSummary) => (
+                <List.Item
+                  onClick={() => dispatch({ type: "pipelineSelected", id: pipeline.id })}
+                  style={{
+                    padding: "8px 16px",
+                    cursor: "pointer",
+                    background:
+                      pipeline.id === selectedPipelineId
+                        ? "rgba(255,255,255,0.08)"
+                        : undefined,
+                  }}
+                >
+                  <div style={{ width: "100%" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: 8,
+                      }}
+                    >
+                      <Text
+                        ellipsis
+                        style={{ fontSize: 13, fontWeight: 500 }}
+                      >
+                        {pipeline.demand_name}
+                      </Text>
+                      <StatusBadge status={pipeline.status} />
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      {pipeline.current_stage && (
+                        <Tag style={{ fontSize: 11, margin: 0 }}>
+                          {pipeline.current_stage}
+                        </Tag>
+                      )}
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {timeAgo(pipeline.created_at)}
+                      </Text>
+                    </div>
+                  </div>
+                </List.Item>
+              )}
+            />
           </div>
         ))}
       </div>
