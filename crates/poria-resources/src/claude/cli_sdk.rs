@@ -48,6 +48,8 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
         prompt.into(),
         "--output-format".into(),
         "stream-json".into(),
+        "--verbose".into(),
+        "--dangerously-skip-permissions".into(),
     ];
 
     if let Some(ref sys_prompt) = options.append_system_prompt {
@@ -95,8 +97,10 @@ impl AgentSdk for ClaudeCliSdk {
 
         let mut cmd = Command::new(&self.claude_path);
         cmd.args(&args)
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
 
         if let Some(ref cwd) = options.cwd {
             cmd.current_dir(cwd);
@@ -197,7 +201,17 @@ mod tests {
             allowed_tools: vec![],
         };
         let args = build_cli_args("hello", &options);
-        assert_eq!(args, vec!["-p", "hello", "--output-format", "stream-json"]);
+        assert_eq!(
+            args,
+            vec![
+                "-p",
+                "hello",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--dangerously-skip-permissions",
+            ]
+        );
     }
 
     #[test]
