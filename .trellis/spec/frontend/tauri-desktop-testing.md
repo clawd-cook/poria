@@ -195,7 +195,7 @@ Prompt vars injected by `insert_backend_coding_aid_vars` into `trd_gen.md` / `co
 | Feature artifacts | Frontend design is `TRD.md`. Optional export is `BACKEND_TRD.md`. Never overwrite `TRD.md` with backend TRD |
 | `gen_trd` / `gen_code` | Read `input.pipeline.config` + optional artifact; prompts are read-only FE coding aid; do not modify the backend repo |
 
-JoySpace live Markdown export may be missing (Init can stay NotImplemented). A non-empty `backend_trd_url` must still be injected so the agent can open the link.
+JoySpace live Markdown export is Init: SSO Cookie + `POST /v1/pages/content`, files land in `~/.poria/projects/<demand_code>/` (`PRD.md`, `BACKEND_TRD.md`). Demand list 「文档」 reads that folder. A non-empty `backend_trd_url` is still injected so later agents can open the link.
 
 ### 4. Validation & Error Matrix
 
@@ -246,6 +246,27 @@ invoke("submit_pipeline", {
 // config.backend_trd_url set; pipeline.repos = [frontend]
 // optional artifact BACKEND_TRD.md; frontend TRD.md unchanged
 ```
+
+## Scenario: Init exports JoySpace markdown
+
+### 1. Scope / Trigger
+
+Use when changing Init, JoySpace `POST /v1/pages/content`, or demand-list 「文档」. Verify in `poria-desktop`, not Vite `:1420`.
+
+### 2. Signatures
+
+```typescript
+invoke("execute_stage", { pipelineId });
+invoke<DemandProject>("list_demand_project", { demandCode, demandId? });
+invoke<DemandProjectFileContent>("read_demand_project_file", { demandCode, fileName, demandId? });
+```
+
+Auth: `~/.poria/auth.json` Cookie + `x-team-id: 00046419`. Files: `~/.poria/projects/<demand_code>/PRD.md` and `BACKEND_TRD.md`.
+
+### 3. Tests Required
+
+- Unit: `cargo test -p poria-channels -- joyspace`; `cargo test -p poria-infrastructure -- demand_project`; `cargo test -p poria-core -- feature_context`.
+- Manual: pipeline Init 执行 on R2026082156824, then demand-list 「文档」 shows exported markdown.
 
 ## Common Mistake: Vite tab vs desktop window
 
