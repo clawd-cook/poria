@@ -19,7 +19,14 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [Hook Guidelines](./hook-guidelines.md)           | Custom hooks, data fetching patterns    | To fill |
 | [State Management](./state-management.md)         | Local state, global state, server state | To fill |
 | [Quality Guidelines](./quality-guidelines.md)     | Code standards, forbidden patterns      | To fill |
+| [Tauri Desktop Testing](./tauri-desktop-testing.md) | Real-window IPC / clone verification    | Active  |
 | [Type Safety](./type-safety.md)                   | Type patterns, validation               | To fill |
+
+---
+
+## When to Use
+
+Load [Tauri Desktop Testing](./tauri-desktop-testing.md) before claiming clone, login, demand list, or pipeline submit works. Cursor browser on port 1420 cannot `invoke` / `listen`.
 
 ---
 

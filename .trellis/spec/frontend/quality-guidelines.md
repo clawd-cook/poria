@@ -38,9 +38,9 @@ Questions to answer:
 
 ## Testing Requirements
 
-<!-- What level of testing is expected -->
+IPC, git clone, Xingyun, and SSO must be verified in the `poria-desktop` window. Cursor's browser on `http://localhost:1420` is Vite-only and cannot `invoke` / `listen`.
 
-(To be filled by the team)
+Launch, AX names, clone paths, and error matrix: [Tauri Desktop Testing](./tauri-desktop-testing.md).
 
 ---
 

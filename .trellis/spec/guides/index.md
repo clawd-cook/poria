@@ -39,6 +39,14 @@ These guides help you **ask the right questions before coding**.
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)
 
+### When verifying the desktop app
+
+- [ ] Does the flow call `invoke`, `listen`, git clone, Xingyun, or SSO?
+- [ ] If yes, is this the `poria-desktop` window (not Cursor browser on port 1420)?
+- [ ] Is port 1420 free, and was the app started with `cargo tauri dev` (not `pnpm tauri` unless a `tauri` binary is on PATH)?
+
+→ Read [Tauri Desktop Testing](../frontend/tauri-desktop-testing.md)
+
 ### When to Think About Code Reuse
 
 - [ ] You're writing similar code to something that exists
