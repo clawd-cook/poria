@@ -19,7 +19,9 @@ use poria_infrastructure::auth::{
 };
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
 use poria_resources::git_current_branch;
-use poria_skills::{GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill, WorkspaceSkill};
+use poria_skills::{
+    CodeReviewSkill, GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill, WorkspaceSkill,
+};
 
 use crate::AppState;
 
@@ -517,6 +519,9 @@ pub async fn execute_stage(
         }
         StageEnum::Dev => {
             run_dev_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
+        }
+        StageEnum::Cr => {
+            run_cr_stage(&mut pipeline, stage_idx, &app, &store, state.agent_pool.clone()).await
         }
         _ => {
             let stage_label = serde_json::to_string(&stage_name)
@@ -1054,6 +1059,121 @@ async fn run_dev_stage(
                     &[CorePipelineEvent::stage_failed(
                         &pipeline.id,
                         StageEnum::Dev,
+                        &message,
+                        pipeline.stages[stage_idx].retry_count,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Err(message)
+        }
+    }
+}
+
+async fn run_cr_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &tauri::AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
+) -> Result<(), String> {
+    let project_dir = resolve_demand_project_dir(pipeline)?;
+    let worktree = resolve_frontend_worktree(pipeline)?;
+    if !worktree.join(".git").exists() {
+        return Err(format!("前端工作区无效: {}", worktree.display()));
+    }
+
+    pipeline.status = PipelineStatus::Running;
+    pipeline.stages[stage_idx].status = StageStatus::Running;
+    pipeline.stages[stage_idx].skill_id = Some("skill:code-review".into());
+    pipeline.stages[stage_idx].started_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = None;
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_started(&pipeline.id, StageEnum::Cr)],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+
+    let project_dir_str = project_dir.to_string_lossy().into_owned();
+    let worktree_str = worktree.to_string_lossy().into_owned();
+    let repo = pipeline.config.repos.first();
+    let mut extra = serde_json::Map::new();
+    extra.insert(
+        "feature_dir".into(),
+        serde_json::Value::String(project_dir_str),
+    );
+    extra.insert(
+        "worktree_path".into(),
+        serde_json::Value::String(worktree_str.clone()),
+    );
+    if let Some(repo) = repo {
+        extra.insert(
+            "base_branch".into(),
+            serde_json::Value::String(repo.base_branch.clone()),
+        );
+        extra.insert(
+            "target_branch".into(),
+            serde_json::Value::String(repo.branch.clone()),
+        );
+    }
+
+    let ctx = SkillContext {
+        pipeline_id: pipeline.id.clone(),
+        workdir: worktree_str,
+        credentials: serde_json::json!({}),
+    };
+    let input = SkillInput {
+        stage: pipeline.stages[stage_idx].clone(),
+        pipeline: pipeline.clone(),
+        extra,
+    };
+
+    match CodeReviewSkill::new()
+        .with_agent_pool(agent_pool)
+        .execute(input, ctx)
+        .await
+    {
+        Ok(output) => {
+            pipeline.stages[stage_idx].status = StageStatus::Completed;
+            pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_completed(
+                        &pipeline.id,
+                        StageEnum::Cr,
+                        output.output,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            Ok(())
+        }
+        Err(err) => {
+            let message = err.to_string();
+            pipeline.status = PipelineStatus::Failed;
+            pipeline.stages[stage_idx].status = StageStatus::Failed;
+            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+            pipeline.stages[stage_idx].issue = Some(StageIssue {
+                class: "cr_failed".into(),
+                message: message.clone(),
+                retryable: true,
+            });
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_failed(
+                        &pipeline.id,
+                        StageEnum::Cr,
                         &message,
                         pipeline.stages[stage_idx].retry_count,
                     )],

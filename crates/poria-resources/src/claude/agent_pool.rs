@@ -60,7 +60,12 @@ pub fn stage_agent_config() -> Vec<(StageEnum, StageAgentConfig)> {
         (
             StageEnum::Cr,
             StageAgentConfig {
-                allowed_tools: vec!["Read".into(), "Bash".into(), "Grep".into()],
+                allowed_tools: vec![
+                    "Read".into(),
+                    "Write".into(),
+                    "Bash".into(),
+                    "Grep".into(),
+                ],
                 max_budget_usd: 5.0,
                 max_turns: 30,
                 timeout_ms: 15 * 60_000, // 15 minutes
