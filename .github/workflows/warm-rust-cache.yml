@@ -1,7 +1,7 @@
-name: Warm Rust cache
-
+# Behavior: spec/spec-process-cicd-warm-rust-cache.md
 # Tag-only publish jobs cannot reuse caches saved on previous tags.
 # Saving the release target on main lets pre-publish / publish restore it.
+name: Warm Rust cache
 on:
   push:
     branches: [main]

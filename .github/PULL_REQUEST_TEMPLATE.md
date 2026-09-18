@@ -31,6 +31,7 @@ Fixes #
 - [ ] `poria-resources`
 - [ ] `poria-infrastructure`
 - [ ] `.github/` / 发布
+- [ ] `spec/` CI 说明
 
 跨层字段（需求筛选、`backendTrdUrl`、前端 `TRD.md` / 后端 `BACKEND_TRD.md`）如有变动，写明前后契约：
 
@@ -39,7 +40,7 @@ Fixes #
 
 - [ ] `src/` 有改动：已跑 `pnpm typecheck`
 - [ ] `crates/` 或 `src-tauri/` 有改动：已跑 `cargo test -p <crate>` 或 `cargo test --workspace`
-- [ ] 涉及 `invoke` / 登录 / 需求 / 克隆 / `submit_pipeline`：已在 **Poria 桌面窗口**验证，不是浏览器 `:1420`
+- [ ] 涉及 `invoke` / 登录 / 需求 / 克隆 / `submit_pipeline`：已用 `cargo tauri dev` 在 **Poria 桌面窗口**验证，不是浏览器 `:1420`
 - [ ] 涉及 Deploy / EasyCI：确认 **先 push 再 SELECT 绑定**
 - [ ] 前端格式：`pnpm exec oxfmt .`（若改了 `src/`）
 

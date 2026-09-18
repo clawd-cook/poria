@@ -309,7 +309,7 @@ Do not commit credentials, `workspace/db/`, or `~/.poria` contents.
 
 ## Build and Deployment
 
-GitHub Actions:
+Behavior specs (source of truth for CI): [spec/README.md](spec/README.md).
 
 | Workflow                              | Trigger                              | Result                                      |
 | ------------------------------------- | ------------------------------------ | ------------------------------------------- |
@@ -318,14 +318,14 @@ GitHub Actions:
 | `.github/workflows/warm-rust-cache.yml` | push to `main` touching Rust       | Pre-warms aarch64 release cache             |
 | `.github/workflows/labeler.yml`       | PR / labels.yml on `main`            | Path labels; CODEOWNERS requests `@clawd-cook` |
 
-Publish jobs currently build **`aarch64-apple-darwin` only** (see workflow `matrix.include`). `APPLE_*` secrets are **optional**; missing certs must ad-hoc sign and still produce a DMG (do not fail-fast on empty secrets). Unsigned notes should mention `xattr -cr`. Local Intel builds are still `cargo tauri build --target x86_64-apple-darwin`.
+Publish jobs build **`aarch64-apple-darwin` only**. `APPLE_*` secrets are optional; missing certs must ad-hoc sign and still produce a DMG. Unsigned notes should mention `xattr -cr`. Local Intel builds are still `cargo tauri build --target x86_64-apple-darwin`.
 
 ```bash
 git tag v1.1.1-beta.1 && git push origin v1.1.1-beta.1
 git tag v1.1.1 && git push origin v1.1.1
 ```
 
-GitHub runs the workflow file **on the tagged commit**. Re-running an old tag will not pick up `main` YAML fixes — retag or cut a new version. CI syncs the tag version into `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` during the job — do not hand-edit those three to “match” a tag unless you are cutting a release.
+GitHub runs the workflow file **on the tagged commit**. Re-running an old tag will not pick up `main` YAML fixes; retag or cut a new version. CI syncs the tag version into `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` during the job. Do not hand-edit those three to match a tag unless you are cutting a release.
 
 CI Node/pnpm: `24.20.0` / `11.23.0` (workflow `env`).
 

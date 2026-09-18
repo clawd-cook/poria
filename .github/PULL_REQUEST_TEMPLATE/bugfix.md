@@ -21,7 +21,7 @@ Fixes #
 
 #### 修复前复现
 
-1. 使用 `pnpm tauri dev`（或注明正式 DMG）
+1. 使用 `cargo tauri dev`（或注明正式 DMG）
 2.
 3.
 

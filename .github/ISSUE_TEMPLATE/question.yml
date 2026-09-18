@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        先看 [README](https://github.com/clawd-cook/poria/blob/main/README.md) 和 [CONTRIBUTING](https://github.com/clawd-cook/poria/blob/main/CONTRIBUTING.md)。
+        先看 [README](https://github.com/clawd-cook/poria/blob/main/README.md)、[ARCHITECTURE](https://github.com/clawd-cook/poria/blob/main/ARCHITECTURE.md) 和 [CONTRIBUTING](https://github.com/clawd-cook/poria/blob/main/CONTRIBUTING.md)。
 
-        常见结论：Cursor / 浏览器打开 `:1420` 不能登录、拉需求或提交流水线；需要 `pnpm tauri dev` 打开标题为 Poria 的桌面窗口。
+        常见结论：Cursor / 浏览器打开 `:1420` 不能登录、拉需求或提交流水线；需要 `cargo tauri dev` 打开标题为 Poria 的桌面窗口。本仓库没有 `@tauri-apps/cli`，不要用 `pnpm tauri`。
 
   - type: textarea
     id: question
@@ -27,7 +27,7 @@ body:
         - 桌面窗口 vs Vite :1420
         - SSO / 鉴权
         - 流水线阶段
-        - 分层 / crate 该把代码放哪
+        - 分层 / crate 该把代码放哪（见 ARCHITECTURE.md）
         - 发布 / DMG / 签名
         - 其他
     validations:

@@ -124,3 +124,7 @@ Created → Running → WaitingMerge → Completed
 | Agent | Claude CLI 子进程池 |
 
 本地可用 `PORIA_PIPELINE_FIXTURE=1` 跳过真实 Claude / 渠道调用。不要在生产路径打开这个开关。
+
+## 发布自动化
+
+GitHub Actions 只打 Apple Silicon DMG。行为说明见 [spec/README.md](spec/README.md)。产品侧的打 tag 步骤见 [README.md](README.md#发布)。

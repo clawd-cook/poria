@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        较大改动请先开 Issue 再写代码。实现时不要反转 crate 依赖，也不要在 `submodules/` 里改代码。
+        较大改动请先开 Issue 再写代码。实现时不要反转 crate 依赖，也不要在 `submodules/` 里改代码。分层见 [ARCHITECTURE.md](https://github.com/clawd-cook/poria/blob/main/ARCHITECTURE.md)。
 
   - type: textarea
     id: problem

@@ -1,3 +1,5 @@
+# Behavior: spec/spec-process-cicd-publish.md
+# Apple Silicon DMG only. Workflow file on the tagged commit is what runs.
 name: Publish (Stable)
 
 on:

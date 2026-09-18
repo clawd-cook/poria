@@ -5,7 +5,10 @@ contact_links:
     about: 不要开公开 Issue。请走 GitHub 安全公告，或按 SECURITY.md 发邮件。
   - name: 产品说明
     url: https://github.com/clawd-cook/poria/blob/main/README.md
-    about: 安装、使用、流水线阶段与发布方式
+    about: 安装、使用与发布
+  - name: 架构
+    url: https://github.com/clawd-cook/poria/blob/main/ARCHITECTURE.md
+    about: 分层、六阶段流水线与数据目录
   - name: 贡献指南
     url: https://github.com/clawd-cook/poria/blob/main/CONTRIBUTING.md
     about: 本地环境、分层约定、提交与 PR 检查

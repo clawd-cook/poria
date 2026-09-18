@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢反馈。登录、需求列表、仓库克隆、提交流水线必须在 **Poria 桌面窗口**（`pnpm tauri dev` 或正式 DMG）里复现。
+        感谢反馈。登录、需求列表、仓库克隆、提交流水线必须在 **Poria 桌面窗口**（`cargo tauri dev` 或正式 DMG）里复现。
 
         浏览器打开 `http://localhost:1420` **没有** Tauri `invoke`，不能当作 IPC 复现环境。
 
@@ -27,7 +27,7 @@ body:
       label: 复现步骤
       description: 从打开 Poria 开始写。涉及登录 / 需求 / 克隆 / 流水线时，写明是桌面窗口而不是浏览器。
       placeholder: |
-        1. `pnpm tauri dev` 打开 Poria
+        1. `cargo tauri dev` 打开 Poria
         2. 登录 SSO
         3. 打开需求列表，勾选「由我受理」
         4. 看到……
@@ -58,10 +58,10 @@ body:
         - 需求列表
         - 仓库克隆 / 仓库列表
         - 流水线看板 / 人工介入
+        - 技能 / 工作区（侧栏）
         - Init
         - ReviewPrd
         - Design
-        - Workspace
         - Dev
         - Cr
         - Deploy
@@ -77,7 +77,7 @@ body:
       label: 运行环境
       description: IPC 相关问题请选择桌面窗口，不要选「仅 Vite :1420」。
       options:
-        - 本仓库 debug（pnpm tauri dev）
+        - 本仓库 debug（cargo tauri dev）
         - 正式版 DMG（/Applications/Poria.app）
         - 仅 Vite :1420（无 IPC，不适合复现登录/需求/流水线）
         - 其他

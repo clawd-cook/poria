@@ -105,7 +105,7 @@ EasyCI `createChange` 只能 `SELECT` 远端已存在的分支：**先 push 再�
 
 ## 发布（维护者）
 
-打 tag 触发 GitHub Actions。当前 `pre-publish.yml` / `publish.yml` 只编 **`aarch64-apple-darwin`** DMG。有 `APPLE_*` secret 则公证签名，没有则 ad-hoc 签名并继续出包。
+打 tag 触发 GitHub Actions。当前 `pre-publish.yml` / `publish.yml` 只编 **`aarch64-apple-darwin`** DMG。有 `APPLE_*` secret 则公证签名，没有则 ad-hoc 签名并继续出包。行为规格见 [spec/README.md](spec/README.md)。
 
 | Tag | Workflow |
 |---|---|

@@ -1,3 +1,4 @@
+# Behavior: spec/spec-process-cicd-setup-macos-tauri.md
 name: Setup macOS Tauri toolchain
 description: Install Rust, restore cargo target cache, and install a prebuilt tauri-cli
 

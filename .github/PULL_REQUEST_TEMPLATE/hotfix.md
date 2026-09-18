@@ -5,7 +5,7 @@
 <!-- 哪个正式版本 / tag 坏了？是 DMG 还是 debug 窗口？ -->
 
 - 版本 / tag：
-- 运行环境：正式 DMG（`/Applications/Poria.app`） / `pnpm tauri dev`
+- 运行环境：正式 DMG（`/Applications/Poria.app`） / `cargo tauri dev`
 - 出问题的位置：登录 / 需求 / 克隆 / 流水线 / 发布 / 其他
 
 Fixes #
@@ -32,7 +32,7 @@ Fixes #
 
 #### 热修前
 
-1. 注明用的是正式 DMG 还是 `pnpm tauri dev`
+1. 注明用的是正式 DMG 还是 `cargo tauri dev`
 2.
 3.
 

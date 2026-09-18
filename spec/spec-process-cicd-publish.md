@@ -1,294 +1,127 @@
 ---
-title: CI/CD Workflow Specification - Publish (Stable)
-version: 1.1
-date_created: 2026-09-17
-last_updated: 2026-09-17
-owner: DevOps Team
-tags: [process, cicd, github-actions, automation, tauri, macos, release, stable, ga]
+title: CI/CD workflow specification: Publish (Stable)
+owner: clawd-cook
+tags: [process, cicd, github-actions, tauri, macos, release, stable]
+source: .github/workflows/publish.yml
 ---
 
-## Workflow Overview
+## Workflow overview
 
-**Purpose**: Build macOS Tauri installers for ARM64 and Intel, then publish them as the GitHub latest (non-prerelease) release for a stable version tag. Apple signing and notarization are used when secrets exist; otherwise the job falls back to ad-hoc signing (same as beta).
-**Trigger Events**: Push of a stable semantic version tag (`vX.Y.Z` with no prerelease suffix)
-**Target Environments**: macOS (aarch64 + x86_64) production distribution via GitHub Releases
+**Purpose**: On a stable version tag, build one Apple Silicon macOS DMG and publish it as the GitHub **latest** (non-prerelease) release.
+**Trigger**: Push of `v*.*.*` excluding `v*-beta*`, `v*-rc*`, `v*-alpha*`.
+**Target**: macOS `aarch64-apple-darwin` distribution only.
 
-This workflow is the GA counterpart of [Pre-Publish (Beta)](./spec-process-cicd-pre-publish.md). Beta tags must never enter this path.
+Sibling: [Pre-Publish (Beta)](./spec-process-cicd-pre-publish.md). Beta tags must never enter this path.
 
-## Execution Flow Diagram
+## Execution flow
 
 ```mermaid
 graph TD
-    A[Tag Push: vX.Y.Z] --> B[Validate stable tag]
-    B --> D[Build macOS aarch64]
-    B --> E[Build macOS x64]
-    D --> F[Create GitHub latest release]
-    E --> F
-    F --> G[Latest release with DMGs]
+    A[Tag push vX.Y.Z] --> B[Validate stable tag]
+    B --> C[Build macOS aarch64]
+    C --> D[Create GitHub latest release]
+    D --> E[Latest release with DMG]
 
     style A fill:#e1f5fe
-    style G fill:#e8f5e8
+    style E fill:#e8f5e8
     style B fill:#f3e5f5
-    style D fill:#fff3e0
-    style E fill:#fff3e0
-    style F fill:#e8f5e8
+    style C fill:#fff3e0
+    style D fill:#e8f5e8
 ```
 
-## Jobs & Dependencies
+## Jobs and dependencies
 
-| Job Name | Purpose | Dependencies | Execution Context |
-|----------|---------|--------------|-------------------|
-| validate | Extract version; reject beta/rc/alpha and non-semver tags | none | ubuntu-latest |
-| build-macos (x2) | Typecheck, bundle, sign (or ad-hoc), and package DMG per arch | validate | macos-latest (matrix) |
-| create-release | Publish GitHub latest release with both DMGs + checksums | validate, build-macos | ubuntu-latest |
+| Job | Purpose | Depends on | Runner |
+| --- | --- | --- | --- |
+| validate | Accept only `vX.Y.Z`; emit `tag` and `version` | none | ubuntu-latest |
+| build-macos | Typecheck, bundle, sign or ad-hoc, package DMG | validate | macos-latest, matrix arch `aarch64` |
+| create-release | Latest release with DMG, SHA-256, install notes | validate, build-macos | ubuntu-latest |
 
-## Requirements Matrix
+## Requirements
 
-### Functional Requirements
+| ID | Requirement | Priority | Acceptance |
+| --- | --- | --- | --- |
+| REQ-001 | Tag is exact `vX.Y.Z` | High | Reject prerelease suffixes and `v1.0` |
+| REQ-002 | Trigger excludes beta, rc, alpha | High | Those tags never start this workflow |
+| REQ-003 | One Apple Silicon DMG | High | Asset `Poria-{VERSION}-aarch64.dmg` |
+| REQ-004 | Do not build Intel | High | Matrix has no `x86_64-apple-darwin` |
+| REQ-005 | Sync tag version into bundle metadata | High | `tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json` equal `VERSION` |
+| REQ-006 | GitHub latest, not prerelease | High | `--latest`; existing betas stay prerelease |
+| REQ-007 | Frontend typecheck before bundle | Medium | Typecheck job step passes |
+| REQ-008 | Missing Apple certificate still yields a DMG | High | Ad-hoc sign; notes mention `xattr -cr` |
+| REQ-009 | DMG larger than 1 MB | High | Smaller file fails the build |
+| REQ-010 | SHA-256 in notes | Medium | Checksums listed |
 
-| ID | Requirement | Priority | Acceptance Criteria |
-|----|-------------|----------|-------------------|
-| REQ-001 | Tag must be exact `vX.Y.Z` (no suffix) | High | Rejects `v1.0.1-beta.1`, `v1.0.1-rc.1`, `v1.0.1-alpha.1`, `v1.0` |
-| REQ-002 | Beta tags never run this workflow | High | `v*-beta*` is excluded at trigger and at validate |
-| REQ-003 | Build DMG for Apple Silicon (aarch64) | High | Valid signed DMG artifact `Poria-{VERSION}-aarch64.dmg` |
-| REQ-004 | Build DMG for Intel (x86_64) | High | Valid signed DMG artifact `Poria-{VERSION}-x64.dmg` |
-| REQ-005 | Version synced into all build configs | High | `tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json` match tag version |
-| REQ-006 | GitHub **latest** release (not prerelease) | High | Release is not marked prerelease; becomes latest for the repo |
-| REQ-007 | Frontend typechecked before bundle | Medium | Frontend typecheck passes |
-| REQ-008 | Cargo workspace + desktop binary compile | High | Both matrix legs produce a DMG |
-| REQ-009 | Apple Developer signing when secrets exist | High | Certificate present → Developer ID sign; absent → ad-hoc, job still succeeds |
-| REQ-010 | Apple notarization when identity exists | High | Identity present → notarize; absent → skip, do not fail the job |
-| REQ-011 | Release notes cover unsigned Gatekeeper workaround | High | Notes include `xattr -cr` when ad-hoc signing is used |
-| REQ-012 | SHA-256 of both DMGs published | Medium | Checksums in release notes and/or assets |
+### Security
 
-### Security Requirements
+| ID | Constraint |
+| --- | --- |
+| SEC-001 | Apple certificate, notarization identity, and Tauri updater key are optional secrets |
+| SEC-002 | `contents: write` only; do not echo secrets |
+| SEC-003 | Artifacts are installers only |
 
-| ID | Requirement | Implementation Constraint |
-|----|-------------|---------------------------|
-| SEC-001 | Apple signing identity optional | Certificate stored as encrypted secret; ad-hoc fallback when unset |
-| SEC-002 | Notarization identity optional | Apple ID, app-specific password, and team ID used when all present |
-| SEC-003 | Tauri updater signing key | Private key from secrets when updater is enabled |
-| SEC-004 | Contents write only | Workflow token limited to creating/updating the release for that tag |
-| SEC-005 | No secret leakage | Secrets never echoed; artifacts are installers only |
+### Performance
 
-### Performance Requirements
+| ID | Metric | Target |
+| --- | --- | --- |
+| PERF-001 | Validate timeout | 5 min |
+| PERF-002 | Build timeout | 30 min |
+| PERF-003 | Release timeout | 10 min |
 
-| ID | Metric | Target | Measurement Method |
-|----|--------|--------|--------------------|
-| PERF-001 | Validate duration | ≤ 5 min | Job timeout |
-| PERF-002 | Per-arch build duration | ≤ 30 min | Job timeout |
-| PERF-003 | Release publish duration | ≤ 10 min | Job timeout |
-| PERF-004 | End-to-end | Both arch jobs in parallel; total wall clock ≈ one build | GitHub Actions run timeline |
+## Input and output
 
-## Input/Output Contracts
+**Inputs**
 
-### Inputs
+- Include: `v*.*.*`. Exclude: `v*-beta*`, `v*-rc*`, `v*-alpha*`.
+- Pins: Node `24.20.0`, pnpm `11.23.0`.
+- Derived: `VERSION` must match `^[0-9]+\.[0-9]+\.[0-9]+$`.
 
-```yaml
-# Repository Triggers
-tags:
-  include: v*.*.*          # Candidate stable tags
-  exclude: v*-beta*, v*-rc*, v*-alpha*
+**Outputs**
 
-# Environment Constants
-NODE_VERSION: pinned Node 24.20.x
-PNPM_VERSION: pinned pnpm 11.23.x
+- Job: `version`, `tag`
+- Artifact: `Poria-{VERSION}-aarch64.dmg`
+- GitHub release title `Poria Desktop {VERSION}`, marked latest
 
-# Derived
-TAG: github.ref without refs/tags/
-VERSION: TAG without leading v  # must match X.Y.Z
-```
+**Secrets**: same optional Apple / Tauri names as the beta workflow; `github.token` for `gh release create`.
 
-### Outputs
+## Execution constraints
 
-```yaml
-# Job outputs (validate)
-version: string   # e.g. 1.0.1
-tag: string       # e.g. v1.0.1
+- Concurrency: one run per tag ref; cancel in-progress retries of the same tag.
+- Shared toolchain: [Setup macOS Tauri](./spec-process-cicd-setup-macos-tauri.md) with `save-cache: false`.
+- Workflow file on the **tagged commit** is what runs.
 
-# Build artifacts (7-day retention, then attached to the release)
-Poria-{VERSION}-aarch64.dmg: file
-Poria-{VERSION}-x64.dmg: file
+## Error handling
 
-# GitHub Release
-kind: latest (not prerelease)
-title: Poria Desktop {VERSION}
-assets: both DMGs
-notes: download table, signed-install steps, SHA-256
-```
+| Error | Response | Recovery |
+| --- | --- | --- |
+| `v1.0.1-beta.1` or `v1.0.1-rc.1` | Do not start, or fail validate | Use the beta workflow or a stable tag |
+| Typecheck or compile failure | Fail build | New patch tag after the fix |
+| Empty Apple certificate | Ad-hoc sign, still publish as latest | Configure secrets later |
+| Notarization rejected when identity is set | Fail build | Inspect Apple log |
+| Duplicate GitHub release for the tag | Fail release | Operator deletes the release or uses a new tag |
 
-### Secrets & Variables
+## Quality gates
 
-| Type | Name | Purpose | Scope | Required |
-|------|------|---------|-------|----------|
-| Secret | APPLE_CERTIFICATE | Code signing identity (base64 p12) | Workflow | No |
-| Secret | APPLE_CERTIFICATE_PASSWORD | P12 passphrase | Workflow | No |
-| Secret | APPLE_ID | Notarization Apple ID | Workflow | No |
-| Secret | APPLE_PASSWORD | Notarization app-specific password | Workflow | No |
-| Secret | APPLE_TEAM_ID | Team ID for notarization | Workflow | No |
-| Secret | TAURI_SIGNING_PRIVATE_KEY | Tauri updater signing | Workflow | Optional |
-| Token | github.token | Create GitHub release | Workflow | Yes (default) |
+| Gate | Bypass |
+| --- | --- |
+| Tag regex `^[0-9]+\.[0-9]+\.[0-9]+$` after stripping `v` | None |
+| Frontend typecheck | None |
+| Tauri bundle for `aarch64-apple-darwin` | None |
+| Apple identity | Skip; ad-hoc |
+| DMG &gt; 1 MB | None |
+| Release is latest, not prerelease | None |
 
-## Execution Constraints
+## Edge cases
 
-### Runtime Constraints
+| Scenario | Expected behavior |
+| --- | --- |
+| `v1.2.3-beta.1` | This workflow does not start |
+| Stable tag while a beta release exists | This release becomes latest; beta stays prerelease |
+| Tag not on `main` | Builds the tagged commit |
 
-- **Timeout**: 5 min (validate), 30 min (build), 10 min (release)
-- **Concurrency**: One run per tag ref; cancel in-progress retries of the same tag
-- **Permissions**: `contents: write` for release creation
-- **Fail-fast (matrix)**: false — one arch failure must not hide the other arch’s logs
+## Related
 
-### Environmental Constraints
-
-- **Runner**: Linux for validate/release; macOS for both architecture builds
-- **Network**: crates.io, npm registry, Apple notarization service, GitHub Releases API
-- **Project layout**: Cargo workspace at repo root; Tauri in `src-tauri/`; frontend at `src/`
-- **No `apps/desktop/` nesting**
-
-### Build Steps (per arch)
-
-1. Checkout the tag
-2. Activate pinned Node + pnpm
-3. Install Rust toolchain with the matrix target
-4. Cache Cargo registry/git + workspace `target`
-5. Install Tauri CLI
-6. Sync `VERSION` into `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json`
-7. Install frontend deps from lockfile
-8. Frontend typecheck
-9. Import Apple signing identity (required)
-10. Bundle with notarization environment present (required)
-11. Copy produced DMG to `Poria-{VERSION}-{arch}.dmg`
-12. Reject DMG smaller than 1 MB
-13. Upload artifact
-
-## Error Handling Strategy
-
-| Error Type | Response | Recovery Action |
-|------------|----------|-----------------|
-| Invalid or prerelease tag | Fail validate | Do not publish; use beta workflow or retag `vX.Y.Z` |
-| Missing Apple signing/notarization secrets | Ad-hoc sign and still publish | Configure secrets later to drop `xattr -cr` |
-| Typecheck failure | Fail build | Fix TypeScript; move tag or push a new patch tag |
-| Rust compilation error | Fail build | Fix crates; new tag |
-| Notarization rejected | Fail build | Inspect Apple notarization log; fix entitlements/signing |
-| DMG too small (<1 MB) | Fail build | Inspect bundle output |
-| One arch fails, other succeeds | Release job blocked | Fix failed arch; re-run workflow |
-| Duplicate GitHub release for tag | Fail release | Delete or reuse existing release only via explicit operator action |
-| Beta tag accidentally matching glob | Validate rejects; trigger exclusion should prevent start | Keep exclude filters + regex |
-
-## Quality Gates
-
-### Gate Definitions
-
-| Gate | Criteria | Bypass Conditions |
-|------|----------|-------------------|
-| Tag format | `^v?[0-9]+\.[0-9]+\.[0-9]+$` after stripping `v` | None |
-| Not a prerelease tag | No `-beta` / `-rc` / `-alpha` / other `-` suffix | None |
-| TypeScript | Frontend typecheck passes | None |
-| Rust + Tauri bundle | Both matrix targets succeed | None |
-| Apple identity | Secrets present → Developer ID + notarize | Allowed to skip; ad-hoc fallback |
-| DMG size | > 1 MB | None |
-| Release kind | Latest, not prerelease | None |
-
-## Monitoring & Observability
-
-### Key Metrics
-
-- **Success Rate**: 100% of valid stable tags should produce a latest release
-- **Execution Time**: < 30 min per architecture
-- **Artifact Size**: DMG typically 10–100 MB
-- **Release freshness**: Published release tag equals the triggering tag
-
-### Alerting
-
-| Condition | Severity | Notification Target |
-|-----------|----------|---------------------|
-| Validate or build failure on a stable tag | High | Repository Actions UI; release owner |
-| Missing Apple secrets | High | Secret administrators |
-| Notarization failure | High | macOS signing owner |
-
-## Integration Points
-
-### External Systems
-
-| System | Integration Type | Data Exchange | SLA Requirements |
-|--------|------------------|---------------|------------------|
-| GitHub Releases | Publish | DMG assets + notes | Tag-triggered; idempotent per tag |
-| Apple Developer / notary | Sign + notarize | Signed app bundle | Must succeed before GA publish |
-| npm / crates.io | Build-time fetch | Lockfile-pinned deps | Frozen lockfile |
-
-### Dependent Workflows
-
-| Workflow | Relationship | Trigger Mechanism |
-|----------|--------------|-------------------|
-| Pre-Publish (Beta) | Sibling; never same tag | `v*-beta*` tags only |
-| This workflow | GA | `vX.Y.Z` tags only |
-
-## Compliance & Governance
-
-### Audit Requirements
-
-- **Execution logs**: GitHub Actions retention (default)
-- **Release assets**: Remain on the GitHub release until manually deleted
-- **Approval**: Tag push to the default protected branch is the human gate; workflow itself is automatic after a valid tag
-- **Change control**: Update this spec before changing the workflow file
-
-### Security Controls
-
-- **Access control**: Only maintainers who can push tags to the default branch can start GA
-- **Secret management**: Apple and updater keys live in GitHub Secrets; rotate with the Apple team
-- **Vulnerability scanning**: Not in this workflow’s scope (separate CI)
-
-## Edge Cases & Exceptions
-
-### Scenario Matrix
-
-| Scenario | Expected Behavior | Validation Method |
-|----------|-------------------|-------------------|
-| Tag `v1.0.1-beta.15` | This workflow does not run (or validate fails) | Trigger exclude + regex |
-| Tag `v1.0.1` on main | Builds from that tag; latest GitHub release | Release URL and assets |
-| Tag `v1.0.1` while a beta release exists | GA is latest; beta remains prerelease | GitHub latest points at GA |
-| Missing `APPLE_CERTIFICATE` | Ad-hoc signing, `xattr` instructions in notes | DMG still produced |
-| Tag not on main | Still builds the tagged commit | Operators should tag main |
-| Concurrent tags | Isolated by ref concurrency group | One run per tag |
-| Re-run of the same tag | Cancels in-progress duplicate; may fail if release already exists | Operator deletes or uses a patch tag |
-| Cargo.lock drift | Frozen install / compile fails | Keep lockfile committed |
-
-## Validation Criteria
-
-### Workflow Validation
-
-- **VLD-001**: Only tags matching exact `vX.Y.Z` produce a latest release
-- **VLD-002**: `v*-beta*` continues to use the beta pre-publish workflow exclusively
-- **VLD-003**: Both architecture DMGs are attached
-- **VLD-004**: Release is not marked prerelease
-- **VLD-005**: Notes include SHA-256; unsigned builds include `xattr -cr`
-- **VLD-006**: Version in bundle metadata equals the tag version
-- **VLD-007**: Missing Apple secrets must not fail the job
-
-### Performance Benchmarks
-
-- **PERF-001**: Validate job completes within 5 minutes
-- **PERF-002**: Each macOS matrix job completes within 30 minutes
-- **PERF-003**: Release job completes within 10 minutes after both builds
-
-## Change Management
-
-### Update Process
-
-1. **Specification Update**: Modify this document first
-2. **Review & Approval**: Maintainer review of spec + workflow diff
-3. **Implementation**: Apply changes to `.github/workflows/publish.yml`
-4. **Testing**: Dry-run on a throwaway `v0.0.0` patch tag only if secrets are available; otherwise validate job unit via a rejected tag
-5. **Deployment**: Merged workflow is live for the next stable tag
-
-### Version History
-
-| Version | Date | Changes | Author |
-|---------|------|---------|--------|
-| 1.0 | 2026-09-17 | Initial GA publish specification | heyongqi10 |
-| 1.1 | 2026-09-17 | Apple secrets optional; ad-hoc fallback matches beta | heyongqi10 |
-
-## Related Specifications
-
-- [Pre-Publish (Beta)](./spec-process-cicd-pre-publish.md) — prerelease path for `vX.Y.Z-beta.N`
-- `AGENTS.md` — local toolchain pins (Node 24.20.0, pnpm 11.23.0) and beta tag recipe
+- Implementation: `.github/workflows/publish.yml`
+- [Pre-Publish (Beta)](./spec-process-cicd-pre-publish.md)
+- [Warm Rust cache](./spec-process-cicd-warm-rust-cache.md)
+- [Setup macOS Tauri](./spec-process-cicd-setup-macos-tauri.md)

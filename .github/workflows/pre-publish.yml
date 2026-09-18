@@ -1,3 +1,5 @@
+# Behavior: spec/spec-process-cicd-pre-publish.md
+# Apple Silicon DMG only. Workflow file on the tagged commit is what runs.
 name: Pre-Publish (Beta)
 
 on:
