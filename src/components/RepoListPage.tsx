@@ -1,10 +1,10 @@
-import { ReloadOutlined } from "@ant-design/icons";
+import { ReloadOutlined, SyncOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Flex, Input, Tag, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { invokeErrorMessage } from "../lib/errors";
-import { registerRepo, retryClone } from "../lib/tauri";
-import type { CloneStatus, RegisteredRepo } from "../lib/types";
+import { registerRepo, retryClone, syncRepo, updateRepoDefaultBranch } from "../lib/tauri";
+import type { CloneStatus, RegisteredRepo, RepoSyncStatus } from "../lib/types";
 import { useStore } from "../state/store";
 
 const { Text, Title } = Typography;
@@ -13,6 +13,13 @@ const STATUS_CONFIG: Record<CloneStatus, { color: string; label: string }> = {
   cloning: { color: "processing", label: "进行中" },
   failed: { color: "error", label: "失败" },
   ready: { color: "success", label: "成功" },
+};
+
+const SYNC_CONFIG: Record<RepoSyncStatus, { color: string; label: string }> = {
+  failed: { color: "error", label: "同步失败" },
+  idle: { color: "default", label: "未同步" },
+  synced: { color: "success", label: "已同步" },
+  syncing: { color: "processing", label: "同步中" },
 };
 
 function groupReposByScope(repos: RegisteredRepo[]): { scope: string; repos: RegisteredRepo[] }[] {
@@ -30,12 +37,25 @@ function groupReposByScope(repos: RegisteredRepo[]): { scope: string; repos: Reg
     .map(([scope, items]) => ({ repos: items, scope }));
 }
 
+function formatSyncTime(value: string | null): string {
+  if (!value) {
+    return "尚未同步";
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+  return new Date(parsed).toLocaleString();
+}
+
 export function RepoListPage() {
   const { state } = useStore();
   const { message } = App.useApp();
   const [gitUrl, setGitUrl] = useState("");
   const [registering, setRegistering] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [savingBranchId, setSavingBranchId] = useState<string | null>(null);
 
   const groups = groupReposByScope(state.repos);
 
@@ -66,6 +86,43 @@ export function RepoListPage() {
       message.error(invokeErrorMessage(error, "重试失败"));
     } finally {
       setRetryingId(null);
+    }
+  }
+
+  async function handleSync(id: string) {
+    setSyncingId(id);
+    try {
+      const updated = await syncRepo(id);
+      if (updated.sync_status === "failed") {
+        message.error(updated.sync_error || "同步失败");
+      } else {
+        message.success("已同步主分支");
+      }
+    } catch (error) {
+      message.error(invokeErrorMessage(error, "同步失败"));
+    } finally {
+      setSyncingId(null);
+    }
+  }
+
+  async function handleSaveBranch(id: string, defaultBranch: string) {
+    const trimmed = defaultBranch.trim();
+    if (!trimmed) {
+      message.error("主分支不能为空");
+      return;
+    }
+    setSavingBranchId(id);
+    try {
+      const updated = await updateRepoDefaultBranch(id, trimmed);
+      if (updated.sync_status === "failed") {
+        message.warning(updated.sync_error || "主分支已保存，但同步失败");
+      } else {
+        message.success("已保存主分支并同步");
+      }
+    } catch (error) {
+      message.error(invokeErrorMessage(error, "保存主分支失败"));
+    } finally {
+      setSavingBranchId(null);
     }
   }
 
@@ -110,8 +167,16 @@ export function RepoListPage() {
                     onRetry={() => {
                       void handleRetry(repo.id);
                     }}
+                    onSaveBranch={(branch) => {
+                      void handleSaveBranch(repo.id, branch);
+                    }}
+                    onSync={() => {
+                      void handleSync(repo.id);
+                    }}
                     repo={repo}
                     retrying={retryingId === repo.id}
+                    savingBranch={savingBranchId === repo.id}
+                    syncing={syncingId === repo.id || repo.sync_status === "syncing"}
                   />
                 ))}
               </Flex>
@@ -125,14 +190,29 @@ export function RepoListPage() {
 
 function RepoRow({
   onRetry,
+  onSaveBranch,
+  onSync,
   repo,
   retrying,
+  savingBranch,
+  syncing,
 }: {
   onRetry: () => void;
+  onSaveBranch: (branch: string) => void;
+  onSync: () => void;
   repo: RegisteredRepo;
   retrying: boolean;
+  savingBranch: boolean;
+  syncing: boolean;
 }) {
   const status = STATUS_CONFIG[repo.clone_status];
+  const sync = SYNC_CONFIG[repo.sync_status];
+  const [branch, setBranch] = useState(repo.default_branch || "master");
+  useEffect(() => {
+    setBranch(repo.default_branch || "master");
+  }, [repo.default_branch]);
+  const branchDirty = branch.trim() !== (repo.default_branch || "master");
+  const ready = repo.clone_status === "ready";
 
   return (
     <Flex
@@ -146,12 +226,15 @@ function RepoRow({
       }}
     >
       <Flex gap={4} style={{ minWidth: 0 }} vertical>
-        <Flex align="center" gap={8}>
+        <Flex align="center" gap={8} wrap>
           <Text ellipsis strong>
             {repo.name}
           </Text>
           <Tag color={status.color} style={{ margin: 0 }}>
             {status.label}
+          </Tag>
+          <Tag color={sync.color} style={{ margin: 0 }}>
+            {sync.label}
           </Tag>
         </Flex>
         <Text copyable ellipsis type="secondary">
@@ -160,15 +243,52 @@ function RepoRow({
         <Text ellipsis type="secondary">
           {repo.local_path}
         </Text>
+        <Text type="secondary">最近同步：{formatSyncTime(repo.last_synced_at)}</Text>
+        <Flex align="center" gap={8}>
+          <Text style={{ flex: "0 0 auto" }}>主分支</Text>
+          <Input
+            aria-label="主分支"
+            disabled={!ready || savingBranch || syncing}
+            onChange={(event) => setBranch(event.target.value)}
+            onPressEnter={() => {
+              if (ready && branchDirty) {
+                onSaveBranch(branch);
+              }
+            }}
+            size="small"
+            style={{ maxWidth: 180 }}
+            value={branch}
+          />
+          <Button
+            disabled={!ready || !branchDirty || !branch.trim()}
+            loading={savingBranch}
+            onClick={() => {
+              onSaveBranch(branch);
+            }}
+            size="small"
+          >
+            保存
+          </Button>
+        </Flex>
         {repo.clone_status === "failed" && repo.error ? (
           <Text type="danger">{repo.error}</Text>
         ) : null}
+        {repo.sync_status === "failed" && repo.sync_error ? (
+          <Text type="danger">{repo.sync_error}</Text>
+        ) : null}
       </Flex>
-      {repo.clone_status === "failed" ? (
-        <Button icon={<ReloadOutlined />} loading={retrying} onClick={onRetry} size="small">
-          重试
-        </Button>
-      ) : null}
+      <Flex gap={8}>
+        {ready ? (
+          <Button icon={<SyncOutlined />} loading={syncing} onClick={onSync} size="small">
+            同步
+          </Button>
+        ) : null}
+        {repo.clone_status === "failed" ? (
+          <Button icon={<ReloadOutlined />} loading={retrying} onClick={onRetry} size="small">
+            重试
+          </Button>
+        ) : null}
+      </Flex>
     </Flex>
   );
 }

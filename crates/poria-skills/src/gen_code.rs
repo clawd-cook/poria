@@ -65,18 +65,10 @@ fn extra_path<'a>(input: &'a SkillInput, key: &str) -> Option<&'a str> {
         .filter(|value| !value.is_empty())
 }
 
-fn resolve_feature_dir(input: &SkillInput, ctx: &SkillContext) -> Result<String, &'static str> {
+fn resolve_feature_dir(input: &SkillInput, _ctx: &SkillContext) -> Result<String, &'static str> {
     extra_path(input, "feature_dir")
         .map(str::to_string)
         .or_else(|| input.pipeline.config.project_dir.clone())
-        .or_else(|| {
-            let workdir = ctx.workdir.trim();
-            if workdir.is_empty() {
-                None
-            } else {
-                Some(workdir.to_string())
-            }
-        })
         .ok_or("missing feature_dir in skill input")
 }
 

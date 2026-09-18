@@ -16,7 +16,6 @@ pub async fn list_skills() -> Result<Vec<SkillInfo>, String> {
         Box::new(poria_skills::InitSkill::new()),
         Box::new(poria_skills::ReviewPrdSkill::new()),
         Box::new(poria_skills::GenTrdSkill::new()),
-        Box::new(poria_skills::WorkspaceSkill::new()),
         Box::new(poria_skills::GenCodeSkill::new()),
         Box::new(poria_skills::CodeReviewSkill::new()),
         Box::new(poria_skills::DeploySkill::new()),

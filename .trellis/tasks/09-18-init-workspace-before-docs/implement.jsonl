@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "阶段顺序、backend_context vs pipeline.repos、文档路径 vs worktree 跨层契约"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "submit_pipeline / 仓库页 / 流水线只能在 Poria 窗口验证"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端 STAGE_ORDER 与仓库 Tab 走现有 store，不另起状态"}
+{"file": ".trellis/spec/frontend/claude-cli.md", "reason": "Agent 仍走 claude -p；只改 cwd 与产物绝对路径"}
+{"file": ".trellis/tasks/09-17-start-pipeline/prd.md", "reason": "前端唯一 repos、后端 context、JoySpace 文档职责"}
+{"file": ".trellis/tasks/09-17-delivery-workspace/prd.md", "reason": "后端不得进入 pipeline.repos，避免 multi-repo 交付"}
+{"file": ".trellis/tasks/09-17-repo-registry/prd.md", "reason": "登记仓路径与 clone_status 基线，本次加主分支与同步"}

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 STAGE_ORDER、repos 长度、backend worktree 路径、文档仍在 ~/.poria/projects"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "检查未用 Vite 1420 冒充桌面验证"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "检查仓库页与阶段条改动未另起 store"}
+{"file": ".trellis/tasks/09-17-start-pipeline/prd.md", "reason": "检查后端仍不进 pipeline.repos、TRD.md 不被后端覆盖"}
+{"file": "AGENTS.md", "reason": "检查阶段表、产物路径、Deploy 提交范围与实现一致"}

@@ -29,15 +29,38 @@ fn build_rollback_instructions(stage: &Stage, _pipeline: &Pipeline) -> Option<Ro
         .unwrap_or(0) as i32;
     let mut commands: Vec<RollbackCommand> = Vec::new();
 
-    if stage.name == StageEnum::Workspace {
+    if stage.name == StageEnum::Init {
         if let Some(output) = &stage.output {
-            if let Some(path) = output.get("worktreePath").and_then(|v| v.as_str()) {
+            let frontend_path = output
+                .get("worktreePath")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    output
+                        .get("repos")
+                        .and_then(|repos| repos.as_array())
+                        .and_then(|repos| repos.first())
+                        .and_then(|repo| repo.get("worktreePath"))
+                        .and_then(|v| v.as_str())
+                });
+            if let Some(path) = frontend_path {
                 commands.push(RollbackCommand {
                     command_type: RollbackCommandType::RemoveWorktree,
                     params: [("path".into(), path.into())].into_iter().collect(),
                 });
             }
-            if let Some(branch) = output.get("branch").and_then(|v| v.as_str()) {
+            if let Some(path) = output.get("backendWorktreePath").and_then(|v| v.as_str()) {
+                commands.push(RollbackCommand {
+                    command_type: RollbackCommandType::RemoveWorktree,
+                    params: [("path".into(), path.into())].into_iter().collect(),
+                });
+            }
+            if let Some(branch) = output
+                .get("repos")
+                .and_then(|repos| repos.as_array())
+                .and_then(|repos| repos.first())
+                .and_then(|repo| repo.get("branch"))
+                .and_then(|v| v.as_str())
+            {
                 commands.push(RollbackCommand {
                     command_type: RollbackCommandType::DeleteBranch,
                     params: [("branch".into(), branch.into())].into_iter().collect(),
@@ -550,3 +573,79 @@ enum GateAction {
     Regress,
     Blocked,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use poria_core::types::{PipelineConfig, StageStatus};
+    use serde_json::json;
+
+    fn init_stage_with_output(output: serde_json::Value) -> Stage {
+        Stage {
+            id: None,
+            pipeline_id: "p1".into(),
+            name: StageEnum::Init,
+            status: StageStatus::Completed,
+            skill_id: Some("skill:init".into()),
+            retry_count: 0,
+            max_retries: 3,
+            input: None,
+            output: Some(output),
+            gate_results: None,
+            issue: None,
+            rollback: None,
+            agent_session_id: None,
+            started_at: None,
+            completed_at: None,
+        }
+    }
+
+    fn dummy_pipeline() -> Pipeline {
+        Pipeline {
+            id: "p1".into(),
+            demand_id: 1,
+            demand_code: "R1".into(),
+            demand_name: None,
+            status: PipelineStatus::Running,
+            raw_link: String::new(),
+            operator: "tester".into(),
+            has_regressed: false,
+            config: PipelineConfig::default(),
+            stages: vec![],
+            repos: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn init_rollback_includes_frontend_and_backend_worktrees() {
+        let stage = init_stage_with_output(json!({
+            "worktreePath": "/tmp/.poria/worktrees/p1/fe",
+            "backendWorktreePath": "/tmp/.poria/worktrees/p1/be",
+            "repos": [{
+                "branch": "feature_R1",
+                "worktreePath": "/tmp/.poria/worktrees/p1/fe"
+            }]
+        }));
+        let rollback = build_rollback_instructions(&stage, &dummy_pipeline()).unwrap();
+        let paths: Vec<_> = rollback
+            .commands
+            .iter()
+            .filter(|cmd| cmd.command_type == RollbackCommandType::RemoveWorktree)
+            .filter_map(|cmd| cmd.params.get("path").map(String::as_str))
+            .collect();
+        assert_eq!(
+            paths,
+            vec![
+                "/tmp/.poria/worktrees/p1/fe",
+                "/tmp/.poria/worktrees/p1/be"
+            ]
+        );
+        assert!(rollback.commands.iter().any(|cmd| {
+            cmd.command_type == RollbackCommandType::DeleteBranch
+                && cmd.params.get("branch").map(String::as_str) == Some("feature_R1")
+        }));
+    }
+}
+

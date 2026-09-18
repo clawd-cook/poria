@@ -192,11 +192,11 @@ Prompt vars injected by `insert_backend_coding_aid_vars` into `trd_gen.md` / `co
 | Layer | Owns |
 | --- | --- |
 | Wizard | Both URLs required + distinct; PRD prefill via `preview_demand_prd`; backend TRD is paste-only |
-| `submit_pipeline` | Persist `config.backend_trd_url`; `pipeline.repos` length 1 (frontend). Backend lives in `backend_context` only |
+| `submit_pipeline` | Persist `config.backend_trd_url`; `pipeline.repos` length 1 (frontend). Frontend `base_branch` = registered `default_branch`. Backend lives in `backend_context` only |
 | Feature artifacts | Frontend design is `TRD.md`. Optional export is `BACKEND_TRD.md`. Never overwrite `TRD.md` with backend TRD |
 | `gen_trd` / `gen_code` | Read `input.pipeline.config` + optional artifact; prompts are read-only FE coding aid; do not modify the backend repo |
 
-JoySpace live Markdown export is Init: SSO Cookie + `POST /v1/pages/content`, files land in `~/.poria/projects/<demand_code>/` (`PRD.md`, `BACKEND_TRD.md`). Demand list 「文档」 reads that folder. A non-empty `backend_trd_url` is still injected so later agents can open the link.
+JoySpace live Markdown export is Init: SSO Cookie + `POST /v1/pages/content`, files land in `~/.poria/projects/<demand_code>/` (`PRD.md`, `BACKEND_TRD.md`, later `PRD_REVIEW.md` / `TRD.md`). Demand list 「文档」 reads that folder. Init then syncs hosted clones and creates frontend feature + backend detached worktrees before ReviewPrd. After Init, `backend_context.local_path` is the backend worktree. A non-empty `backend_trd_url` is still injected so later agents can open the link. See [Pipeline Init Workspace](./pipeline-workspace.md).
 
 ### 4. Validation & Error Matrix
 

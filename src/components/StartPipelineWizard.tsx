@@ -265,7 +265,7 @@ export function StartPipelineWizard({
 
       {step === 0 ? (
         <Flex gap={8} vertical>
-          <Text>选择前端仓库。不选分支，使用托管副本当前检出作为 base_branch。</Text>
+          <Text>选择前端仓库。功能分支基于该仓登记的主分支创建。</Text>
           <Select
             onChange={(value) => {
               setFrontendRepoId(value);

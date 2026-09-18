@@ -4,8 +4,8 @@
 
 ## 上下文
 
-- 项目根目录：`{{project_root}}`
-- Feature 目录：`{{feature_dir}}`
+- 项目根目录（前端 worktree，可读代码）：`{{project_root}}`
+- Feature 目录（文档权威路径）：`{{feature_dir}}`
 - PRD 内容：{{prd_content}}
 - PRD_REVIEW 内容：{{prd_review_content}}
 - 后端 TRD URL（只读参考，**不是**前端 `TRD.md`）：{{backend_trd_url}}
@@ -138,7 +138,8 @@
 
 ## 硬约束
 
-- 禁止停下等用户确认范围、API 模式或 grilling；必须在本轮写完 `TRD.md`
+- 禁止停下等用户确认范围、API 模式或 grilling；必须在本轮把 `TRD.md` 写到 `{{feature_dir}}/TRD.md`
+- 禁止把 `TRD.md` / `PRD_REVIEW.md` 写进 git 工作区根目录
 - grilling 用推荐答案写入附录 B；无法推导的 P0 记未确定项，不要因此拒绝落盘
 - 同目录存在 PRD_REVIEW.md 时必须读
 - 有无法推导的 P0 时结论为「有条件开发」，仍须写出 TRD
