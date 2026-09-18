@@ -267,6 +267,93 @@ pub async fn git_fetch(repo_path: &Path) -> Result<(), ResourceError> {
     }
 }
 
+pub async fn git_ref_exists(repo_path: &Path, spec: &str) -> Result<bool, ResourceError> {
+    let output = run_git(
+        &["show-ref", "--verify", "--quiet", spec],
+        Some(repo_path),
+        GIT_QUERY_TIMEOUT_MS,
+    )
+    .await?;
+    Ok(output.status.success())
+}
+
+fn git_output_detail(output: &std::process::Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stderr.trim().is_empty() {
+        stdout.trim().to_string()
+    } else {
+        stderr.trim().to_string()
+    }
+}
+
+/// Fetch origin and fast-forward the hosted clone to `origin/<default_branch>`.
+/// Fails when the working tree is dirty or the update is not a fast-forward.
+pub async fn git_sync_hosted_clone(
+    repo_path: &Path,
+    default_branch: &str,
+) -> Result<(), ResourceError> {
+    let branch = default_branch.trim();
+    if branch.is_empty() {
+        return Err(ResourceError::Other("主分支不能为空".into()));
+    }
+    if branch.contains("..") || branch.starts_with('-') || branch.contains(char::is_whitespace) {
+        return Err(ResourceError::Other("主分支名称不合法".into()));
+    }
+
+    git_fetch(repo_path).await?;
+    if git_has_changes(repo_path).await? {
+        return Err(ResourceError::Other(
+            "托管副本有未提交改动，无法同步".into(),
+        ));
+    }
+
+    let origin_ref = format!("refs/remotes/origin/{branch}");
+    if !git_ref_exists(repo_path, &origin_ref).await? {
+        return Err(ResourceError::Other(format!(
+            "远程不存在 origin/{branch}，无法同步"
+        )));
+    }
+
+    let local_ref = format!("refs/heads/{branch}");
+    let origin_branch = format!("origin/{branch}");
+    if git_ref_exists(repo_path, &local_ref).await? {
+        let checkout = run_git(&["checkout", branch], Some(repo_path), GIT_QUERY_TIMEOUT_MS).await?;
+        if !checkout.status.success() {
+            return Err(ResourceError::Other(format!(
+                "git checkout failed: {}",
+                git_output_detail(&checkout)
+            )));
+        }
+        let merge = run_git(
+            &["merge", "--ff-only", &origin_branch],
+            Some(repo_path),
+            GIT_QUERY_TIMEOUT_MS,
+        )
+        .await?;
+        if !merge.status.success() {
+            return Err(ResourceError::Other(format!(
+                "git merge --ff-only failed: {}",
+                git_output_detail(&merge)
+            )));
+        }
+    } else {
+        let checkout = run_git(
+            &["checkout", "-B", branch, &origin_branch],
+            Some(repo_path),
+            GIT_QUERY_TIMEOUT_MS,
+        )
+        .await?;
+        if !checkout.status.success() {
+            return Err(ResourceError::Other(format!(
+                "git checkout failed: {}",
+                git_output_detail(&checkout)
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// `git status --porcelain` in a worktree.
 pub async fn git_status_porcelain(repo_path: &Path) -> Result<String, ResourceError> {
     let output = run_git(
@@ -547,6 +634,129 @@ mod tests {
             "expected {branch} in {branches:?}"
         );
 
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn unique_temp(prefix: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "{prefix}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    async fn init_bare_origin_with_master(origin: &std::path::Path) {
+        let seed = origin.parent().unwrap().join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        std::fs::write(seed.join("README"), "base").unwrap();
+        let init = exec(TerminalExecInput {
+            command: "git init -b master && git config user.email test@example.com && git config user.name test && git add README && git -c commit.gpgsign=false commit -m init".into(),
+            cwd: Some(seed.to_string_lossy().into_owned()),
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(init.code, 0, "seed init failed: {}", init.stderr);
+        let clone = exec(TerminalExecInput {
+            command: format!(
+                "git clone --bare {} {}",
+                seed.to_string_lossy(),
+                origin.to_string_lossy()
+            ),
+            cwd: None,
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(clone.code, 0, "bare clone failed: {}", clone.stderr);
+        let _ = std::fs::remove_dir_all(&seed);
+    }
+
+    #[tokio::test]
+    async fn git_sync_hosted_clone_fast_forwards_default_branch() {
+        let root = unique_temp("poria-git-sync");
+        let origin = root.join("origin.git");
+        let hosted = root.join("hosted");
+        std::fs::create_dir_all(&root).unwrap();
+        init_bare_origin_with_master(&origin).await;
+
+        let clone = exec(TerminalExecInput {
+            command: format!(
+                "git clone {} {}",
+                origin.to_string_lossy(),
+                hosted.to_string_lossy()
+            ),
+            cwd: None,
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(clone.code, 0, "clone failed: {}", clone.stderr);
+
+        let work = root.join("work");
+        let clone_work = exec(TerminalExecInput {
+            command: format!(
+                "git clone {} {}",
+                origin.to_string_lossy(),
+                work.to_string_lossy()
+            ),
+            cwd: None,
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(clone_work.code, 0, "{}", clone_work.stderr);
+        std::fs::write(work.join("NEXT"), "next").unwrap();
+        let push = exec(TerminalExecInput {
+            command: "git config user.email test@example.com && git config user.name test && git add NEXT && git -c commit.gpgsign=false commit -m next && git push origin master".into(),
+            cwd: Some(work.to_string_lossy().into_owned()),
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(push.code, 0, "push failed: {}", push.stderr);
+
+        git_sync_hosted_clone(&hosted, "master").await.unwrap();
+        assert_eq!(git_current_branch(&hosted).await.unwrap(), "master");
+        assert!(hosted.join("NEXT").exists());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn git_sync_hosted_clone_fails_when_dirty() {
+        let root = unique_temp("poria-git-sync-dirty");
+        let origin = root.join("origin.git");
+        let hosted = root.join("hosted");
+        std::fs::create_dir_all(&root).unwrap();
+        init_bare_origin_with_master(&origin).await;
+        let clone = exec(TerminalExecInput {
+            command: format!(
+                "git clone {} {}",
+                origin.to_string_lossy(),
+                hosted.to_string_lossy()
+            ),
+            cwd: None,
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(clone.code, 0, "{}", clone.stderr);
+        std::fs::write(hosted.join("DIRTY"), "nope").unwrap();
+        let err = git_sync_hosted_clone(&hosted, "master")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("未提交改动"), "{err}");
         let _ = std::fs::remove_dir_all(&root);
     }
 

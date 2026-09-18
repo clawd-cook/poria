@@ -18,10 +18,9 @@ use poria_infrastructure::auth::{
     get_credentials, get_demand_project_dir, get_user_root,
 };
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
-use poria_resources::git_current_branch;
+use poria_resources::WorktreeResource;
 use poria_skills::{
     CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill,
-    WorkspaceSkill,
 };
 
 use crate::AppState;
@@ -258,12 +257,9 @@ pub async fn submit_pipeline(
     let frontend = require_ready_repo(&state, &frontend_repo_id, "前端仓库")?;
     let backend = require_ready_repo(&state, &backend_repo_id, "后端仓库")?;
 
-    let frontend_path = PathBuf::from(&frontend.local_path);
-    let base_branch = git_current_branch(&frontend_path)
-        .await
-        .map_err(|e| format!("无法读取前端仓库当前分支: {e}"))?;
-    if base_branch.is_empty() || base_branch == "HEAD" {
-        return Err("前端仓库未检出分支，请先在托管副本中检出一个分支".into());
+    let base_branch = frontend.default_branch.trim().to_string();
+    if base_branch.is_empty() {
+        return Err("前端仓库未设置主分支".into());
     }
 
     let demand_code = demand_code
@@ -626,7 +622,16 @@ async fn execute_next_stage(
 
     let stage_name = pipeline.stages[stage_idx].name;
     match stage_name {
-        StageEnum::Init => run_init_stage(&mut pipeline, stage_idx, app, &store).await?,
+        StageEnum::Init => {
+            run_init_stage(
+                &mut pipeline,
+                stage_idx,
+                app,
+                &store,
+                &runtime.repo_store,
+            )
+            .await?;
+        }
         StageEnum::ReviewPrd => {
             run_review_prd_stage(
                 &mut pipeline,
@@ -646,9 +651,6 @@ async fn execute_next_stage(
                 runtime.agent_pool.clone(),
             )
             .await?;
-        }
-        StageEnum::Workspace => {
-            run_workspace_stage(&mut pipeline, stage_idx, app, &store, &runtime.repo_store).await?;
         }
         StageEnum::Dev => {
             run_dev_stage(
@@ -767,11 +769,27 @@ async fn run_init_stage(
     stage_idx: usize,
     app: &tauri::AppHandle,
     store: &std::sync::Arc<SqlitePipelineStore>,
+    repo_store: &std::sync::Arc<poria_infrastructure::store::RegisteredRepoStore>,
 ) -> Result<(), String> {
     let creds = get_credentials(None).ok_or_else(|| "请先登录".to_string())?;
     if creds.cookie.trim().is_empty() {
         return Err("请先登录".into());
     }
+
+    let frontend = pipeline
+        .config
+        .repos
+        .first()
+        .cloned()
+        .ok_or("缺少前端仓库，无法创建工作区")?;
+    let backend = pipeline
+        .config
+        .backend_context
+        .clone()
+        .ok_or("缺少后端仓库上下文，无法创建工作区")?;
+    let frontend_registered = resolve_registered_clone(repo_store, &frontend.git_url, &frontend.name)?;
+    let backend_registered =
+        resolve_registered_clone(repo_store, &backend.git_url, &backend.name)?;
 
     let folder = demand_project_folder_name(&pipeline.demand_code, pipeline.demand_id);
     let project_dir = get_demand_project_dir(None, &folder)?;
@@ -794,6 +812,13 @@ async fn run_init_stage(
         .map_err(|e| e.to_string())?;
     emit_pipeline_updated(app, pipeline)?;
 
+    if let Err(message) = sync_repo_for_init(app, repo_store, &frontend_registered.id).await {
+        return fail_init_stage(pipeline, stage_idx, app, store, message).await;
+    }
+    if let Err(message) = sync_repo_for_init(app, repo_store, &backend_registered.id).await {
+        return fail_init_stage(pipeline, stage_idx, app, store, message).await;
+    }
+
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
         workdir: project_dir.to_string_lossy().to_string(),
@@ -808,53 +833,197 @@ async fn run_init_stage(
         extra: serde_json::Map::new(),
     };
 
-    match InitSkill::new().execute(input, ctx).await {
-        Ok(output) => {
-            pipeline.config.project_dir = Some(project_dir.to_string_lossy().to_string());
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_completed(
-                        &pipeline.id,
-                        StageEnum::Init,
-                        output.output,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
+    let mut output = match InitSkill::new().execute(input, ctx).await {
+        Ok(output) => output.output,
+        Err(err) => {
+            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
+        }
+    };
+
+    let workspace_root = get_user_root(None).join("worktrees");
+    let worktree = WorktreeResource::new(Some(workspace_root.to_string_lossy().into_owned()));
+    let frontend_git_root = PathBuf::from(&frontend_registered.local_path);
+    let backend_git_root = PathBuf::from(&backend_registered.local_path);
+    if let Err(err) = assert_path_under_repos_root(None, &frontend_git_root) {
+        return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+    }
+    if let Err(err) = assert_path_under_repos_root(None, &backend_git_root) {
+        return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+    }
+
+    let frontend_created = match worktree
+        .create(&frontend, &pipeline.id, &frontend.base_branch, &frontend_git_root)
+        .await
+    {
+        Ok(created) => created,
+        Err(err) => {
+            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
+        }
+    };
+
+    let backend_created = match worktree
+        .create_detached(&backend.name, &pipeline.id, &backend_git_root, &backend.branch)
+        .await
+    {
+        Ok(created) => created,
+        Err(err) => {
+            let _ = worktree
+                .remove_path(&frontend_git_root, Path::new(&frontend_created.worktree_path))
+                .await;
+            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
+        }
+    };
+
+    if let Some(backend_ctx) = pipeline.config.backend_context.as_mut() {
+        backend_ctx.local_path = backend_created.worktree_path.clone();
+    }
+
+    output = merge_init_workspace_output(
+        output,
+        &frontend,
+        &frontend_created.worktree_path,
+        &frontend_created.branch,
+        &backend_created.worktree_path,
+    );
+    let rollback = init_rollback_instruction(
+        stage_idx as i32,
+        &frontend_created.worktree_path,
+        &backend_created.worktree_path,
+        &frontend_created.branch,
+    );
+
+    pipeline.config.project_dir = Some(project_dir.to_string_lossy().to_string());
+    pipeline.stages[stage_idx].status = StageStatus::Completed;
+    pipeline.stages[stage_idx].output = Some(output.clone());
+    pipeline.stages[stage_idx].rollback = Some(rollback);
+    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_completed(
+                &pipeline.id,
+                StageEnum::Init,
+                output,
+            )],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+    Ok(())
+}
+
+async fn sync_repo_for_init(
+    app: &tauri::AppHandle,
+    repo_store: &std::sync::Arc<poria_infrastructure::store::RegisteredRepoStore>,
+    id: &str,
+) -> Result<(), String> {
+    match super::repos::run_repo_sync(repo_store, id).await {
+        Ok(updated) => {
+            let _ = app.emit("repo:updated", &updated);
             Ok(())
         }
         Err(err) => {
-            let message = err.to_string();
-            pipeline.status = PipelineStatus::Failed;
-            pipeline.stages[stage_idx].status = StageStatus::Failed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.stages[stage_idx].issue = Some(StageIssue {
-                class: "init_failed".into(),
-                message: message.clone(),
-                retryable: true,
-            });
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_failed(
-                        &pipeline.id,
-                        StageEnum::Init,
-                        &message,
-                        pipeline.stages[stage_idx].retry_count,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Err(message)
+            if let Ok(Some(updated)) = repo_store.load(id) {
+                let _ = app.emit("repo:updated", &updated);
+            }
+            Err(format!("同步仓库失败: {err}"))
         }
+    }
+}
+
+async fn fail_init_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &tauri::AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    message: String,
+) -> Result<(), String> {
+    pipeline.status = PipelineStatus::Failed;
+    pipeline.stages[stage_idx].status = StageStatus::Failed;
+    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = Some(StageIssue {
+        class: "init_failed".into(),
+        message: message.clone(),
+        retryable: true,
+    });
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_failed(
+                &pipeline.id,
+                StageEnum::Init,
+                &message,
+                pipeline.stages[stage_idx].retry_count,
+            )],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+    Err(message)
+}
+
+fn merge_init_workspace_output(
+    mut output: serde_json::Value,
+    frontend: &RepoConfig,
+    frontend_worktree: &str,
+    frontend_branch: &str,
+    backend_worktree: &str,
+) -> serde_json::Value {
+    if let Some(obj) = output.as_object_mut() {
+        obj.insert(
+            "worktreePath".into(),
+            serde_json::Value::String(frontend_worktree.to_string()),
+        );
+        obj.insert(
+            "backendWorktreePath".into(),
+            serde_json::Value::String(backend_worktree.to_string()),
+        );
+        obj.insert(
+            "repos".into(),
+            serde_json::json!([{
+                "name": frontend.name,
+                "branch": frontend_branch,
+                "baseBranch": frontend.base_branch,
+                "changeId": serde_json::Value::Null,
+                "worktreePath": frontend_worktree,
+                "gitlabProjectPath": frontend.gitlab_project_path,
+            }]),
+        );
+    }
+    output
+}
+
+fn init_rollback_instruction(
+    stage_index: i32,
+    frontend_worktree: &str,
+    backend_worktree: &str,
+    feature_branch: &str,
+) -> poria_core::types::RollbackInstruction {
+    use poria_core::types::{RollbackCommand, RollbackCommandType, RollbackInstruction};
+    RollbackInstruction {
+        stage_index,
+        commands: vec![
+            RollbackCommand {
+                command_type: RollbackCommandType::RemoveWorktree,
+                params: [("path".into(), frontend_worktree.into())]
+                    .into_iter()
+                    .collect(),
+            },
+            RollbackCommand {
+                command_type: RollbackCommandType::RemoveWorktree,
+                params: [("path".into(), backend_worktree.into())]
+                    .into_iter()
+                    .collect(),
+            },
+            RollbackCommand {
+                command_type: RollbackCommandType::DeleteBranch,
+                params: [("branch".into(), feature_branch.into())]
+                    .into_iter()
+                    .collect(),
+            },
+        ],
     }
 }
 
@@ -885,6 +1054,11 @@ async fn run_review_prd_stage(
     if !project_dir.join("PRD.md").is_file() {
         return Err("请先完成初始化，导出 PRD.md".into());
     }
+    let worktree = resolve_frontend_worktree(pipeline)?;
+    if !worktree.join(".git").exists() {
+        return Err(format!("前端工作区无效: {}", worktree.display()));
+    }
+    let worktree_str = worktree.to_string_lossy().into_owned();
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -917,7 +1091,7 @@ async fn run_review_prd_stage(
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
-        workdir: project_dir_str,
+        workdir: worktree_str,
         credentials: serde_json::json!({}),
     };
     let input = SkillInput {
@@ -990,6 +1164,11 @@ async fn run_design_stage(
     if !project_dir.join("PRD.md").is_file() {
         return Err("请先完成初始化，导出 PRD.md".into());
     }
+    let worktree = resolve_frontend_worktree(pipeline)?;
+    if !worktree.join(".git").exists() {
+        return Err(format!("前端工作区无效: {}", worktree.display()));
+    }
+    let worktree_str = worktree.to_string_lossy().into_owned();
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -1018,7 +1197,7 @@ async fn run_design_stage(
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
-        workdir: project_dir_str,
+        workdir: worktree_str,
         credentials: serde_json::json!({}),
     };
     let input = SkillInput {
@@ -1080,21 +1259,20 @@ async fn run_design_stage(
     }
 }
 
-fn resolve_frontend_clone(
+fn resolve_registered_clone(
     repo_store: &poria_infrastructure::store::RegisteredRepoStore,
-    repo: &RepoConfig,
-) -> Result<PathBuf, String> {
-    let wanted = normalize_git_url(&repo.git_url);
+    git_url: &str,
+    name: &str,
+) -> Result<RegisteredRepo, String> {
+    let wanted = normalize_git_url(git_url);
     repo_store
         .list_all()?
         .into_iter()
         .find(|registered| {
             registered.clone_status == CloneStatus::Ready
-                && (normalize_git_url(&registered.git_url) == wanted
-                    || registered.name == repo.name)
+                && (normalize_git_url(&registered.git_url) == wanted || registered.name == name)
         })
-        .map(|registered| PathBuf::from(registered.local_path))
-        .ok_or_else(|| format!("未找到已就绪的前端仓库 {}", repo.name))
+        .ok_or_else(|| format!("未找到已就绪的仓库 {name}"))
 }
 
 fn assert_path_under_worktrees_root(path: &Path) -> Result<(), String> {
@@ -1112,22 +1290,30 @@ fn assert_path_under_worktrees_root(path: &Path) -> Result<(), String> {
 }
 
 fn resolve_frontend_worktree(pipeline: &Pipeline) -> Result<PathBuf, String> {
-    if let Some(workspace) = pipeline
+    if let Some(init) = pipeline
         .stages
         .iter()
-        .find(|stage| stage.name == StageEnum::Workspace)
+        .find(|stage| stage.name == StageEnum::Init)
     {
-        if workspace.status != StageStatus::Completed {
-            return Err("请先完成工作区".into());
+        if init.status != StageStatus::Completed {
+            return Err("请先完成初始化".into());
         }
-        if let Some(path) = workspace
+        if let Some(path) = init
             .output
             .as_ref()
-            .and_then(|output| output.get("repos"))
-            .and_then(|repos| repos.as_array())
-            .and_then(|repos| repos.first())
-            .and_then(|repo| repo.get("worktreePath"))
-            .and_then(|value| value.as_str())
+            .and_then(|output| {
+                output
+                    .get("worktreePath")
+                    .and_then(|value| value.as_str())
+                    .or_else(|| {
+                        output
+                            .get("repos")
+                            .and_then(|repos| repos.as_array())
+                            .and_then(|repos| repos.first())
+                            .and_then(|repo| repo.get("worktreePath"))
+                            .and_then(|value| value.as_str())
+                    })
+            })
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
@@ -1138,7 +1324,7 @@ fn resolve_frontend_worktree(pipeline: &Pipeline) -> Result<PathBuf, String> {
             }
         }
     } else {
-        return Err("请先完成工作区".into());
+        return Err("请先完成初始化".into());
     }
 
     let repo = pipeline
@@ -1389,7 +1575,7 @@ fn workspace_repo_field<'a>(pipeline: &'a Pipeline, key: &str) -> Option<&'a str
     pipeline
         .stages
         .iter()
-        .find(|stage| stage.name == StageEnum::Workspace)
+        .find(|stage| stage.name == StageEnum::Init)
         .and_then(|stage| stage.output.as_ref())
         .and_then(|output| output.get("repos"))
         .and_then(|repos| repos.as_array())
@@ -1523,114 +1709,6 @@ async fn run_deploy_stage(
     }
 }
 
-async fn run_workspace_stage(
-    pipeline: &mut Pipeline,
-    stage_idx: usize,
-    app: &tauri::AppHandle,
-    store: &std::sync::Arc<SqlitePipelineStore>,
-    repo_store: &std::sync::Arc<poria_infrastructure::store::RegisteredRepoStore>,
-) -> Result<(), String> {
-    let frontend = pipeline
-        .config
-        .repos
-        .first()
-        .cloned()
-        .ok_or("缺少前端仓库，无法创建工作区")?;
-    let git_root = resolve_frontend_clone(repo_store, &frontend)?;
-    assert_path_under_repos_root(None, &git_root)?;
-    if !git_root.join(".git").exists() {
-        return Err(format!("前端托管副本无效: {}", git_root.display()));
-    }
-
-    pipeline.status = PipelineStatus::Running;
-    pipeline.stages[stage_idx].status = StageStatus::Running;
-    pipeline.stages[stage_idx].skill_id = Some("skill:workspace".into());
-    pipeline.stages[stage_idx].started_at = Some(Utc::now());
-    pipeline.stages[stage_idx].issue = None;
-    pipeline.updated_at = Utc::now();
-    store
-        .save_stage_tx(
-            Some(&pipeline.stages[stage_idx]),
-            pipeline,
-            &[CorePipelineEvent::stage_started(
-                &pipeline.id,
-                StageEnum::Workspace,
-            )],
-        )
-        .map_err(|e| e.to_string())?;
-    emit_pipeline_updated(app, pipeline)?;
-
-    let workspace_root = get_user_root(None).join("worktrees");
-    let mut extra = serde_json::Map::new();
-    extra.insert(
-        "repo_root".into(),
-        serde_json::Value::String(git_root.to_string_lossy().into_owned()),
-    );
-    extra.insert(
-        "workspace_root".into(),
-        serde_json::Value::String(workspace_root.to_string_lossy().into_owned()),
-    );
-
-    let ctx = SkillContext {
-        pipeline_id: pipeline.id.clone(),
-        workdir: workspace_root.to_string_lossy().into_owned(),
-        credentials: serde_json::json!({}),
-    };
-    let input = SkillInput {
-        stage: pipeline.stages[stage_idx].clone(),
-        pipeline: pipeline.clone(),
-        extra,
-    };
-
-    match WorkspaceSkill::new().execute(input, ctx).await {
-        Ok(output) => {
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_completed(
-                        &pipeline.id,
-                        StageEnum::Workspace,
-                        output.output,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Ok(())
-        }
-        Err(err) => {
-            let message = err.to_string();
-            pipeline.status = PipelineStatus::Failed;
-            pipeline.stages[stage_idx].status = StageStatus::Failed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.stages[stage_idx].issue = Some(StageIssue {
-                class: "workspace_failed".into(),
-                message: message.clone(),
-                retryable: true,
-            });
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_failed(
-                        &pipeline.id,
-                        StageEnum::Workspace,
-                        &message,
-                        pipeline.stages[stage_idx].retry_count,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Err(message)
-        }
-    }
-}
-
 /// Skip a pending, failed, or blocked stage in a pipeline.
 #[tauri::command]
 pub async fn skip_stage(
@@ -1676,7 +1754,8 @@ pub async fn skip_stage(
 
 #[cfg(test)]
 mod tests {
-    use super::require_prd_and_backend_trd_urls;
+    use super::{merge_init_workspace_output, require_prd_and_backend_trd_urls};
+    use poria_core::types::RepoConfig;
 
     #[test]
     fn require_prd_and_backend_trd_rejects_empty_or_non_joyspace() {
@@ -1707,5 +1786,41 @@ mod tests {
             "https://joyspace.jd.com/pages/backend-trd",
         )
         .unwrap();
+    }
+
+    #[test]
+    fn merge_init_workspace_output_sets_frontend_and_backend_paths() {
+        let frontend = RepoConfig {
+            name: "ls-entrance".into(),
+            git_url: "git@coding.jd.com:ls/ls-entrance.git".into(),
+            branch: "feature_R1".into(),
+            base_branch: "master".into(),
+            gitlab_project_path: "ls/ls-entrance".into(),
+            depends_on: None,
+            build_cmd: None,
+        };
+        let merged = merge_init_workspace_output(
+            serde_json::json!({
+                "projectDir": "/tmp/.poria/projects/R1",
+                "prdPath": "/tmp/.poria/projects/R1/PRD.md"
+            }),
+            &frontend,
+            "/tmp/.poria/worktrees/p1/ls-entrance",
+            "feature_R1",
+            "/tmp/.poria/worktrees/p1/ls-api",
+        );
+        assert_eq!(
+            merged.get("worktreePath").and_then(|v| v.as_str()),
+            Some("/tmp/.poria/worktrees/p1/ls-entrance")
+        );
+        assert_eq!(
+            merged.get("backendWorktreePath").and_then(|v| v.as_str()),
+            Some("/tmp/.poria/worktrees/p1/ls-api")
+        );
+        assert_eq!(
+            merged["repos"][0]["baseBranch"].as_str(),
+            Some("master")
+        );
+        assert!(merged.get("prdPath").is_some());
     }
 }

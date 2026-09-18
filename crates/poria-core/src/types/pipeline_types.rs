@@ -10,7 +10,6 @@ pub enum StageEnum {
     Init,
     ReviewPrd,
     Design,
-    Workspace,
     Dev,
     Cr,
     Deploy,
@@ -20,7 +19,6 @@ pub const STAGE_ORDER: &[StageEnum] = &[
     StageEnum::Init,
     StageEnum::ReviewPrd,
     StageEnum::Design,
-    StageEnum::Workspace,
     StageEnum::Dev,
     StageEnum::Cr,
     StageEnum::Deploy,
@@ -217,6 +215,25 @@ mod tests {
             Some("https://joyspace.jd.com/pages/be")
         );
         assert!(config.prd_url.is_none());
+    }
+
+    #[test]
+    fn stage_order_is_init_through_deploy_without_workspace() {
+        assert_eq!(
+            STAGE_ORDER,
+            &[
+                StageEnum::Init,
+                StageEnum::ReviewPrd,
+                StageEnum::Design,
+                StageEnum::Dev,
+                StageEnum::Cr,
+                StageEnum::Deploy,
+            ]
+        );
+        assert_eq!(STAGE_ORDER.len(), 6);
+        assert!(!STAGE_ORDER
+            .iter()
+            .any(|stage| format!("{stage:?}") == "Workspace"));
     }
 
     #[test]

@@ -119,13 +119,15 @@ impl WorktreeResource {
         );
 
         let local_ref = format!("refs/heads/{branch}");
-        let remote_ref = format!("refs/remotes/origin/{branch}");
-        let has_local = git_ref_exists(&git_root_str, &local_ref).await?;
-        let has_remote = git_ref_exists(&git_root_str, &remote_ref).await?;
+        let remote_base = format!("refs/remotes/origin/{base_branch}");
+        let has_local = git_ref_exists(Path::new(&git_root_str), &local_ref).await?;
+        let has_remote_base = git_ref_exists(Path::new(&git_root_str), &remote_base).await?;
         let command = if has_local {
             format!("git worktree add \"{worktree_str}\" \"{branch}\"")
-        } else if has_remote {
-            format!("git worktree add -b \"{branch}\" \"{worktree_str}\" \"origin/{branch}\"")
+        } else if has_remote_base {
+            format!(
+                "git worktree add -b \"{branch}\" \"{worktree_str}\" \"origin/{base_branch}\""
+            )
         } else {
             format!("git worktree add -b \"{branch}\" \"{worktree_str}\" \"{base_branch}\"")
         };
@@ -151,6 +153,90 @@ impl WorktreeResource {
         Ok(WorktreeCreateResult {
             worktree_path: worktree_str,
             branch: branch.clone(),
+        })
+    }
+
+    /// Create a detached (read-only) worktree at `origin/<branch>` or the local branch.
+    /// Hosted clone can stay on the default branch; same-branch lock is avoided.
+    pub async fn create_detached(
+        &self,
+        repo_name: &str,
+        pipeline_id: &str,
+        git_root: &Path,
+        branch: &str,
+    ) -> Result<WorktreeCreateResult, ResourceError> {
+        let worktree_path = self.workspace_root.join(pipeline_id).join(repo_name);
+        let worktree_str = worktree_path.to_string_lossy().into_owned();
+        let git_root_str = git_root.to_string_lossy().into_owned();
+        let branch = branch.trim();
+        if branch.is_empty() {
+            return Err(ResourceError::Other("后端分支不能为空".into()));
+        }
+
+        if worktree_path.exists() {
+            if worktree_path.join(".git").exists() {
+                info!(
+                    repo = %repo_name,
+                    branch = %branch,
+                    worktree_path = %worktree_str,
+                    "reusing existing detached git worktree"
+                );
+                return Ok(WorktreeCreateResult {
+                    worktree_path: worktree_str,
+                    branch: branch.to_string(),
+                });
+            }
+            return Err(ResourceError::Other(format!(
+                "worktree path already exists and is not a git worktree: {worktree_str}"
+            )));
+        }
+
+        if let Some(parent) = worktree_path.parent() {
+            std::fs::create_dir_all(parent).map_err(ResourceError::SpawnError)?;
+        }
+
+        let remote_ref = format!("refs/remotes/origin/{branch}");
+        let local_ref = format!("refs/heads/{branch}");
+        let start_point = if git_ref_exists(Path::new(&git_root_str), &remote_ref).await? {
+            format!("origin/{branch}")
+        } else if git_ref_exists(Path::new(&git_root_str), &local_ref).await? {
+            branch.to_string()
+        } else {
+            return Err(ResourceError::Other(format!(
+                "找不到后端分支 {branch}（origin/{branch} 与本地均不存在）"
+            )));
+        };
+
+        info!(
+            repo = %repo_name,
+            start_point = %start_point,
+            worktree_path = %worktree_str,
+            git_root = %git_root_str,
+            "creating detached git worktree"
+        );
+
+        let command = format!("git worktree add --detach \"{worktree_str}\" \"{start_point}\"");
+        let result = terminal::exec(terminal::TerminalExecInput {
+            command,
+            cwd: Some(git_root_str),
+            env: None,
+            timeout_ms: Some(GIT_MEDIUM_TIMEOUT),
+        })
+        .await?;
+        if result.code != 0 {
+            let detail = if result.stderr.trim().is_empty() {
+                result.stdout.trim().to_string()
+            } else {
+                result.stderr.trim().to_string()
+            };
+            return Err(ResourceError::Other(format!(
+                "git worktree add --detach failed: {detail}"
+            )));
+        }
+
+        Ok(WorktreeCreateResult {
+            worktree_path: worktree_str,
+            branch: branch.to_string(),
         })
     }
 
@@ -197,7 +283,15 @@ impl WorktreeResource {
     /// Remove a worktree. Checks existence first, uses --force for locked worktrees.
     pub async fn remove(&self, repo: &RepoConfig, pipeline_id: &str) -> Result<(), ResourceError> {
         let worktree_path = self.path(repo, pipeline_id);
+        self.remove_path(Path::new("."), &worktree_path).await
+    }
 
+    /// Remove a worktree using the hosted clone as `git_root`.
+    pub async fn remove_path(
+        &self,
+        git_root: &Path,
+        worktree_path: &Path,
+    ) -> Result<(), ResourceError> {
         if !worktree_path.exists() {
             debug!(
                 worktree_path = %worktree_path.display(),
@@ -206,40 +300,31 @@ impl WorktreeResource {
             return Ok(());
         }
 
-        let worktree_str = worktree_path.to_string_lossy();
+        let worktree_str = worktree_path.to_string_lossy().into_owned();
+        let git_root_str = git_root.to_string_lossy().into_owned();
 
         info!(
             worktree_path = %worktree_str,
             "removing git worktree"
         );
 
-        let command = format!("git worktree remove --force \"{}\"", worktree_str);
-
-        terminal::exec(terminal::TerminalExecInput {
+        let command = format!("git worktree remove --force \"{worktree_str}\"");
+        let _ = terminal::exec(terminal::TerminalExecInput {
             command,
-            cwd: Some(self.resolve_repo_root().to_string()),
+            cwd: Some(git_root_str),
             env: None,
             timeout_ms: Some(GIT_MEDIUM_TIMEOUT),
         })
-        .await?;
-
+        .await;
+        if worktree_path.exists() {
+            std::fs::remove_dir_all(worktree_path).map_err(ResourceError::SpawnError)?;
+        }
         Ok(())
-    }
-
-    fn resolve_repo_root(&self) -> &str {
-        "."
     }
 }
 
-async fn git_ref_exists(git_root: &str, spec: &str) -> Result<bool, ResourceError> {
-    let result = terminal::exec(terminal::TerminalExecInput {
-        command: format!("git show-ref --verify --quiet {spec}"),
-        cwd: Some(git_root.to_string()),
-        env: None,
-        timeout_ms: Some(GIT_MEDIUM_TIMEOUT),
-    })
-    .await?;
-    Ok(result.code == 0)
+async fn git_ref_exists(git_root: &Path, spec: &str) -> Result<bool, ResourceError> {
+    crate::terminal::git_ref_exists(git_root, spec).await
 }
 
 #[async_trait]
@@ -268,11 +353,6 @@ impl poria_core::contracts::Resource for WorktreeResource {
         Ok(serde_json::to_value(result)?)
     }
 }
-
-// Suppress dead_code warning for resolve_repo_root since it is used but clippy
-// can't see through the string borrow.
-#[allow(dead_code)]
-fn _assert_path_type(_: &Path) {}
 
 #[cfg(test)]
 mod tests {
@@ -304,5 +384,96 @@ mod tests {
         let repo = test_repo();
         let path = resource.path(&repo, "p1");
         assert_eq!(path, PathBuf::from("workspace/projects/p1/test-repo"));
+    }
+
+    fn unique_temp(prefix: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "{prefix}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    async fn init_repo_with_master(path: &Path) {
+        std::fs::create_dir_all(path).unwrap();
+        std::fs::write(path.join("README"), "hi").unwrap();
+        let init = terminal::exec(terminal::TerminalExecInput {
+            command: "git init -b master && git config user.email test@example.com && git config user.name test && git add README && git -c commit.gpgsign=false commit -m init".into(),
+            cwd: Some(path.to_string_lossy().into_owned()),
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(init.code, 0, "git init failed: {}", init.stderr);
+    }
+
+    #[tokio::test]
+    async fn create_detached_keeps_hosted_clone_on_master() {
+        let root = unique_temp("poria-wt-detach");
+        let hosted = root.join("hosted");
+        init_repo_with_master(&hosted).await;
+        let add_branch = terminal::exec(terminal::TerminalExecInput {
+            command: "git checkout -b develop && git -c commit.gpgsign=false commit --allow-empty -m develop && git checkout master".into(),
+            cwd: Some(hosted.to_string_lossy().into_owned()),
+            env: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        .unwrap();
+        assert_eq!(add_branch.code, 0, "{}", add_branch.stderr);
+
+        let resource = WorktreeResource::new(Some(root.join("worktrees").to_string_lossy().into_owned()));
+        let created = resource
+            .create_detached("ls-api", "pipe-1", &hosted, "master")
+            .await
+            .unwrap();
+        assert!(Path::new(&created.worktree_path).join("README").exists());
+        assert_eq!(
+            terminal::git_current_branch(&hosted).await.unwrap(),
+            "master"
+        );
+        let detached = terminal::git_current_branch(Path::new(&created.worktree_path))
+            .await
+            .unwrap();
+        assert_eq!(detached, "HEAD");
+
+        resource
+            .remove_path(&hosted, Path::new(&created.worktree_path))
+            .await
+            .unwrap();
+        assert!(!Path::new(&created.worktree_path).exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn create_feature_from_local_base_does_not_move_hosted_branch() {
+        let root = unique_temp("poria-wt-feature");
+        let hosted = root.join("hosted");
+        init_repo_with_master(&hosted).await;
+        let resource = WorktreeResource::new(Some(root.join("worktrees").to_string_lossy().into_owned()));
+        let mut repo = test_repo();
+        repo.name = "ls-entrance".into();
+        repo.branch = "feature_TEST".into();
+        repo.base_branch = "master".into();
+        let created = resource
+            .create(&repo, "pipe-1", "master", &hosted)
+            .await
+            .unwrap();
+        assert_eq!(created.branch, "feature_TEST");
+        assert_eq!(
+            terminal::git_current_branch(Path::new(&created.worktree_path))
+                .await
+                .unwrap(),
+            "feature_TEST"
+        );
+        assert_eq!(
+            terminal::git_current_branch(&hosted).await.unwrap(),
+            "master"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

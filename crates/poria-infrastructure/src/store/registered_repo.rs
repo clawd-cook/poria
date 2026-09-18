@@ -3,6 +3,8 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
+const REPO_SELECT: &str = "SELECT id, git_url, normalized_url, scope, name, local_path, clone_status, error, created_at, updated_at, default_branch, sync_status, last_synced_at, sync_error FROM registered_repos";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CloneStatus {
@@ -29,6 +31,35 @@ impl CloneStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncStatus {
+    Idle,
+    Syncing,
+    Synced,
+    Failed,
+}
+
+impl SyncStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Syncing => "syncing",
+            Self::Synced => "synced",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "syncing" => Self::Syncing,
+            "synced" => Self::Synced,
+            "failed" => Self::Failed,
+            _ => Self::Idle,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisteredRepo {
     pub id: String,
@@ -39,8 +70,26 @@ pub struct RegisteredRepo {
     pub local_path: String,
     pub clone_status: CloneStatus,
     pub error: Option<String>,
+    pub default_branch: String,
+    pub sync_status: SyncStatus,
+    pub last_synced_at: Option<String>,
+    pub sync_error: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl RegisteredRepo {
+    pub fn normalized_default_branch(value: &str) -> Result<String, String> {
+        let branch = value.trim();
+        if branch.is_empty() {
+            return Err("主分支不能为空".into());
+        }
+        if branch.contains("..") || branch.starts_with('-') || branch.contains(char::is_whitespace)
+        {
+            return Err("主分支名称不合法".into());
+        }
+        Ok(branch.to_string())
+    }
 }
 
 pub struct RegisteredRepoStore {
@@ -66,8 +115,11 @@ impl RegisteredRepoStore {
             return Err(format!("已存在仓库 {}/{}", repo.scope, repo.name));
         }
 
+        let default_branch = RegisteredRepo::normalized_default_branch(&repo.default_branch)
+            .unwrap_or_else(|_| "master".into());
+
         conn.execute(
-            "INSERT INTO registered_repos (id, git_url, normalized_url, scope, name, local_path, clone_status, error, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO registered_repos (id, git_url, normalized_url, scope, name, local_path, clone_status, error, created_at, updated_at, default_branch, sync_status, last_synced_at, sync_error) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 repo.id,
                 repo.git_url,
@@ -79,6 +131,10 @@ impl RegisteredRepoStore {
                 repo.error,
                 repo.created_at,
                 repo.updated_at,
+                default_branch,
+                repo.sync_status.as_str(),
+                repo.last_synced_at,
+                repo.sync_error,
             ],
         )
         .map_err(|e| map_constraint(e, repo))?;
@@ -88,9 +144,7 @@ impl RegisteredRepoStore {
     pub fn list_all(&self) -> Result<Vec<RegisteredRepo>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
-            .prepare(
-                "SELECT id, git_url, normalized_url, scope, name, local_path, clone_status, error, created_at, updated_at FROM registered_repos ORDER BY scope ASC, name ASC",
-            )
+            .prepare(&format!("{REPO_SELECT} ORDER BY scope ASC, name ASC"))
             .map_err(|e| e.to_string())?;
 
         let repos = stmt
@@ -104,7 +158,7 @@ impl RegisteredRepoStore {
     pub fn load(&self, id: &str) -> Result<Option<RegisteredRepo>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         match conn.query_row(
-            "SELECT id, git_url, normalized_url, scope, name, local_path, clone_status, error, created_at, updated_at FROM registered_repos WHERE id = ?1",
+            &format!("{REPO_SELECT} WHERE id = ?1"),
             params![id],
             row_to_repo,
         ) {
@@ -132,7 +186,58 @@ impl RegisteredRepoStore {
             return Err(format!("仓库不存在: {id}"));
         }
         conn.query_row(
-            "SELECT id, git_url, normalized_url, scope, name, local_path, clone_status, error, created_at, updated_at FROM registered_repos WHERE id = ?1",
+            &format!("{REPO_SELECT} WHERE id = ?1"),
+            params![id],
+            row_to_repo,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    pub fn update_default_branch(
+        &self,
+        id: &str,
+        default_branch: &str,
+    ) -> Result<RegisteredRepo, String> {
+        let default_branch = RegisteredRepo::normalized_default_branch(default_branch)?;
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let updated_at = Utc::now().to_rfc3339();
+        let changed = conn
+            .execute(
+                "UPDATE registered_repos SET default_branch = ?1, updated_at = ?2 WHERE id = ?3",
+                params![default_branch, updated_at, id],
+            )
+            .map_err(|e| e.to_string())?;
+        if changed == 0 {
+            return Err(format!("仓库不存在: {id}"));
+        }
+        conn.query_row(
+            &format!("{REPO_SELECT} WHERE id = ?1"),
+            params![id],
+            row_to_repo,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    pub fn update_sync_status(
+        &self,
+        id: &str,
+        status: SyncStatus,
+        last_synced_at: Option<String>,
+        sync_error: Option<String>,
+    ) -> Result<RegisteredRepo, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let updated_at = Utc::now().to_rfc3339();
+        let changed = conn
+            .execute(
+                "UPDATE registered_repos SET sync_status = ?1, last_synced_at = ?2, sync_error = ?3, updated_at = ?4 WHERE id = ?5",
+                params![status.as_str(), last_synced_at, sync_error, updated_at, id],
+            )
+            .map_err(|e| e.to_string())?;
+        if changed == 0 {
+            return Err(format!("仓库不存在: {id}"));
+        }
+        conn.query_row(
+            &format!("{REPO_SELECT} WHERE id = ?1"),
             params![id],
             row_to_repo,
         )
@@ -192,6 +297,8 @@ impl RegisteredRepoStore {
 
 fn row_to_repo(row: &rusqlite::Row<'_>) -> rusqlite::Result<RegisteredRepo> {
     let status: String = row.get(6)?;
+    let sync_status: String = row.get(11)?;
+    let default_branch: String = row.get(10)?;
     Ok(RegisteredRepo {
         id: row.get(0)?,
         git_url: row.get(1)?,
@@ -203,6 +310,14 @@ fn row_to_repo(row: &rusqlite::Row<'_>) -> rusqlite::Result<RegisteredRepo> {
         error: row.get(7)?,
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
+        default_branch: if default_branch.trim().is_empty() {
+            "master".into()
+        } else {
+            default_branch
+        },
+        sync_status: SyncStatus::parse(&sync_status),
+        last_synced_at: row.get(12)?,
+        sync_error: row.get(13)?,
     })
 }
 
@@ -253,6 +368,10 @@ mod tests {
             local_path: format!("/tmp/.poria/repos/{scope}/{name}"),
             clone_status: CloneStatus::Cloning,
             error: None,
+            default_branch: "master".into(),
+            sync_status: SyncStatus::Idle,
+            last_synced_at: None,
+            sync_error: None,
             created_at: now.clone(),
             updated_at: now,
         }
@@ -276,6 +395,10 @@ mod tests {
         assert_eq!(listed[0].scope, "ls");
         assert_eq!(listed[0].name, "ls-entrance");
         assert_eq!(listed[0].clone_status, CloneStatus::Cloning);
+        assert_eq!(listed[0].default_branch, "master");
+        assert_eq!(listed[0].sync_status, SyncStatus::Idle);
+        assert!(listed[0].last_synced_at.is_none());
+        assert!(listed[0].sync_error.is_none());
     }
 
     #[test]
@@ -392,5 +515,84 @@ mod tests {
         assert_eq!(by_id["repo-1"].clone_status, CloneStatus::Failed);
         assert_eq!(by_id["repo-1"].error.as_deref(), Some("克隆中断，请重试"));
         assert_eq!(by_id["repo-2"].clone_status, CloneStatus::Ready);
+    }
+
+    #[test]
+    fn update_default_branch_persists_without_touching_sync() {
+        let ctx = test_store();
+        ctx.store
+            .insert(&sample_repo(
+                "repo-1",
+                "git@coding.jd.com:ls/ls-entrance.git",
+                "https://coding.jd.com/ls/ls-entrance",
+                "ls",
+                "ls-entrance",
+            ))
+            .unwrap();
+
+        let updated = ctx
+            .store
+            .update_default_branch("repo-1", "  release  ")
+            .unwrap();
+        assert_eq!(updated.default_branch, "release");
+        assert_eq!(updated.sync_status, SyncStatus::Idle);
+
+        let failed_sync = ctx
+            .store
+            .update_sync_status(
+                "repo-1",
+                SyncStatus::Failed,
+                None,
+                Some("fast-forward failed".into()),
+            )
+            .unwrap();
+        assert_eq!(failed_sync.default_branch, "release");
+        assert_eq!(failed_sync.sync_status, SyncStatus::Failed);
+        assert_eq!(
+            failed_sync.sync_error.as_deref(),
+            Some("fast-forward failed")
+        );
+        assert!(failed_sync.last_synced_at.is_none());
+    }
+
+    #[test]
+    fn update_sync_status_synced_records_timestamp() {
+        let ctx = test_store();
+        ctx.store
+            .insert(&sample_repo(
+                "repo-1",
+                "git@coding.jd.com:ls/ls-entrance.git",
+                "https://coding.jd.com/ls/ls-entrance",
+                "ls",
+                "ls-entrance",
+            ))
+            .unwrap();
+        let now = Utc::now().to_rfc3339();
+        let synced = ctx
+            .store
+            .update_sync_status("repo-1", SyncStatus::Synced, Some(now.clone()), None)
+            .unwrap();
+        assert_eq!(synced.sync_status, SyncStatus::Synced);
+        assert_eq!(synced.last_synced_at.as_deref(), Some(now.as_str()));
+        assert!(synced.sync_error.is_none());
+    }
+
+    #[test]
+    fn update_default_branch_rejects_empty() {
+        let ctx = test_store();
+        ctx.store
+            .insert(&sample_repo(
+                "repo-1",
+                "git@coding.jd.com:ls/ls-entrance.git",
+                "https://coding.jd.com/ls/ls-entrance",
+                "ls",
+                "ls-entrance",
+            ))
+            .unwrap();
+        let err = ctx
+            .store
+            .update_default_branch("repo-1", "   ")
+            .unwrap_err();
+        assert!(err.contains("主分支不能为空"), "{err}");
     }
 }

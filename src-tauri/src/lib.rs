@@ -100,6 +100,8 @@ pub fn run() {
             commands::repos::list_repos,
             commands::repos::retry_clone,
             commands::repos::list_repo_branches,
+            commands::repos::sync_repo,
+            commands::repos::update_repo_default_branch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

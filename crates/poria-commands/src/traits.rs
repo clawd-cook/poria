@@ -134,7 +134,6 @@ pub fn stage_skill_id(stage: StageEnum) -> &'static str {
         StageEnum::Init => "skill:init",
         StageEnum::ReviewPrd => "skill:review-prd",
         StageEnum::Design => "skill:gen-trd",
-        StageEnum::Workspace => "skill:workspace",
         StageEnum::Dev => "skill:gen-code",
         StageEnum::Cr => "skill:code-review",
         StageEnum::Deploy => "skill:deploy",

@@ -53,11 +53,10 @@ Shared Rust deps live in root `Cargo.toml` `[workspace.dependencies]`. Add versi
 
 | `StageEnum` | Skill id | Implementation |
 |---|---|---|
-| `Init` | `skill:init` | Export JoySpace PRD + backend TRD into `~/.poria/projects/<demand_code>/` |
-| `ReviewPrd` | `skill:review-prd` | Write `PRD_REVIEW.md` (P0/P1/P2) via `claude -p` |
-| `Design` | `skill:gen-trd` | Write frontend `TRD.md` |
-| `Workspace` | `skill:workspace` | Git worktree + `feature_<demand_code>` |
-| `Dev` | `skill:gen-code` | Codegen + `TASK.md`; `Dev`/`Cr`/`Deploy` are multi-repo stages |
+| `Init` | `skill:init` | Export JoySpace docs into `~/.poria/projects/<demand_code>/`, then create frontend feature worktree + backend detached worktree |
+| `ReviewPrd` | `skill:review-prd` | Write `PRD_REVIEW.md` (P0/P1/P2) via `claude -p` in the frontend worktree |
+| `Design` | `skill:gen-trd` | Write frontend `TRD.md` into the demand project dir; cwd is the frontend worktree |
+| `Dev` | `skill:gen-code` | Codegen + `TASK.md`; `Dev`/`Cr`/`Deploy` only deliver the frontend repo |
 | `Cr` | `skill:code-review` | `CR.md` + gates |
 | `Deploy` | `skill:deploy` | Commit if dirty → **push** → EasyCI SELECT bind → find/create MR |
 
@@ -240,8 +239,8 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 
 - **SSO**: Cookie in `~/.poria/auth.json`. Commands that hit Xingyun / JoySpace / Coding must fail with 请先登录 when cookie is missing. Logged-out demand list UI must not call `list_demands`.
 - **Demand list**: default is related-to-me (omit JACP `receiver`). 「由我受理」 is `acceptedByMe` → `receiver` = ERP. Do not stamp the logged-in ERP onto rows that have no receiver.
-- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Backend repo stays **out of** `pipeline.repos` (frontend worktree only; backend is reference + TRD).
-- **JoySpace export**: SSO cookie + POST `/v1/pages/content` (`poria-channels` joyspace). Init writes markdown under `~/.poria/projects/<demand_code>/`.
+- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Frontend `base_branch` is the registered `default_branch` (default `master`). Backend repo stays **out of** `pipeline.repos`. Init creates frontend feature worktree + backend detached worktree before ReviewPrd. Docs stay in `~/.poria/projects/<demand_code>/`.
+- **JoySpace export**: SSO cookie + POST `/v1/pages/content` (`poria-channels` joyspace). Init writes `PRD.md` / `BACKEND_TRD.md` under `~/.poria/projects/<demand_code>/`; ReviewPrd / Design write `PRD_REVIEW.md` / `TRD.md` there too — not into the git worktree.
 - **Deploy**: commit (`feat(<demand_code>): <name>`) → `git push -u` → `bind_branch` (EasyCI SELECT) → `find_mr_live` / `create_merge_request_live`. Do not bind before push.
 - **Clone dest**: `~/.poria/repos/<scope>/<name>`.
 - **Worktrees**: `~/.poria/worktrees/<pipeline_id>/<repo_name>`.

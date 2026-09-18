@@ -11,5 +11,5 @@ pub use backup::DatabaseBackup;
 pub use event_store::EventStore;
 pub use pipeline_repo::SqlitePipelineStore;
 pub use queue::{PipelineQueue, WorkerLock};
-pub use registered_repo::{CloneStatus, RegisteredRepo, RegisteredRepoStore};
+pub use registered_repo::{CloneStatus, RegisteredRepo, RegisteredRepoStore, SyncStatus};
 pub use schema::init_database;

@@ -6,8 +6,8 @@ use poria_channels::coding::{normalize_git_url, query_branches, repo_scope_and_n
 use poria_infrastructure::auth::{
     assert_path_under_repos_root, get_credentials, get_registered_repo_path,
 };
-use poria_infrastructure::store::{CloneStatus, RegisteredRepo, RegisteredRepoStore};
-use poria_resources::{git_clone, git_fetch, git_list_branches};
+use poria_infrastructure::store::{CloneStatus, RegisteredRepo, RegisteredRepoStore, SyncStatus};
+use poria_resources::{git_clone, git_fetch, git_list_branches, git_sync_hosted_clone};
 use tauri::Emitter;
 use tauri::State;
 
@@ -56,18 +56,43 @@ fn spawn_clone(
         }
 
         let result = git_clone(&git_url, &local_path).await;
-        let (status, error) = match result {
-            Ok(()) => (CloneStatus::Ready, None),
-            Err(e) => (CloneStatus::Failed, Some(e.to_string())),
-        };
-
-        match repo_store.update_clone_status(&repo_id, status, error) {
-            Ok(updated) => {
-                let _ = app.emit("repo:updated", &updated);
+        match result {
+            Ok(()) => {
+                match repo_store.update_clone_status(&repo_id, CloneStatus::Ready, None) {
+                    Ok(updated) => {
+                        let _ = app.emit("repo:updated", &updated);
+                    }
+                    Err(e) => {
+                        tracing::error!(repo_id = %repo_id, error = %e, "failed to persist clone status");
+                        return;
+                    }
+                }
+                match run_repo_sync(&repo_store, &repo_id).await {
+                    Ok(synced) => {
+                        let _ = app.emit("repo:updated", &synced);
+                    }
+                    Err(e) => {
+                        tracing::warn!(repo_id = %repo_id, error = %e, "clone succeeded but sync failed");
+                        if let Ok(updated) = repo_store.load(&repo_id) {
+                            if let Some(updated) = updated {
+                                let _ = app.emit("repo:updated", &updated);
+                            }
+                        }
+                    }
+                }
             }
-            Err(e) => {
-                tracing::error!(repo_id = %repo_id, error = %e, "failed to persist clone status");
-            }
+            Err(e) => match repo_store.update_clone_status(
+                &repo_id,
+                CloneStatus::Failed,
+                Some(e.to_string()),
+            ) {
+                Ok(updated) => {
+                    let _ = app.emit("repo:updated", &updated);
+                }
+                Err(persist_err) => {
+                    tracing::error!(repo_id = %repo_id, error = %persist_err, "failed to persist clone status");
+                }
+            },
         }
     });
 }
@@ -99,6 +124,10 @@ pub async fn register_repo(
         local_path: local_path.to_string_lossy().into_owned(),
         clone_status: CloneStatus::Cloning,
         error: None,
+        default_branch: "master".into(),
+        sync_status: SyncStatus::Idle,
+        last_synced_at: None,
+        sync_error: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -199,4 +228,88 @@ pub async fn list_repo_branches(
     }
 
     Ok(branches)
+}
+
+pub(crate) async fn run_repo_sync(
+    repo_store: &RegisteredRepoStore,
+    id: &str,
+) -> Result<RegisteredRepo, String> {
+    let repo = repo_store
+        .load(id)?
+        .ok_or_else(|| format!("仓库不存在: {id}"))?;
+    if repo.clone_status != CloneStatus::Ready {
+        return Err("仓库尚未克隆完成，无法同步".into());
+    }
+    let local_path = PathBuf::from(&repo.local_path);
+    assert_path_under_repos_root(None, &local_path)?;
+
+    let _ = repo_store.update_sync_status(id, SyncStatus::Syncing, repo.last_synced_at.clone(), None)?;
+    match git_sync_hosted_clone(&local_path, &repo.default_branch).await {
+        Ok(()) => repo_store.update_sync_status(
+            id,
+            SyncStatus::Synced,
+            Some(Utc::now().to_rfc3339()),
+            None,
+        ),
+        Err(err) => {
+            let message = err.to_string();
+            let _ = repo_store.update_sync_status(
+                id,
+                SyncStatus::Failed,
+                repo.last_synced_at.clone(),
+                Some(message.clone()),
+            )?;
+            Err(message)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn sync_repo(
+    id: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RegisteredRepo, String> {
+    match run_repo_sync(&state.repo_store, &id).await {
+        Ok(updated) => {
+            app.emit("repo:updated", &updated)
+                .map_err(|e| format!("Failed to emit event: {e}"))?;
+            Ok(updated)
+        }
+        Err(err) => {
+            if let Ok(Some(updated)) = state.repo_store.load(&id) {
+                let _ = app.emit("repo:updated", &updated);
+            }
+            Err(err)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn update_repo_default_branch(
+    id: String,
+    default_branch: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RegisteredRepo, String> {
+    let updated = state
+        .repo_store
+        .update_default_branch(&id, &default_branch)?;
+    app.emit("repo:updated", &updated)
+        .map_err(|e| format!("Failed to emit event: {e}"))?;
+
+    match run_repo_sync(&state.repo_store, &id).await {
+        Ok(synced) => {
+            app.emit("repo:updated", &synced)
+                .map_err(|e| format!("Failed to emit event: {e}"))?;
+            Ok(synced)
+        }
+        Err(err) => {
+            if let Ok(Some(failed)) = state.repo_store.load(&id) {
+                let _ = app.emit("repo:updated", &failed);
+                return Ok(failed);
+            }
+            Err(err)
+        }
+    }
 }

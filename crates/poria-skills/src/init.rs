@@ -20,7 +20,7 @@ impl InitSkill {
             metadata: CapabilityMetadata {
                 id: "skill:init".into(),
                 name: "Init".into(),
-                description: "Export JoySpace PRD and backend TRD into ~/.poria/projects".into(),
+                description: "Export JoySpace docs and create frontend/backend worktrees".into(),
                 version: "0.2.0".into(),
             },
         }
@@ -41,6 +41,17 @@ fn fixture_output() -> SkillOutput {
             "prdTitle": "Fixture PRD",
             "backendTrdPath": "/tmp/poria-fixture/project/BACKEND_TRD.md",
             "backendTrdTitle": "Fixture Backend TRD",
+            "worktreePath": "/tmp/poria-fixture/frontend",
+            "backendWorktreePath": "/tmp/poria-fixture/backend",
+            "repos": [
+                {
+                    "name": "main",
+                    "branch": "feature_TEST",
+                    "baseBranch": "master",
+                    "worktreePath": "/tmp/poria-fixture/frontend",
+                    "gitlabProjectPath": "group/repo"
+                }
+            ],
             "demandMetadata": {
                 "demandId": 1,
                 "demandCode": "TEST",
@@ -137,5 +148,32 @@ impl Skill for InitSkill {
             }),
             gates_pass: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixture_output_includes_worktree_paths() {
+        let output = fixture_output().output;
+        assert_eq!(
+            output.get("worktreePath").and_then(|v| v.as_str()),
+            Some("/tmp/poria-fixture/frontend")
+        );
+        assert_eq!(
+            output.get("backendWorktreePath").and_then(|v| v.as_str()),
+            Some("/tmp/poria-fixture/backend")
+        );
+        let repos = output.get("repos").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(
+            repos[0].get("worktreePath").and_then(|v| v.as_str()),
+            Some("/tmp/poria-fixture/frontend")
+        );
+        assert_eq!(
+            repos[0].get("baseBranch").and_then(|v| v.as_str()),
+            Some("master")
+        );
     }
 }

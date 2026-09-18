@@ -5,7 +5,6 @@ pub const STAGE_SKILL_MAP: &[(StageEnum, &str)] = &[
     (StageEnum::Init, "skill:init"),
     (StageEnum::ReviewPrd, "skill:review-prd"),
     (StageEnum::Design, "skill:gen-trd"),
-    (StageEnum::Workspace, "skill:workspace"),
     (StageEnum::Dev, "skill:gen-code"),
     (StageEnum::Cr, "skill:code-review"),
     (StageEnum::Deploy, "skill:deploy"),
@@ -17,7 +16,6 @@ pub fn stage_to_skill_id(stage: StageEnum) -> &'static str {
         StageEnum::Init => "skill:init",
         StageEnum::ReviewPrd => "skill:review-prd",
         StageEnum::Design => "skill:gen-trd",
-        StageEnum::Workspace => "skill:workspace",
         StageEnum::Dev => "skill:gen-code",
         StageEnum::Cr => "skill:code-review",
         StageEnum::Deploy => "skill:deploy",
@@ -34,7 +32,6 @@ mod tests {
             StageEnum::Init,
             StageEnum::ReviewPrd,
             StageEnum::Design,
-            StageEnum::Workspace,
             StageEnum::Dev,
             StageEnum::Cr,
             StageEnum::Deploy,
@@ -57,7 +54,6 @@ mod tests {
         assert_eq!(stage_to_skill_id(StageEnum::Init), "skill:init");
         assert_eq!(stage_to_skill_id(StageEnum::ReviewPrd), "skill:review-prd");
         assert_eq!(stage_to_skill_id(StageEnum::Design), "skill:gen-trd");
-        assert_eq!(stage_to_skill_id(StageEnum::Workspace), "skill:workspace");
         assert_eq!(stage_to_skill_id(StageEnum::Dev), "skill:gen-code");
         assert_eq!(stage_to_skill_id(StageEnum::Cr), "skill:code-review");
         assert_eq!(stage_to_skill_id(StageEnum::Deploy), "skill:deploy");

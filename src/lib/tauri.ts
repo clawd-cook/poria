@@ -145,3 +145,14 @@ export async function readDemandProjectFile(input: {
 export async function listRepoBranches(id: string): Promise<string[]> {
   return invoke<string[]>("list_repo_branches", { id });
 }
+
+export async function syncRepo(id: string): Promise<RegisteredRepo> {
+  return invoke<RegisteredRepo>("sync_repo", { id });
+}
+
+export async function updateRepoDefaultBranch(
+  id: string,
+  defaultBranch: string,
+): Promise<RegisteredRepo> {
+  return invoke<RegisteredRepo>("update_repo_default_branch", { defaultBranch, id });
+}

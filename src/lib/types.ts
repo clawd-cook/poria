@@ -19,26 +19,17 @@ export type PipelineStatus =
 
 export type StageStatus = "pending" | "running" | "completed" | "failed" | "blocked" | "skipped";
 
-export type StageEnum = "init" | "review_prd" | "design" | "workspace" | "dev" | "cr" | "deploy";
+export type StageEnum = "init" | "review_prd" | "design" | "dev" | "cr" | "deploy";
 
-export const STAGE_ORDER: StageEnum[] = [
-  "init",
-  "review_prd",
-  "design",
-  "workspace",
-  "dev",
-  "cr",
-  "deploy",
-];
+export const STAGE_ORDER: StageEnum[] = ["init", "review_prd", "design", "dev", "cr", "deploy"];
 
 export const STAGE_LABELS: Record<StageEnum, string> = {
-  init: "初始化",
-  review_prd: "需求评审",
-  design: "技术设计",
-  workspace: "工作区",
-  dev: "开发",
   cr: "代码审查",
   deploy: "部署",
+  design: "技术设计",
+  dev: "开发",
+  init: "初始化",
+  review_prd: "需求评审",
 };
 
 export interface StageDetail {
@@ -115,18 +106,24 @@ export interface ChannelInfo {
 
 export type ViewType = "home" | "demands" | "repos" | "settings";
 
-export type CloneStatus = "cloning" | "ready" | "failed";
+export type CloneStatus = "cloning" | "failed" | "ready";
+
+export type RepoSyncStatus = "failed" | "idle" | "synced" | "syncing";
 
 export interface RegisteredRepo {
   clone_status: CloneStatus;
   created_at: string;
+  default_branch: string;
   error: string | null;
   git_url: string;
   id: string;
+  last_synced_at: string | null;
   local_path: string;
   name: string;
   normalized_url: string;
   scope: string;
+  sync_error: string | null;
+  sync_status: RepoSyncStatus;
   updated_at: string;
 }
 

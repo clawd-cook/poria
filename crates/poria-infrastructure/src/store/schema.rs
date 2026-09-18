@@ -124,6 +124,23 @@ fn apply_migrations(conn: &Connection) -> SqlResult<()> {
         tx.commit()?;
     }
 
+    if version < 3 {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(
+            "
+            ALTER TABLE registered_repos ADD COLUMN default_branch TEXT NOT NULL DEFAULT 'master';
+            ALTER TABLE registered_repos ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'idle';
+            ALTER TABLE registered_repos ADD COLUMN last_synced_at TEXT;
+            ALTER TABLE registered_repos ADD COLUMN sync_error TEXT;
+            ",
+        )?;
+        tx.execute(
+            "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
+            rusqlite::params![3, chrono::Utc::now().to_rfc3339()],
+        )?;
+        tx.commit()?;
+    }
+
     Ok(())
 }
 
@@ -142,7 +159,7 @@ mod tests {
         let count: i32 = conn
             .query_row("SELECT COUNT(*) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 2);
+        assert_eq!(count, 3);
     }
 
     #[test]
@@ -169,6 +186,72 @@ mod tests {
         let version: i32 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
+
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(registered_repos)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(columns.contains(&"default_branch".to_string()));
+        assert!(columns.contains(&"sync_status".to_string()));
+        assert!(columns.contains(&"last_synced_at".to_string()));
+        assert!(columns.contains(&"sync_error".to_string()));
+    }
+
+    #[test]
+    fn schema_v3_defaults_existing_rows_to_master() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(INIT_DDL).unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE registered_repos (
+              id TEXT PRIMARY KEY,
+              git_url TEXT NOT NULL,
+              normalized_url TEXT NOT NULL UNIQUE,
+              scope TEXT NOT NULL,
+              name TEXT NOT NULL,
+              local_path TEXT NOT NULL,
+              clone_status TEXT NOT NULL,
+              error TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE (scope, name)
+            );
+            INSERT INTO schema_version (version, applied_at) VALUES (2, '2026-09-17T00:00:00Z');
+            INSERT INTO registered_repos (
+              id, git_url, normalized_url, scope, name, local_path, clone_status, error, created_at, updated_at
+            ) VALUES (
+              'repo-1',
+              'git@coding.jd.com:ls/ls-entrance.git',
+              'https://coding.jd.com/ls/ls-entrance',
+              'ls',
+              'ls-entrance',
+              '/tmp/.poria/repos/ls/ls-entrance',
+              'ready',
+              NULL,
+              '2026-09-17T00:00:00Z',
+              '2026-09-17T00:00:00Z'
+            );
+            ",
+        )
+        .unwrap();
+
+        apply_migrations(&conn).unwrap();
+        let (branch, sync_status): (String, String) = conn
+            .query_row(
+                "SELECT default_branch, sync_status FROM registered_repos WHERE id = 'repo-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(branch, "master");
+        assert_eq!(sync_status, "idle");
+        let version: i32 = conn
+            .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 3);
     }
 }

@@ -4,8 +4,9 @@
 
 ## 上下文
 
-- 项目根目录：`{{project_root}}`
-- Feature 目录：`{{feature_dir}}`
+- Feature 目录（文档权威路径，必须写到这里）：`{{feature_dir}}`
+- 前端工作区（可读代码，禁止把项目文档写进这里）：`{{project_root}}`
+- 后端只读 worktree：`{{backend_repo_path}}`（分支 `{{backend_branch}}`）
 - PRD 来源：`{{prd_source}}`
 
 ## 产物
@@ -111,7 +112,8 @@
 
 ## 硬约束
 
-- 禁止停下等用户确认范围或回答问题；必须在本轮写完 `PRD_REVIEW.md`
+- 禁止停下等用户确认范围或回答问题；必须在本轮把 `PRD_REVIEW.md` 写到 `{{feature_dir}}/PRD_REVIEW.md`
+- 禁止把 `PRD_REVIEW.md` 写进 git 工作区根目录
 - 被排除模块不产出任何条目
 - FIX 必须引用 PRD 原句
 - 不设数量上限，但每条都要落到阻塞/返工/验收风险

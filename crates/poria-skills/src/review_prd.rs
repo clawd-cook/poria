@@ -9,6 +9,8 @@ use poria_core::feature_context::{FeatureContext, ARTIFACT_PRD, ARTIFACT_PRD_REV
 use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
+use crate::artifacts::adopt_and_remove_from_worktree;
+use crate::backend_aid::insert_backend_coding_aid_vars;
 use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
 use crate::prompt_templates::{render_prompt, PRD_REVIEW_PROMPT};
@@ -82,14 +84,6 @@ impl Skill for ReviewPrdSkill {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string)
-            .or_else(|| {
-                let workdir = ctx.workdir.trim();
-                if workdir.is_empty() {
-                    None
-                } else {
-                    Some(workdir.to_string())
-                }
-            })
             .or_else(|| input.pipeline.config.project_dir.clone())
             .ok_or("missing feature_dir in skill input")?;
 
@@ -127,17 +121,20 @@ impl Skill for ReviewPrdSkill {
         vars.insert("prd_source".into(), prd_source);
         vars.insert("title".into(), title);
         vars.insert("reviewed_at".into(), reviewed_at);
+        insert_backend_coding_aid_vars(&mut vars, &input.pipeline.config, &feature_ctx);
 
         let system_prompt = format!(
             "{system_prompt}\n\n## 桌面端非交互覆盖（优先于上文任何等待指令）\n\
              没有用户可以回复。禁止提问、禁止等待范围确认。默认全部模块纳入本期（PRD 明确写二期/不做的除外）。\n\
-             必须用 Write 工具把完整 `PRD_REVIEW.md` 写到 Feature 目录；`An` 行留空。",
-            system_prompt = render_prompt(PRD_REVIEW_PROMPT, &vars)
+             必须用 Write 工具把完整 `PRD_REVIEW.md` 写到 `{feature_dir}/PRD_REVIEW.md`（绝对路径）。\n\
+             禁止把 PRD_REVIEW.md 写到 git 工作区根目录。可以阅读前端代码和后端只读 worktree。`An` 行留空。",
+            system_prompt = render_prompt(PRD_REVIEW_PROMPT, &vars),
+            feature_dir = feature_dir
         );
 
         let prompt = format!(
             "这是桌面端非交互执行。默认全部模块纳入本期（PRD 明确写二期/不做的除外），不要停下来等用户确认范围。\
-             根据下面的 PRD 从前端视角生成 PRD_REVIEW.md：An 行留空给产品回填。读完即可 Write，不要追问。\n\n\
+             根据下面的 PRD 从前端视角生成 PRD_REVIEW.md：An 行留空给产品回填。读完即可 Write 到 `{feature_dir}/PRD_REVIEW.md`，不要追问。\n\n\
              # PRD.md\n\n{prd_content}"
         );
 
@@ -149,7 +146,7 @@ impl Skill for ReviewPrdSkill {
             max_budget_usd: Some(1.0),
             max_turns: Some(10),
             timeout_ms: Some(12 * 60_000),
-            extra_tools: Some(vec!["Read".into(), "Write".into(), "Grep".into()]),
+            extra_tools: Some(vec!["Read".into(), "Write".into(), "Grep".into(), "Glob".into()]),
         };
 
         let review_already_exists = feature_ctx.has_artifact(ARTIFACT_PRD_REVIEW);
@@ -157,6 +154,7 @@ impl Skill for ReviewPrdSkill {
             (None, None)
         } else {
             let result = agent_pool.dispatch(agent_input).await;
+            adopt_and_remove_from_worktree(&feature_ctx, &ctx.workdir, ARTIFACT_PRD_REVIEW);
             let review_exists = feature_ctx.has_artifact(ARTIFACT_PRD_REVIEW);
             if !result.success && !review_exists {
                 return Err(format!(
@@ -167,6 +165,8 @@ impl Skill for ReviewPrdSkill {
             }
             (result.session_id, result.cost_usd)
         };
+
+        adopt_and_remove_from_worktree(&feature_ctx, &ctx.workdir, ARTIFACT_PRD_REVIEW);
 
         let review_exists = feature_ctx.has_artifact(ARTIFACT_PRD_REVIEW);
         if !review_exists {

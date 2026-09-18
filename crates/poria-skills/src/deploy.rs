@@ -11,6 +11,7 @@ use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
 use poria_core::types::{SkillInput, SkillOutput};
 use poria_resources::{git_add_all, git_commit, git_has_changes, git_push_set_upstream};
 
+use crate::artifacts::strip_project_docs_from_worktree;
 use crate::fixture::is_fixture_mode;
 
 pub struct DeploySkill {
@@ -149,6 +150,7 @@ impl Skill for DeploySkill {
         }
 
         let creds = credentials_from_ctx(&ctx)?;
+        strip_project_docs_from_worktree(worktree_path);
         if git_has_changes(worktree_path).await? {
             git_add_all(worktree_path).await?;
             let _ = git_commit(
