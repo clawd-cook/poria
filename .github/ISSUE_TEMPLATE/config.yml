@@ -9,3 +9,6 @@ contact_links:
   - name: 贡献指南
     url: https://github.com/clawd-cook/poria/blob/main/CONTRIBUTING.md
     about: 本地环境、分层约定、提交与 PR 检查
+  - name: 想法（Discussions）
+    url: https://github.com/clawd-cook/poria/discussions/new?category=ideas
+    about: 还不成熟的想法先开 Discussion；确定要做再转功能建议 Issue

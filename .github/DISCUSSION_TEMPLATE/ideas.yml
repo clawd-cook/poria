@@ -1,0 +1,58 @@
+title: "[Idea]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这里适合还不成熟、想先讨论的想法。已经能说清问题和期望方案时，请改用 [功能建议 Issue](https://github.com/clawd-cook/poria/issues/new?template=feature_request.yml)。
+
+        安全漏洞请走 [私下披露](https://github.com/clawd-cook/poria/security/advisories/new)，不要发公开 Discussion。不要粘贴 SSO Cookie、`~/.poria/auth.json` 或签名密钥。
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 想法
+      description: 你希望 Poria 多做什么，或哪条路径用起来别扭？
+      placeholder: 例如：Deploy 失败时看板上能否区分「没 push」和「EasyCI SELECT 绑不上」。
+    validations:
+      required: true
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: 好处
+      description: 谁会用到？比现在好在哪？
+    validations:
+      required: true
+
+  - type: textarea
+    id: drawbacks
+    attributes:
+      label: 顾虑
+      description: 分层、契约、桌面验证或发布会不会更难？不确定就写「不确定」。
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 主要相关
+      multiple: true
+      options:
+        - 桌面 UI
+        - 流水线阶段
+        - 行云 / JoySpace / Coding
+        - 发布 / DMG
+        - 开发体验 / 文档
+        - 不确定
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 确认
+      options:
+        - label: 这不是安全漏洞（安全问题已走私下披露）
+          required: true
+        - label: 文中没有 Cookie、auth.json 或签名密钥
+          required: true

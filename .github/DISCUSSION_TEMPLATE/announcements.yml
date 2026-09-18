@@ -1,0 +1,45 @@
+title: "[Announcement]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        维护者公告：版本、破坏性变更、发布或贡献流程变化。不要在这里报告缺陷或安全问题。
+
+        安全漏洞请走 [私下披露](https://github.com/clawd-cook/poria/security/advisories/new)。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 公告
+      description: 发生了什么？贡献者或使用者要做什么？
+    validations:
+      required: true
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: 主要读者
+      options:
+        - 使用者（安装 / 升级 DMG）
+        - 贡献者（开发 / PR）
+        - 维护者（发布 / 签名）
+        - 全员
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 相关版本
+      description: tag 或 Release，没有可留空
+      placeholder: 例如 v1.1.1 或 v1.1.1-beta.1
+    validations:
+      required: false
+
+  - type: textarea
+    id: action
+    attributes:
+      label: 需要采取的行动
+      description: 例如：升级 DMG、不要对旧 tag 点 Re-run、改用某条验证路径。没有可写「无」。
+    validations:
+      required: true
