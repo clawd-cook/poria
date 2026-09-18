@@ -9,7 +9,9 @@ use tauri_plugin_opener::OpenerExt;
 
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
-use poria_commands::{is_auth_expired, is_requirement_ambiguous, stage_error_outcome};
+use poria_commands::{
+    is_auth_expired, is_requirement_ambiguous, is_trd_unconfirmed, stage_error_outcome,
+};
 use poria_core::contracts::{Channel, ChannelContext, Skill, SkillContext};
 use poria_core::pipeline::{
     create_pipeline_id, evaluate_gates, parse_prd_review, GatePhase,
@@ -18,7 +20,8 @@ use poria_core::pipeline::{
 use poria_core::types::{
     BackendContext, IssueClass, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, SkillInput,
     Stage, StageEnum, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS, AUTH_EXPIRED_USER_MESSAGE,
-    REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, STAGE_ORDER,
+    REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, STAGE_ORDER, TRD_UNCONFIRMED_ISSUE_CLASS,
+    TRD_UNCONFIRMED_USER_MESSAGE,
 };
 use poria_infrastructure::auth::{
     assert_path_under_projects_root, assert_path_under_repos_root,
@@ -384,6 +387,7 @@ pub async fn submit_pipeline(
         backend_trd_url: Some(backend_trd_url),
         backend_context: Some(backend_context),
         project_dir: None,
+        trd_confirmed: false,
     };
     if config.repos.len() != 1 {
         return Err("流水线只能包含前端仓库".into());
@@ -557,6 +561,29 @@ pub async fn human_loop_respond(
             action
         )),
     }
+}
+
+/// Confirm frontend `TRD.md` (or explicitly skip confirmation) and resume Dev.
+#[tauri::command]
+pub async fn confirm_trd(
+    pipeline_id: String,
+    skipped: bool,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut pipeline = state
+        .store
+        .load(&pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+    pipeline.config.trd_confirmed = true;
+    pipeline.updated_at = Utc::now();
+    state
+        .store
+        .update_config(&pipeline_id, &pipeline.config, None)
+        .map_err(|e| e.to_string())?;
+    tracing::info!(pipeline_id = %pipeline_id, skipped, "frontend TRD confirmation recorded");
+    enqueue_auto_run(app, &state, pipeline_id);
+    Ok(())
 }
 
 /// Request execution of the next pending stage in a pipeline.
@@ -909,6 +936,8 @@ fn emit_human_request(
                 AUTH_EXPIRED_ISSUE_CLASS.to_string()
             } else if is_requirement_ambiguous(detail) {
                 REQUIREMENT_AMBIGUOUS_ISSUE_CLASS.to_string()
+            } else if is_trd_unconfirmed(detail) {
+                TRD_UNCONFIRMED_ISSUE_CLASS.to_string()
             } else {
                 "stage_failed".into()
             }
@@ -1292,6 +1321,10 @@ fn blocked_issue_class(class: &str) -> IssueClass {
         || class.eq_ignore_ascii_case("RequirementAmbiguous")
     {
         IssueClass::RequirementAmbiguous
+    } else if class.eq_ignore_ascii_case(TRD_UNCONFIRMED_ISSUE_CLASS)
+        || class.eq_ignore_ascii_case("TrdUnconfirmed")
+    {
+        IssueClass::TrdUnconfirmed
     } else {
         IssueClass::Unknown
     }
@@ -1383,6 +1416,56 @@ async fn enforce_prd_review_p0(
         store,
         message,
         REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+    )
+}
+
+fn enforce_trd_confirmed(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+) -> Result<(), String> {
+    let project_dir = resolve_demand_project_dir(pipeline)?;
+    let trd_exists = project_dir.join("TRD.md").is_file();
+    let confirmed = pipeline.config.trd_confirmed;
+    let stage_result = StageResult {
+        trd_exists: Some(trd_exists),
+        trd_confirmed: Some(confirmed),
+        ..Default::default()
+    };
+    let rules: Vec<_> = DEFAULT_GATES
+        .iter()
+        .filter(|rule| rule.id == "trd_exists" || rule.id == "trd_confirmed")
+        .cloned()
+        .collect();
+    let evaluation = evaluate_gates(&stage_result, &rules, GatePhase::StageEntry);
+    pipeline.stages[stage_idx].gate_results = Some(serde_json::json!([
+        {
+            "gate": "TRD 文档存在",
+            "passed": trd_exists,
+            "actual": trd_exists.to_string(),
+            "threshold": "true",
+        },
+        {
+            "gate": "TRD 已确认",
+            "passed": confirmed,
+            "actual": confirmed.to_string(),
+            "threshold": "true",
+        }
+    ]));
+    if !trd_exists {
+        return Err("请先完成技术设计，生成 TRD.md".into());
+    }
+    if evaluation.all_pass && confirmed {
+        return Ok(());
+    }
+    fail_or_block_stage(
+        pipeline,
+        stage_idx,
+        app,
+        store,
+        TRD_UNCONFIRMED_USER_MESSAGE.to_string(),
+        TRD_UNCONFIRMED_ISSUE_CLASS,
     )
 }
 
@@ -1724,6 +1807,7 @@ async fn run_dev_stage(
     if !worktree.join(".git").exists() {
         return Err(format!("前端工作区无效: {}", worktree.display()));
     }
+    enforce_trd_confirmed(pipeline, stage_idx, app, store)?;
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -2259,6 +2343,7 @@ mod tests {
     fn blocked_issue_class_maps_p0_and_auth() {
         use poria_core::types::{
             IssueClass, AUTH_EXPIRED_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+            TRD_UNCONFIRMED_ISSUE_CLASS,
         };
         assert_eq!(
             blocked_issue_class(AUTH_EXPIRED_ISSUE_CLASS),
@@ -2267,6 +2352,10 @@ mod tests {
         assert_eq!(
             blocked_issue_class(REQUIREMENT_AMBIGUOUS_ISSUE_CLASS),
             IssueClass::RequirementAmbiguous
+        );
+        assert_eq!(
+            blocked_issue_class(TRD_UNCONFIRMED_ISSUE_CLASS),
+            IssueClass::TrdUnconfirmed
         );
     }
 

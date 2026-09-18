@@ -11,6 +11,10 @@ pub const AUTH_EXPIRED_USER_MESSAGE: &str = "SSO Cookie 已过期，请重新登
 /// Stored on `Stage.issue.class` when Design is blocked on unanswered P0.
 pub const REQUIREMENT_AMBIGUOUS_ISSUE_CLASS: &str = "requirement_ambiguous";
 
+/// Stored on `Stage.issue.class` when Dev is blocked pending TRD confirmation.
+pub const TRD_UNCONFIRMED_ISSUE_CLASS: &str = "trd_unconfirmed";
+pub const TRD_UNCONFIRMED_USER_MESSAGE: &str = "TRD unconfirmed: 请确认前端 TRD.md 后再进入开发";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueClass {
@@ -28,6 +32,7 @@ pub enum IssueClass {
     SecurityViolation,
     OutOfScopeChange,
     AuthExpired,
+    TrdUnconfirmed,
     Unknown,
 }
 
@@ -182,6 +187,16 @@ pub static ISSUE_POLICIES: Lazy<HashMap<IssueClass, IssuePolicy>> = Lazy::new(||
             escalate_at: Some("1h".into()),
             retry_delay: None,
             note: Some("静默重读 auth.json 后仍失败则 Blocked，等待重新登录".into()),
+        },
+    );
+    m.insert(
+        IssueClass::TrdUnconfirmed,
+        IssuePolicy {
+            auto_retry: 0,
+            notify_roles: vec!["developer".into()],
+            escalate_at: Some("4h".into()),
+            retry_delay: None,
+            note: Some("确认前端 TRD.md 或明确跳过确认后再进入 Dev".into()),
         },
     );
     m.insert(

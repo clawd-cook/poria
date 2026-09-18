@@ -107,6 +107,9 @@ pub struct PipelineConfig {
     /// Local folder `~/.poria/projects/<demand_code>` with extracted markdown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_dir: Option<String>,
+    /// Frontend `TRD.md` has been confirmed (or confirmation explicitly skipped).
+    #[serde(default)]
+    pub trd_confirmed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +169,7 @@ mod tests {
         assert!(config.backend_trd_url.is_none());
         assert!(config.backend_context.is_none());
         assert!(config.repos.is_empty());
+        assert!(!config.trd_confirmed);
     }
 
     #[test]
@@ -184,6 +188,7 @@ mod tests {
                 name: "ls-api".into(),
             }),
             project_dir: None,
+            trd_confirmed: false,
         };
 
         let parsed: PipelineConfig =

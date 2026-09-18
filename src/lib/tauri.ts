@@ -47,6 +47,10 @@ export async function humanLoopRespond(pipelineId: string, action: string): Prom
   return invoke<void>("human_loop_respond", { pipelineId, action });
 }
 
+export async function confirmTrd(pipelineId: string, skipped = false): Promise<void> {
+  return invoke<void>("confirm_trd", { pipelineId, skipped });
+}
+
 export async function getAuthStatus(): Promise<AuthStatus> {
   return invoke<AuthStatus>("get_auth_status");
 }
