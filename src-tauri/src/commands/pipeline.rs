@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -19,7 +20,9 @@ use poria_infrastructure::auth::{
     assert_path_under_workspaces_root, demand_project_folder_name, get_credentials,
     get_demand_project_dir, get_pipeline_workspace_dir, get_workspaces_root,
 };
-use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
+use poria_infrastructure::store::{
+    demand_task_key, CloneStatus, RegisteredRepo, SqlitePipelineStore,
+};
 use poria_resources::WorktreeResource;
 use poria_skills::{
     prepare_pipeline_workspace, CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, InitSkill,
@@ -32,6 +35,7 @@ use crate::AppState;
 #[derive(Debug, Serialize, Clone)]
 pub struct PipelineSummary {
     pub id: String,
+    pub demand_id: i64,
     pub demand_name: String,
     pub demand_code: String,
     pub status: String,
@@ -98,6 +102,7 @@ fn pipeline_to_summary(p: &Pipeline) -> PipelineSummary {
 
     PipelineSummary {
         id: p.id.clone(),
+        demand_id: p.demand_id,
         demand_name: p.demand_name.clone().unwrap_or_default(),
         demand_code: p.demand_code.clone(),
         status: status_str,
@@ -173,7 +178,52 @@ fn pipeline_to_detail(p: &Pipeline) -> PipelineDetail {
 #[tauri::command]
 pub async fn list_pipelines(state: State<'_, AppState>) -> Result<Vec<PipelineSummary>, String> {
     let pipelines = state.store.list_all()?;
-    Ok(pipelines.iter().map(pipeline_to_summary).collect())
+    Ok(dedupe_latest_by_task_key(pipelines)
+        .iter()
+        .map(pipeline_to_summary)
+        .collect())
+}
+
+fn is_newer_pipeline(candidate: &Pipeline, current: &Pipeline) -> bool {
+    candidate.updated_at > current.updated_at
+        || (candidate.updated_at == current.updated_at && candidate.id > current.id)
+}
+
+fn dedupe_latest_by_task_key(pipelines: Vec<Pipeline>) -> Vec<Pipeline> {
+    let mut best: HashMap<String, Pipeline> = HashMap::new();
+    for pipeline in pipelines {
+        let key = demand_task_key(&pipeline.demand_code, pipeline.demand_id);
+        match best.get(&key) {
+            Some(existing) if !is_newer_pipeline(&pipeline, existing) => {}
+            _ => {
+                best.insert(key, pipeline);
+            }
+        }
+    }
+    let mut out: Vec<Pipeline> = best.into_values().collect();
+    out.sort_by(|a, b| {
+        b.updated_at
+            .cmp(&a.updated_at)
+            .then_with(|| b.id.cmp(&a.id))
+    });
+    out
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SubmitReuse {
+    Create,
+    UpdateCreated(String),
+    ReturnExisting(String),
+}
+
+fn submit_reuse_decision(existing: Option<&Pipeline>) -> SubmitReuse {
+    match existing {
+        None => SubmitReuse::Create,
+        Some(pipeline) if pipeline.status == PipelineStatus::Created => {
+            SubmitReuse::UpdateCreated(pipeline.id.clone())
+        }
+        Some(pipeline) => SubmitReuse::ReturnExisting(pipeline.id.clone()),
+    }
 }
 
 #[tauri::command]
@@ -320,8 +370,6 @@ pub async fn submit_pipeline(
         .filter(|username| !username.is_empty())
         .ok_or_else(|| "请先登录".to_string())?;
 
-    let pipeline_id = create_pipeline_id();
-    let now = Utc::now();
     let config = PipelineConfig {
         gates: vec![],
         trd_scope: vec![],
@@ -331,6 +379,31 @@ pub async fn submit_pipeline(
         backend_context: Some(backend_context),
         project_dir: None,
     };
+    if config.repos.len() != 1 {
+        return Err("流水线只能包含前端仓库".into());
+    }
+
+    let existing = state
+        .store
+        .find_latest_for_demand(&demand_code, demand_id)?;
+    match submit_reuse_decision(existing.as_ref()) {
+        SubmitReuse::UpdateCreated(pipeline_id) => {
+            state
+                .store
+                .update_config(&pipeline_id, &config, demand_name.as_deref())?;
+            app.emit("pipeline:list-changed", &pipeline_id)
+                .map_err(|e| e.to_string())?;
+            enqueue_auto_run(app.clone(), &state, pipeline_id.clone());
+            return Ok(pipeline_id);
+        }
+        SubmitReuse::ReturnExisting(pipeline_id) => {
+            return Ok(pipeline_id);
+        }
+        SubmitReuse::Create => {}
+    }
+
+    let pipeline_id = create_pipeline_id();
+    let now = Utc::now();
 
     let pipeline = Pipeline {
         id: pipeline_id.clone(),
@@ -1889,8 +1962,31 @@ pub async fn open_workspace(
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_init_workspace_output, require_prd_and_backend_trd_urls};
-    use poria_core::types::RepoConfig;
+    use super::{
+        dedupe_latest_by_task_key, merge_init_workspace_output, require_prd_and_backend_trd_urls,
+        submit_reuse_decision, SubmitReuse,
+    };
+    use chrono::Utc;
+    use poria_core::types::{Pipeline, PipelineConfig, PipelineStatus, RepoConfig};
+
+    fn test_pipeline(id: &str, code: &str, demand_id: i64, status: PipelineStatus) -> Pipeline {
+        let now = Utc::now();
+        Pipeline {
+            id: id.into(),
+            demand_id,
+            demand_code: code.into(),
+            demand_name: Some("Demand".into()),
+            status,
+            raw_link: "https://xingyun.jd.com/demand/1".into(),
+            operator: "tester".into(),
+            has_regressed: false,
+            config: PipelineConfig::default(),
+            stages: vec![],
+            repos: vec![],
+            created_at: now,
+            updated_at: now,
+        }
+    }
 
     #[test]
     fn require_prd_and_backend_trd_rejects_empty_or_non_joyspace() {
@@ -1959,5 +2055,66 @@ mod tests {
         );
         assert_eq!(merged["repos"][0]["baseBranch"].as_str(), Some("master"));
         assert!(merged.get("prdPath").is_some());
+    }
+
+    #[test]
+    fn submit_reuse_created_updates_existing_id() {
+        let existing = test_pipeline("pl-1", "REQ-001", 42, PipelineStatus::Created);
+        assert_eq!(
+            submit_reuse_decision(Some(&existing)),
+            SubmitReuse::UpdateCreated("pl-1".into())
+        );
+    }
+
+    #[test]
+    fn submit_reuse_non_created_returns_existing_id() {
+        for status in [
+            PipelineStatus::Running,
+            PipelineStatus::Blocked,
+            PipelineStatus::WaitingMerge,
+            PipelineStatus::Completed,
+            PipelineStatus::Failed,
+            PipelineStatus::Cancelled,
+        ] {
+            let existing = test_pipeline("pl-keep", "REQ-001", 42, status);
+            assert_eq!(
+                submit_reuse_decision(Some(&existing)),
+                SubmitReuse::ReturnExisting("pl-keep".into()),
+                "{status:?} must not insert or reset"
+            );
+        }
+        assert_eq!(submit_reuse_decision(None), SubmitReuse::Create);
+    }
+
+    #[test]
+    fn list_pipelines_dedupes_same_demand_code_to_latest() {
+        let older = Utc::now() - chrono::Duration::hours(1);
+        let mut first = test_pipeline("pl-old", "REQ-001", 42, PipelineStatus::Completed);
+        first.updated_at = older;
+        first.created_at = older;
+        let second = test_pipeline("pl-new", "REQ-001", 42, PipelineStatus::Running);
+        let other = test_pipeline("pl-other", "REQ-002", 99, PipelineStatus::Created);
+
+        let deduped = dedupe_latest_by_task_key(vec![first, second, other]);
+        assert_eq!(deduped.len(), 2);
+        let req001 = deduped.iter().find(|p| p.demand_code == "REQ-001").unwrap();
+        assert_eq!(req001.id, "pl-new");
+        assert!(deduped.iter().any(|p| p.id == "pl-other"));
+    }
+
+    #[test]
+    fn list_pipelines_dedupes_empty_code_by_demand_id() {
+        let older = Utc::now() - chrono::Duration::hours(1);
+        let mut first = test_pipeline("pl-old", "", 42, PipelineStatus::Completed);
+        first.updated_at = older;
+        first.created_at = older;
+        let second = test_pipeline("pl-new", "  ", 42, PipelineStatus::Created);
+        let other = test_pipeline("pl-other", "", 99, PipelineStatus::Running);
+
+        let deduped = dedupe_latest_by_task_key(vec![first, second, other]);
+        assert_eq!(deduped.len(), 2);
+        let id42 = deduped.iter().find(|p| p.demand_id == 42).unwrap();
+        assert_eq!(id42.id, "pl-new");
+        assert!(deduped.iter().any(|p| p.id == "pl-other"));
     }
 }

@@ -3,7 +3,7 @@ import { Tag } from "antd";
 import type { PipelineStatus } from "../lib/types";
 
 const STATUS_CONFIG: Record<PipelineStatus, { color: string; label: string }> = {
-  created: { color: "default", label: "已创建" },
+  created: { color: "default", label: "未开始" },
   running: { color: "processing", label: "运行中" },
   waiting_merge: { color: "warning", label: "待合并" },
   blocked: { color: "error", label: "已阻塞" },
