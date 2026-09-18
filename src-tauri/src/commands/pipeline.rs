@@ -8,7 +8,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
-use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
+use poria_channels::xingyun::{
+    feature_branch_name, is_joyspace_prd_link, writeback_pipeline_progress,
+    xingyun_demand_view_url, PipelineWriteback,
+};
 use poria_commands::{
     classify, handle_stage_error, is_auth_expired, is_out_of_scope, is_quality_gate_block,
     is_requirement_ambiguous, is_security_violation, is_trd_unconfirmed, retry_delay_for_message,
@@ -540,6 +543,7 @@ async fn cancel_pipeline_inner(id: &str, app: &AppHandle, state: &AppState) -> R
 
     app.emit("pipeline:cancelled", id)
         .map_err(|e| e.to_string())?;
+    spawn_delivery_side_effects(pipeline, true, None, None);
 
     Ok(())
 }
@@ -942,7 +946,145 @@ fn persist_stage_failure(
         .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &[event])
         .map_err(|e| e.to_string())?;
     emit_pipeline_updated(app, pipeline)?;
+    spawn_delivery_side_effects(
+        pipeline.clone(),
+        !blocked,
+        Some(issue_class.clone()),
+        Some(message.clone()),
+    );
     Err(message)
+}
+
+fn is_quality_defect_class(issue_class: &str) -> bool {
+    matches!(
+        issue_class,
+        "ci_build" | "test_coverage" | "security_violation" | "test_failure"
+    )
+}
+
+fn spawn_delivery_side_effects(
+    pipeline: Pipeline,
+    rollback: bool,
+    issue_class: Option<String>,
+    message: Option<String>,
+) {
+    tauri::async_runtime::spawn(async move {
+        if matches!(
+            pipeline.status,
+            PipelineStatus::WaitingMerge
+                | PipelineStatus::Completed
+                | PipelineStatus::Failed
+                | PipelineStatus::Cancelled
+        ) {
+            let _ = writeback_xingyun(&pipeline).await;
+        }
+        if rollback {
+            let _ = rollback_coding_mrs(&pipeline).await;
+        }
+        if issue_class.as_deref().is_some_and(is_quality_defect_class) {
+            let _ = create_quality_defect(&pipeline, message.as_deref().unwrap_or("")).await;
+        }
+    });
+}
+
+async fn writeback_xingyun(pipeline: &Pipeline) -> Result<(), String> {
+    let creds = ensure_sso_credentials().await?;
+    let xingyun = poria_channels::xingyun::JacpCredentials {
+        cookie: creds.cookie,
+        username: creds.username,
+    };
+    writeback_pipeline_progress(
+        &xingyun,
+        &PipelineWriteback {
+            demand_id: pipeline.demand_id,
+            demand_code: pipeline.demand_code.clone(),
+            pipeline_id: pipeline.id.clone(),
+            status: pipeline.status,
+            mr_urls: poria_core::pipeline::collect_deploy_mr_urls(pipeline),
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+async fn create_quality_defect(pipeline: &Pipeline, detail: &str) -> Result<(), String> {
+    let creds = ensure_sso_credentials().await?;
+    let xingyun = poria_channels::xingyun::JacpCredentials {
+        cookie: creds.cookie,
+        username: creds.username,
+    };
+    poria_channels::defect::create_defect(
+        &xingyun,
+        &poria_channels::defect::CreateDefectInput {
+            demand_id: pipeline.demand_id,
+            title: format!("【Poria】{} 质量门禁失败", pipeline.demand_code),
+            detail: format!("{} ({})", detail, pipeline.id),
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+async fn rollback_coding_mrs(pipeline: &Pipeline) -> Result<(), String> {
+    let urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
+    if urls.is_empty() {
+        return Ok(());
+    }
+    let creds = ensure_sso_credentials().await?;
+    let coding_creds = poria_channels::coding::JacpCredentials {
+        cookie: creds.cookie.clone(),
+        username: creds.username.clone(),
+    };
+    let Ok((project_path, _, _)) = deploy_mr_ref(pipeline) else {
+        return Ok(());
+    };
+    for url in urls {
+        let Some(iid) = poria_core::pipeline::parse_mr_iid_from_url(&url) else {
+            continue;
+        };
+        match poria_channels::coding::get_mr_status_live(&coding_creds, &project_path, iid).await {
+            Ok(poria_channels::coding::MrStatus::Merged) => {
+                match poria_channels::coding::revert_mr_live(&coding_creds, &project_path, iid)
+                    .await
+                {
+                    Ok(revert_url) => {
+                        let note = format!(
+                            "【Poria】已创建 revert MR: {revert_url}。Poria 不会自动点合并，请审查后合入。"
+                        );
+                        let _ = poria_channels::coding::post_mr_note_live(
+                            &coding_creds,
+                            &project_path,
+                            iid,
+                            &note,
+                        )
+                        .await;
+                        if !pipeline.operator.trim().is_empty() {
+                            let _ = poria_channels::jme::send_message(
+                                &pipeline.operator,
+                                &note,
+                                Some(120),
+                                None,
+                            )
+                            .await;
+                        }
+                    }
+                    Err(err) => tracing::warn!(error = %err, mr = %url, "revert MR failed"),
+                }
+            }
+            Ok(poria_channels::coding::MrStatus::Opened)
+            | Ok(poria_channels::coding::MrStatus::Locked) => {
+                if let Err(err) =
+                    poria_channels::coding::close_mr_live(&coding_creds, &project_path, iid).await
+                {
+                    tracing::warn!(error = %err, mr = %url, "close MR failed");
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn emit_pipeline_updated(app: &tauri::AppHandle, pipeline: &Pipeline) -> Result<(), String> {
@@ -1045,6 +1187,7 @@ pub(crate) async fn poll_waiting_merges_once(
                     )
                     .map_err(|e| e.to_string())?;
                 emit_pipeline_updated(app, &pipeline)?;
+                spawn_delivery_side_effects(pipeline, false, None, None);
             }
             poria_channels::coding::MrStatus::Closed => {
                 pipeline.status = PipelineStatus::Failed;
@@ -1060,6 +1203,7 @@ pub(crate) async fn poll_waiting_merges_once(
                     )
                     .map_err(|e| e.to_string())?;
                 emit_pipeline_updated(app, &pipeline)?;
+                spawn_delivery_side_effects(pipeline, false, None, None);
             }
             _ => {
                 let stale = pipeline
@@ -2747,6 +2891,33 @@ async fn run_deploy_stage(
             }
             pipeline.stages[stage_idx].output = Some(output_value.clone());
             let mr_urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
+            let mut rollback_cmds = Vec::new();
+            for url in &mr_urls {
+                rollback_cmds.push(poria_core::types::RollbackCommand {
+                    command_type: poria_core::types::RollbackCommandType::CloseMr,
+                    params: [("mrUrl".into(), url.clone())].into_iter().collect(),
+                });
+            }
+            if let Some(branch) = output_value
+                .get("branch")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                rollback_cmds.push(poria_core::types::RollbackCommand {
+                    command_type: poria_core::types::RollbackCommandType::DeleteBranch,
+                    params: [("branch".into(), branch.to_string())]
+                        .into_iter()
+                        .collect(),
+                });
+            }
+            if !rollback_cmds.is_empty() {
+                pipeline.stages[stage_idx].rollback =
+                    Some(poria_core::types::RollbackInstruction {
+                        stage_index: stage_idx as i32,
+                        commands: rollback_cmds,
+                    });
+            }
             store
                 .save_stage_tx(
                     Some(&pipeline.stages[stage_idx]),
@@ -2774,6 +2945,7 @@ async fn run_deploy_stage(
                     ),
                 }),
             );
+            spawn_delivery_side_effects(pipeline.clone(), false, None, None);
             Ok(())
         }
         Err(err) => {
