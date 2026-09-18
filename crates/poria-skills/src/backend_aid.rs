@@ -37,7 +37,7 @@ pub fn insert_backend_coding_aid_vars(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prompt_templates::{render_prompt, CODE_IMPL_PROMPT, TRD_GEN_PROMPT};
+    use crate::workspace_layout::repo_bundled_skills_dir;
     use poria_core::feature_context::ARTIFACT_TRD;
     use poria_core::types::BackendContext;
     use std::fs;
@@ -94,17 +94,12 @@ mod tests {
             Some("frontend trd must not leak")
         );
 
-        for template in [TRD_GEN_PROMPT, CODE_IMPL_PROMPT] {
-            let rendered = render_prompt(template, &vars);
-            assert!(rendered.contains("https://joyspace.jd.com/pages/be"));
-            assert!(rendered.contains("# backend trd"));
-            assert!(rendered.contains("/tmp/.poria/repos/ls/ls-api"));
-            assert!(rendered.contains("release"));
-            assert!(!rendered.contains("{{backend_trd_url}}"));
-            assert!(!rendered.contains("{{backend_trd_content}}"));
-            assert!(!rendered.contains("{{backend_repo_path}}"));
-            assert!(!rendered.contains("{{backend_branch}}"));
-            assert!(rendered.contains("禁止修改后端仓"));
+        let bundled = repo_bundled_skills_dir();
+        for name in ["gen-trd", "gen-code"] {
+            let body = fs::read_to_string(bundled.join(name).join("SKILL.md")).unwrap();
+            assert!(body.contains("禁止修改后端仓"));
+            assert!(body.contains("TRD.md"));
+            assert!(!body.contains("{{backend_trd_url}}"));
         }
         fs::remove_dir_all(&base).ok();
     }

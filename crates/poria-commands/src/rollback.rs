@@ -282,6 +282,19 @@ impl PipelineRollback {
                     path,
                 ));
             }
+            RollbackCommandType::RemoveDirectory => {
+                let path = cmd.params.get("path").map(|s| s.as_str()).unwrap_or("");
+                let dir = std::path::Path::new(path);
+                poria_infrastructure::auth::assert_path_under_workspaces_root(None, dir)?;
+                if dir.exists() {
+                    std::fs::remove_dir_all(dir)?;
+                }
+                events.push(PipelineEvent::rollback_executed(
+                    pipeline_id,
+                    "remove_directory",
+                    path,
+                ));
+            }
             _ => {
                 events.push(PipelineEvent::rollback_executed(
                     pipeline_id,

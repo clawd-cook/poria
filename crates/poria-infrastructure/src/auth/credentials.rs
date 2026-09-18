@@ -6,6 +6,7 @@ const AUTH_FILE_NAME: &str = "auth.json";
 const CONFIG_FILE_NAME: &str = "config.json";
 const REPOS_DIR_NAME: &str = "repos";
 const PROJECTS_DIR_NAME: &str = "projects";
+const WORKSPACES_DIR_NAME: &str = "workspaces";
 const ERP_COOKIE_NAME: &str = "erp_erp";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +55,26 @@ pub fn get_repos_root(home: Option<&Path>) -> PathBuf {
 
 pub fn get_projects_root(home: Option<&Path>) -> PathBuf {
     get_user_root(home).join(PROJECTS_DIR_NAME)
+}
+
+pub fn get_workspaces_root(home: Option<&Path>) -> PathBuf {
+    get_user_root(home).join(WORKSPACES_DIR_NAME)
+}
+
+pub fn get_pipeline_workspace_dir(home: Option<&Path>, pipeline_id: &str) -> Result<PathBuf, String> {
+    validate_path_segment(pipeline_id, "流水线 ID")?;
+    Ok(get_workspaces_root(home).join(pipeline_id))
+}
+
+pub fn assert_path_under_workspaces_root(home: Option<&Path>, path: &Path) -> Result<(), String> {
+    let root = get_workspaces_root(home);
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err("工作区路径不合法".into());
+    }
+    if !path.starts_with(&root) {
+        return Err("工作区路径不在 ~/.poria/workspaces 下".into());
+    }
+    Ok(())
 }
 
 /// `~/.poria/projects/<demand_code>` for extracted PRD / TRD markdown.
@@ -232,12 +253,34 @@ pub fn logout(user_root: Option<&Path>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn test_get_repos_root_under_poria() {
         let dir = tempfile::tempdir().unwrap();
         let path = get_repos_root(Some(dir.path()));
         assert_eq!(path, dir.path().join(".poria").join("repos"));
+    }
+
+    #[test]
+    fn test_get_pipeline_workspace_dir_under_poria() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = get_pipeline_workspace_dir(Some(dir.path()), "pl-20260918-abcd1234").unwrap();
+        assert_eq!(
+            path,
+            dir.path()
+                .join(".poria")
+                .join("workspaces")
+                .join("pl-20260918-abcd1234")
+        );
+        assert!(get_pipeline_workspace_dir(Some(dir.path()), "../escape").is_err());
+        let ok = dir.path().join(".poria").join("workspaces").join("p1");
+        assert!(assert_path_under_workspaces_root(Some(dir.path()), &ok).is_ok());
+        assert!(assert_path_under_workspaces_root(
+            Some(dir.path()),
+            Path::new("/tmp/elsewhere")
+        )
+        .is_err());
     }
 
     #[test]

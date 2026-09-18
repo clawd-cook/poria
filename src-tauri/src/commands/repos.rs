@@ -243,7 +243,12 @@ pub(crate) async fn run_repo_sync(
     let local_path = PathBuf::from(&repo.local_path);
     assert_path_under_repos_root(None, &local_path)?;
 
-    let _ = repo_store.update_sync_status(id, SyncStatus::Syncing, repo.last_synced_at.clone(), None)?;
+    let _ = repo_store.update_sync_status(
+        id,
+        SyncStatus::Syncing,
+        repo.last_synced_at.clone(),
+        None,
+    )?;
     match git_sync_hosted_clone(&local_path, &repo.default_branch).await {
         Ok(()) => repo_store.update_sync_status(
             id,

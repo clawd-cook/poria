@@ -21,14 +21,14 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [Quality Guidelines](./quality-guidelines.md)     | Code standards, forbidden patterns      | To fill |
 | [Tauri Desktop Testing](./tauri-desktop-testing.md) | Real-window IPC / clone verification    | Active  |
 | [Claude CLI Path](./claude-cli.md)                | `which` resolve, `claude_path`, probe   | Active  |
-| [Pipeline Init Workspace](./pipeline-workspace.md) | Init worktrees, repo sync, doc paths   | Active  |
+| [Pipeline Init Workspace](./pipeline-workspace.md) | Init workspaces, skill symlinks, repo sync | Active  |
 | [Type Safety](./type-safety.md)                   | Type patterns, validation               | To fill |
 
 ---
 
 ## When to Use
 
-Load [Tauri Desktop Testing](./tauri-desktop-testing.md) before claiming clone, login, demand list, or pipeline submit works. Cursor browser on port 1420 cannot `invoke` / `listen`. Demand list default is related-to-me (omit JACP `receiver`); 「由我受理」 is `acceptedByMe` → `receiver` = ERP. Start-pipeline submit must send `backendTrdUrl`; backend stays out of `pipeline.repos`. Init creates both worktrees before ReviewPrd; project docs stay in `~/.poria/projects/<demand_code>/` ([Pipeline Init Workspace](./pipeline-workspace.md)). Agent spawn / Settings Claude status: [Claude CLI Path](./claude-cli.md) — `~/.poria/config.json` `claude_path`, login-shell `which`, probe only in the Poria window.
+Load [Tauri Desktop Testing](./tauri-desktop-testing.md) before claiming clone, login, demand list, or pipeline submit works. Cursor browser on port 1420 cannot `invoke` / `listen`. Demand list default is related-to-me (omit JACP `receiver`); 「由我受理」 is `acceptedByMe` → `receiver` = ERP. Start-pipeline submit must send `backendTrdUrl`; backend stays out of `pipeline.repos`. Init creates `~/.poria/workspaces/<pipeline_id>/` (doc/skill symlinks + both worktrees) before ReviewPrd; project docs stay in `~/.poria/projects/<demand_code>/` ([Pipeline Init Workspace](./pipeline-workspace.md)). Agent spawn / Settings Claude status: [Claude CLI Path](./claude-cli.md) — `~/.poria/config.json` `claude_path`, login-shell `which`, probe only in the Poria window.
 
 ---
 

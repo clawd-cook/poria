@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
@@ -14,13 +15,15 @@ use poria_core::types::{
     StageEnum, StageIssue, StageStatus, STAGE_ORDER,
 };
 use poria_infrastructure::auth::{
-    assert_path_under_projects_root, assert_path_under_repos_root, demand_project_folder_name,
-    get_credentials, get_demand_project_dir, get_user_root,
+    assert_path_under_projects_root, assert_path_under_repos_root,
+    assert_path_under_workspaces_root, demand_project_folder_name, get_credentials,
+    get_demand_project_dir, get_pipeline_workspace_dir, get_workspaces_root,
 };
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
 use poria_resources::WorktreeResource;
 use poria_skills::{
-    CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill,
+    bundled_skills_complete, prepare_pipeline_workspace, CodeReviewSkill, DeploySkill,
+    GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill,
 };
 
 use crate::AppState;
@@ -62,6 +65,7 @@ pub struct PipelineDetail {
     pub operator: String,
     pub has_regressed: bool,
     pub stages: Vec<StageDetail>,
+    pub workspace_path: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -160,6 +164,7 @@ fn pipeline_to_detail(p: &Pipeline) -> PipelineDetail {
         operator: p.operator.clone(),
         has_regressed: p.has_regressed,
         stages: p.stages.iter().map(stage_to_detail).collect(),
+        workspace_path: init_output_path(p, "workspacePath"),
         created_at: p.created_at.to_rfc3339(),
         updated_at: p.updated_at.to_rfc3339(),
     }
@@ -623,14 +628,7 @@ async fn execute_next_stage(
     let stage_name = pipeline.stages[stage_idx].name;
     match stage_name {
         StageEnum::Init => {
-            run_init_stage(
-                &mut pipeline,
-                stage_idx,
-                app,
-                &store,
-                &runtime.repo_store,
-            )
-            .await?;
+            run_init_stage(&mut pipeline, stage_idx, app, &store, &runtime.repo_store).await?;
         }
         StageEnum::ReviewPrd => {
             run_review_prd_stage(
@@ -787,9 +785,9 @@ async fn run_init_stage(
         .backend_context
         .clone()
         .ok_or("缺少后端仓库上下文，无法创建工作区")?;
-    let frontend_registered = resolve_registered_clone(repo_store, &frontend.git_url, &frontend.name)?;
-    let backend_registered =
-        resolve_registered_clone(repo_store, &backend.git_url, &backend.name)?;
+    let frontend_registered =
+        resolve_registered_clone(repo_store, &frontend.git_url, &frontend.name)?;
+    let backend_registered = resolve_registered_clone(repo_store, &backend.git_url, &backend.name)?;
 
     let folder = demand_project_folder_name(&pipeline.demand_code, pipeline.demand_id);
     let project_dir = get_demand_project_dir(None, &folder)?;
@@ -840,36 +838,76 @@ async fn run_init_stage(
         }
     };
 
-    let workspace_root = get_user_root(None).join("worktrees");
-    let worktree = WorktreeResource::new(Some(workspace_root.to_string_lossy().into_owned()));
+    let workspace_dir = match get_pipeline_workspace_dir(None, &pipeline.id) {
+        Ok(path) => path,
+        Err(err) => {
+            return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+        }
+    };
+    let bundled_skills = match bundled_skills_dir(app) {
+        Ok(path) => path,
+        Err(err) => {
+            return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+        }
+    };
+    if let Err(err) = prepare_pipeline_workspace(&workspace_dir, &project_dir, &bundled_skills) {
+        let _ = cleanup_pipeline_workspace(&workspace_dir);
+        return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+    }
+
+    let worktree_root = get_workspaces_root(None);
+    let worktree = WorktreeResource::new(Some(worktree_root.to_string_lossy().into_owned()));
     let frontend_git_root = PathBuf::from(&frontend_registered.local_path);
     let backend_git_root = PathBuf::from(&backend_registered.local_path);
     if let Err(err) = assert_path_under_repos_root(None, &frontend_git_root) {
+        let _ = cleanup_pipeline_workspace(&workspace_dir);
         return fail_init_stage(pipeline, stage_idx, app, store, err).await;
     }
     if let Err(err) = assert_path_under_repos_root(None, &backend_git_root) {
+        let _ = cleanup_pipeline_workspace(&workspace_dir);
         return fail_init_stage(pipeline, stage_idx, app, store, err).await;
     }
 
     let frontend_created = match worktree
-        .create(&frontend, &pipeline.id, &frontend.base_branch, &frontend_git_root)
-        .await
-    {
-        Ok(created) => created,
-        Err(err) => {
-            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
-        }
-    };
-
-    let backend_created = match worktree
-        .create_detached(&backend.name, &pipeline.id, &backend_git_root, &backend.branch)
+        .create(
+            &frontend,
+            &pipeline.id,
+            &frontend.base_branch,
+            &frontend_git_root,
+        )
         .await
     {
         Ok(created) => created,
         Err(err) => {
             let _ = worktree
-                .remove_path(&frontend_git_root, Path::new(&frontend_created.worktree_path))
+                .remove_path(&frontend_git_root, &worktree.path(&frontend, &pipeline.id))
                 .await;
+            let _ = cleanup_pipeline_workspace(&workspace_dir);
+            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
+        }
+    };
+
+    let backend_created = match worktree
+        .create_detached(
+            &backend.name,
+            &pipeline.id,
+            &backend_git_root,
+            &backend.branch,
+        )
+        .await
+    {
+        Ok(created) => created,
+        Err(err) => {
+            let _ = worktree
+                .remove_path(
+                    &frontend_git_root,
+                    Path::new(&frontend_created.worktree_path),
+                )
+                .await;
+            let _ = worktree
+                .remove_path(&backend_git_root, &workspace_dir.join(&backend.name))
+                .await;
+            let _ = cleanup_pipeline_workspace(&workspace_dir);
             return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
         }
     };
@@ -878,18 +916,21 @@ async fn run_init_stage(
         backend_ctx.local_path = backend_created.worktree_path.clone();
     }
 
+    let workspace_path = workspace_dir.to_string_lossy().into_owned();
     output = merge_init_workspace_output(
         output,
         &frontend,
         &frontend_created.worktree_path,
         &frontend_created.branch,
         &backend_created.worktree_path,
+        &workspace_path,
     );
     let rollback = init_rollback_instruction(
         stage_idx as i32,
         &frontend_created.worktree_path,
         &backend_created.worktree_path,
         &frontend_created.branch,
+        &workspace_path,
     );
 
     pipeline.config.project_dir = Some(project_dir.to_string_lossy().to_string());
@@ -970,8 +1011,13 @@ fn merge_init_workspace_output(
     frontend_worktree: &str,
     frontend_branch: &str,
     backend_worktree: &str,
+    workspace_path: &str,
 ) -> serde_json::Value {
     if let Some(obj) = output.as_object_mut() {
+        obj.insert(
+            "workspacePath".into(),
+            serde_json::Value::String(workspace_path.to_string()),
+        );
         obj.insert(
             "worktreePath".into(),
             serde_json::Value::String(frontend_worktree.to_string()),
@@ -1000,6 +1046,7 @@ fn init_rollback_instruction(
     frontend_worktree: &str,
     backend_worktree: &str,
     feature_branch: &str,
+    workspace_path: &str,
 ) -> poria_core::types::RollbackInstruction {
     use poria_core::types::{RollbackCommand, RollbackCommandType, RollbackInstruction};
     RollbackInstruction {
@@ -1014,6 +1061,12 @@ fn init_rollback_instruction(
             RollbackCommand {
                 command_type: RollbackCommandType::RemoveWorktree,
                 params: [("path".into(), backend_worktree.into())]
+                    .into_iter()
+                    .collect(),
+            },
+            RollbackCommand {
+                command_type: RollbackCommandType::RemoveDirectory,
+                params: [("path".into(), workspace_path.into())]
                     .into_iter()
                     .collect(),
             },
@@ -1054,10 +1107,12 @@ async fn run_review_prd_stage(
     if !project_dir.join("PRD.md").is_file() {
         return Err("请先完成初始化，导出 PRD.md".into());
     }
+    let workspace = resolve_pipeline_workspace(pipeline)?;
     let worktree = resolve_frontend_worktree(pipeline)?;
     if !worktree.join(".git").exists() {
         return Err(format!("前端工作区无效: {}", worktree.display()));
     }
+    let workspace_str = workspace.to_string_lossy().into_owned();
     let worktree_str = worktree.to_string_lossy().into_owned();
 
     pipeline.status = PipelineStatus::Running;
@@ -1085,13 +1140,21 @@ async fn run_review_prd_stage(
         serde_json::Value::String(project_dir_str.clone()),
     );
     extra.insert(
+        "workspace_path".into(),
+        serde_json::Value::String(workspace_str.clone()),
+    );
+    extra.insert(
+        "worktree_path".into(),
+        serde_json::Value::String(worktree_str),
+    );
+    extra.insert(
         "reviewed_at".into(),
         serde_json::Value::String(Utc::now().to_rfc3339()),
     );
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
-        workdir: worktree_str,
+        workdir: workspace_str,
         credentials: serde_json::json!({}),
     };
     let input = SkillInput {
@@ -1164,10 +1227,12 @@ async fn run_design_stage(
     if !project_dir.join("PRD.md").is_file() {
         return Err("请先完成初始化，导出 PRD.md".into());
     }
+    let workspace = resolve_pipeline_workspace(pipeline)?;
     let worktree = resolve_frontend_worktree(pipeline)?;
     if !worktree.join(".git").exists() {
         return Err(format!("前端工作区无效: {}", worktree.display()));
     }
+    let workspace_str = workspace.to_string_lossy().into_owned();
     let worktree_str = worktree.to_string_lossy().into_owned();
 
     pipeline.status = PipelineStatus::Running;
@@ -1194,10 +1259,18 @@ async fn run_design_stage(
         "feature_dir".into(),
         serde_json::Value::String(project_dir_str.clone()),
     );
+    extra.insert(
+        "workspace_path".into(),
+        serde_json::Value::String(workspace_str.clone()),
+    );
+    extra.insert(
+        "worktree_path".into(),
+        serde_json::Value::String(worktree_str),
+    );
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
-        workdir: worktree_str,
+        workdir: workspace_str,
         credentials: serde_json::json!({}),
     };
     let input = SkillInput {
@@ -1259,6 +1332,75 @@ async fn run_design_stage(
     }
 }
 
+fn assert_path_under_workspaces_dir(path: &Path) -> Result<(), String> {
+    assert_path_under_workspaces_root(None, path)
+}
+
+fn init_output_path(pipeline: &Pipeline, key: &str) -> Option<String> {
+    pipeline
+        .stages
+        .iter()
+        .find(|stage| stage.name == StageEnum::Init)
+        .and_then(|stage| stage.output.as_ref())
+        .and_then(|output| output.get(key))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn resolve_pipeline_workspace(pipeline: &Pipeline) -> Result<PathBuf, String> {
+    let init = pipeline
+        .stages
+        .iter()
+        .find(|stage| stage.name == StageEnum::Init)
+        .ok_or("请先完成初始化")?;
+    if init.status != StageStatus::Completed {
+        return Err("请先完成初始化".into());
+    }
+    if let Some(path) = init_output_path(pipeline, "workspacePath") {
+        let workspace = PathBuf::from(path);
+        assert_path_under_workspaces_dir(&workspace)?;
+        if workspace.is_dir() {
+            return Ok(workspace);
+        }
+    }
+    let workspace = get_pipeline_workspace_dir(None, &pipeline.id)?;
+    assert_path_under_workspaces_dir(&workspace)?;
+    if !workspace.is_dir() {
+        return Err(format!("工作区不存在: {}", workspace.display()));
+    }
+    Ok(workspace)
+}
+
+fn bundled_skills_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../skills");
+    if bundled_skills_complete(&dev) {
+        return Ok(dev.canonicalize().unwrap_or(dev));
+    }
+    let resource = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("无法解析资源目录: {e}"))?;
+    let bundled = resource.join("skills");
+    if bundled_skills_complete(&bundled) {
+        return Ok(bundled);
+    }
+    Err(format!(
+        "找不到随包 skill 目录（已试 {} 与 {}）",
+        dev.display(),
+        bundled.display()
+    ))
+}
+
+fn cleanup_pipeline_workspace(workspace_dir: &Path) -> Result<(), String> {
+    assert_path_under_workspaces_dir(workspace_dir)?;
+    if workspace_dir.exists() {
+        std::fs::remove_dir_all(workspace_dir).map_err(|e| format!("无法删除工作区: {e}"))?;
+    }
+    Ok(())
+}
+
 fn resolve_registered_clone(
     repo_store: &poria_infrastructure::store::RegisteredRepoStore,
     git_url: &str,
@@ -1273,20 +1415,6 @@ fn resolve_registered_clone(
                 && (normalize_git_url(&registered.git_url) == wanted || registered.name == name)
         })
         .ok_or_else(|| format!("未找到已就绪的仓库 {name}"))
-}
-
-fn assert_path_under_worktrees_root(path: &Path) -> Result<(), String> {
-    let root = get_user_root(None).join("worktrees");
-    if path
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        return Err("工作区路径不合法".into());
-    }
-    if !path.starts_with(&root) {
-        return Err("工作区路径不在 ~/.poria/worktrees 下".into());
-    }
-    Ok(())
 }
 
 fn resolve_frontend_worktree(pipeline: &Pipeline) -> Result<PathBuf, String> {
@@ -1318,7 +1446,7 @@ fn resolve_frontend_worktree(pipeline: &Pipeline) -> Result<PathBuf, String> {
             .filter(|value| !value.is_empty())
         {
             let worktree = PathBuf::from(path);
-            assert_path_under_worktrees_root(&worktree)?;
+            assert_path_under_workspaces_dir(&worktree)?;
             if worktree.exists() {
                 return Ok(worktree);
             }
@@ -1332,11 +1460,10 @@ fn resolve_frontend_worktree(pipeline: &Pipeline) -> Result<PathBuf, String> {
         .repos
         .first()
         .ok_or("缺少前端仓库，无法进入开发")?;
-    let worktree = get_user_root(None)
-        .join("worktrees")
+    let worktree = get_workspaces_root(None)
         .join(&pipeline.id)
         .join(&repo.name);
-    assert_path_under_worktrees_root(&worktree)?;
+    assert_path_under_workspaces_dir(&worktree)?;
     if !worktree.exists() {
         return Err(format!("前端工作区不存在: {}", worktree.display()));
     }
@@ -1354,6 +1481,7 @@ async fn run_dev_stage(
     if !project_dir.join("TRD.md").is_file() {
         return Err("请先完成技术设计，生成 TRD.md".into());
     }
+    let workspace = resolve_pipeline_workspace(pipeline)?;
     let worktree = resolve_frontend_worktree(pipeline)?;
     if !worktree.join(".git").exists() {
         return Err(format!("前端工作区无效: {}", worktree.display()));
@@ -1378,6 +1506,7 @@ async fn run_dev_stage(
     emit_pipeline_updated(app, pipeline)?;
 
     let project_dir_str = project_dir.to_string_lossy().into_owned();
+    let workspace_str = workspace.to_string_lossy().into_owned();
     let worktree_str = worktree.to_string_lossy().into_owned();
     let mut extra = serde_json::Map::new();
     extra.insert(
@@ -1385,13 +1514,17 @@ async fn run_dev_stage(
         serde_json::Value::String(project_dir_str),
     );
     extra.insert(
+        "workspace_path".into(),
+        serde_json::Value::String(workspace_str.clone()),
+    );
+    extra.insert(
         "worktree_path".into(),
-        serde_json::Value::String(worktree_str.clone()),
+        serde_json::Value::String(worktree_str),
     );
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
-        workdir: worktree_str,
+        workdir: workspace_str,
         credentials: serde_json::json!({}),
     };
     let input = SkillInput {
@@ -1461,6 +1594,7 @@ async fn run_cr_stage(
     agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
 ) -> Result<(), String> {
     let project_dir = resolve_demand_project_dir(pipeline)?;
+    let workspace = resolve_pipeline_workspace(pipeline)?;
     let worktree = resolve_frontend_worktree(pipeline)?;
     if !worktree.join(".git").exists() {
         return Err(format!("前端工作区无效: {}", worktree.display()));
@@ -1485,6 +1619,7 @@ async fn run_cr_stage(
     emit_pipeline_updated(app, pipeline)?;
 
     let project_dir_str = project_dir.to_string_lossy().into_owned();
+    let workspace_str = workspace.to_string_lossy().into_owned();
     let worktree_str = worktree.to_string_lossy().into_owned();
     let repo = pipeline.config.repos.first();
     let mut extra = serde_json::Map::new();
@@ -1493,8 +1628,12 @@ async fn run_cr_stage(
         serde_json::Value::String(project_dir_str),
     );
     extra.insert(
+        "workspace_path".into(),
+        serde_json::Value::String(workspace_str.clone()),
+    );
+    extra.insert(
         "worktree_path".into(),
-        serde_json::Value::String(worktree_str.clone()),
+        serde_json::Value::String(worktree_str),
     );
     if let Some(repo) = repo {
         extra.insert(
@@ -1509,7 +1648,7 @@ async fn run_cr_stage(
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
-        workdir: worktree_str,
+        workdir: workspace_str,
         credentials: serde_json::json!({}),
     };
     let input = SkillInput {
@@ -1752,6 +1891,22 @@ pub async fn skip_stage(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn open_workspace(
+    pipeline_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pipeline = state
+        .store
+        .load(&pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+    let path = resolve_pipeline_workspace(&pipeline)?;
+    app.opener()
+        .open_path(path.to_string_lossy().as_ref(), None::<&str>)
+        .map_err(|e| format!("无法打开工作区: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{merge_init_workspace_output, require_prd_and_backend_trd_urls};
@@ -1805,22 +1960,24 @@ mod tests {
                 "prdPath": "/tmp/.poria/projects/R1/PRD.md"
             }),
             &frontend,
-            "/tmp/.poria/worktrees/p1/ls-entrance",
+            "/tmp/.poria/workspaces/p1/ls-entrance",
             "feature_R1",
-            "/tmp/.poria/worktrees/p1/ls-api",
+            "/tmp/.poria/workspaces/p1/ls-api",
+            "/tmp/.poria/workspaces/p1",
+        );
+        assert_eq!(
+            merged.get("workspacePath").and_then(|v| v.as_str()),
+            Some("/tmp/.poria/workspaces/p1")
         );
         assert_eq!(
             merged.get("worktreePath").and_then(|v| v.as_str()),
-            Some("/tmp/.poria/worktrees/p1/ls-entrance")
+            Some("/tmp/.poria/workspaces/p1/ls-entrance")
         );
         assert_eq!(
             merged.get("backendWorktreePath").and_then(|v| v.as_str()),
-            Some("/tmp/.poria/worktrees/p1/ls-api")
+            Some("/tmp/.poria/workspaces/p1/ls-api")
         );
-        assert_eq!(
-            merged["repos"][0]["baseBranch"].as_str(),
-            Some("master")
-        );
+        assert_eq!(merged["repos"][0]["baseBranch"].as_str(), Some("master"));
         assert!(merged.get("prdPath").is_some());
     }
 }

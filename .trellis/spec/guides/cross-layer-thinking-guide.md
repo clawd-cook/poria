@@ -308,10 +308,10 @@ When changing the demand start wizard, `submit_pipeline`, or design/dev prompt i
 
 - [ ] Does TS send `backendTrdUrl` and Rust persist `config.backend_trd_url` (JoySpace, required, ≠ `prd_url`)?
 - [ ] Is backend still out of `pipeline.repos` (`backend_context` only)?
-- [ ] After Init, is `backend_context.local_path` the detached **worktree**, not the hosted clone?
+- [ ] After Init, is `backend_context.local_path` the detached **worktree** under `~/.poria/workspaces/<id>/`, not the hosted clone?
 - [ ] Is frontend `base_branch` the registered `default_branch`, not `git_current_branch`?
-- [ ] Do ReviewPrd/Design write `PRD_REVIEW.md` / `TRD.md` only under `~/.poria/projects/<demand_code>/` with Agent cwd = frontend worktree?
-- [ ] Do `gen_trd` / `gen_code` inject URL + optional `BACKEND_TRD.md` without overwriting frontend `TRD.md`?
+- [ ] Do ReviewPrd/Design write `PRD_REVIEW.md` / `TRD.md` only under `~/.poria/projects/<demand_code>/` with Agent cwd = **workspace root** (`workspacePath`), not the frontend git worktree?
+- [ ] Do `gen_trd` / `gen_code` short prompts include `backend_trd_url` + base branch without overwriting frontend `TRD.md`?
 
 → Read [Tauri Desktop Testing](../frontend/tauri-desktop-testing.md) (start pipeline IPC).
 

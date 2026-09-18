@@ -8,6 +8,7 @@ pub enum RollbackCommandType {
     CloseMr,
     RevertCommit,
     RemoveWorktree,
+    RemoveDirectory,
     RevertMr,
 }
 

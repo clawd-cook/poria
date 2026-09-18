@@ -44,7 +44,7 @@ We do not pay a bug bounty.
 In scope:
 
 - Theft or leakage of SSO cookies / Coding credentials (`~/.poria/auth.json`, login callback, IPC)
-- Path traversal that writes or deletes outside `~/.poria/repos`, `~/.poria/projects`, or `~/.poria/worktrees`
+- Path traversal that writes or deletes outside `~/.poria/repos`, `~/.poria/projects`, or `~/.poria/workspaces`
 - Agent or skill behavior that bypasses output-guard / worktree limits and mutates unexpected paths
 - Privilege issues in Tauri commands (`src-tauri/src/commands/`) that expose secrets to the webview or the network
 - Supply-chain issues in the published GitHub Release DMG or in release workflows (secret exfiltration, malicious signing)
@@ -60,7 +60,7 @@ Out of scope:
 ## Handling secrets and local data
 
 - Auth is stored at `~/.poria/auth.json` with mode `0600`. Do not copy this file into the repo, issues, or CI logs.
-- Hosted clones and worktrees live under `~/.poria/`. Do not commit that tree.
+- Hosted clones and pipeline workspaces live under `~/.poria/`. Do not commit that tree.
 - SQLite may contain pipeline metadata under `~/Library/Application Support/com.poria.desktop/` (or `workspace/db/poria.db` in some local runs).
 - Release workflows may use `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, and `TAURI_SIGNING_PRIVATE_KEY`. Keep them as GitHub Actions secrets; never commit them.
 - Cookie values in logs should go through `redact_cookie` (or equivalent). Do not paste raw `Cookie` headers.

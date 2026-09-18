@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,14 +5,16 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
-use poria_core::feature_context::{FeatureContext, ARTIFACT_PRD, ARTIFACT_TASK, ARTIFACT_TRD};
+use poria_core::feature_context::{FeatureContext, ARTIFACT_TASK, ARTIFACT_TRD};
 use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::{terminal, ClaudeAgentPool, TerminalExecInput};
 
-use crate::backend_aid::insert_backend_coding_aid_vars;
+use crate::claude_prompt::{
+    backend_dir, backend_trd_url, build_claude_skill_prompt, extra_nonempty, frontend_base_branch,
+    resolve_feature_dir, resolve_workspace_cwd, SKILL_GEN_CODE,
+};
 use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
-use crate::prompt_templates::{render_prompt, CODE_IMPL_PROMPT};
 
 pub struct GenCodeSkill {
     metadata: CapabilityMetadata,
@@ -56,22 +57,6 @@ fn fixture_output() -> SkillOutput {
     }
 }
 
-fn extra_path<'a>(input: &'a SkillInput, key: &str) -> Option<&'a str> {
-    input
-        .extra
-        .get(key)
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-}
-
-fn resolve_feature_dir(input: &SkillInput, _ctx: &SkillContext) -> Result<String, &'static str> {
-    extra_path(input, "feature_dir")
-        .map(str::to_string)
-        .or_else(|| input.pipeline.config.project_dir.clone())
-        .ok_or("missing feature_dir in skill input")
-}
-
 fn collect_changed_files(porcelain: &str) -> Vec<String> {
     porcelain
         .lines()
@@ -109,6 +94,13 @@ fn adopt_task_md_from_worktree(feature_ctx: &FeatureContext, worktree: &str) {
     if !candidate.is_file() {
         return;
     }
+    if candidate
+        .symlink_metadata()
+        .map(|meta| meta.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return;
+    }
     if let Ok(content) = std::fs::read_to_string(&candidate) {
         let _ = feature_ctx.write_artifact(ARTIFACT_TASK, &content);
     }
@@ -134,54 +126,38 @@ impl Skill for GenCodeSkill {
             .as_ref()
             .ok_or_else(|| SkillError::NotImplemented("GenCodeSkill: no agent pool".into()))?;
 
-        let feature_dir = resolve_feature_dir(&input, &ctx)?;
-        let worktree_path = extra_path(&input, "worktree_path")
+        let feature_dir = resolve_feature_dir(&input)?;
+        let workspace_path = resolve_workspace_cwd(&input, &ctx.workdir)?;
+        let frontend_worktree = extra_nonempty(&input, "worktree_path")
             .map(str::to_string)
-            .or_else(|| {
-                let workdir = ctx.workdir.trim();
-                if workdir.is_empty() {
-                    None
-                } else {
-                    Some(workdir.to_string())
-                }
-            })
             .ok_or("missing worktree_path in skill input")?;
+        let backend = backend_dir(&input);
 
         let feature_ctx = FeatureContext::from_root(Path::new(&feature_dir))
             .ok_or("feature context not found")?;
 
-        let trd_content = feature_ctx
+        if feature_ctx
             .read_artifact(ARTIFACT_TRD)?
-            .ok_or("TRD.md not found")?;
-        let prd_content = feature_ctx.read_artifact(ARTIFACT_PRD)?.unwrap_or_default();
+            .filter(|content| !content.trim().is_empty())
+            .is_none()
+        {
+            return Err("TRD.md not found".into());
+        }
 
-        let mut vars = HashMap::new();
-        vars.insert("feature_dir".into(), feature_dir.clone());
-        vars.insert("project_root".into(), worktree_path.clone());
-        vars.insert("trd_content".into(), trd_content);
-        vars.insert("prd_content".into(), prd_content);
-        insert_backend_coding_aid_vars(&mut vars, &input.pipeline.config, &feature_ctx);
-
-        let task_path = feature_ctx.artifact_path(ARTIFACT_TASK);
-        let system_prompt = format!(
-            "{rendered}\n\n## 桌面端非交互覆盖（优先于上文任何等待指令）\n\
-             没有用户可以回复。禁止提问、禁止等待 TASK.md 确认、禁止派生子 agent / Explore / Agent / Task。\n\
-             当前 cwd 是前端 git worktree：`{worktree}`。业务代码只改这里。\n\
-             先用 Write 把完整 TASK.md 写到 `{task}`，然后立即按计划实现全部 T-n，不要停下。\n\
-             禁止读取或修改 backend_repo_path 下任何源码；不得覆盖或改名前端 TRD.md。",
-            rendered = render_prompt(CODE_IMPL_PROMPT, &vars),
-            worktree = worktree_path,
-            task = task_path.display(),
+        let prompt = build_claude_skill_prompt(
+            SKILL_GEN_CODE,
+            &input.pipeline.demand_code,
+            &workspace_path,
+            &frontend_worktree,
+            &backend,
+            backend_trd_url(&input),
+            &frontend_base_branch(&input),
         );
 
         let agent_input = AgentTaskInput {
-            prompt: format!(
-                "这是桌面端非交互执行。材料已在系统提示中。先 Write `{task}`，再在当前前端 worktree 实现代码。\
-                 不要等用户确认，不要子 agent。后端 TRD 与后端仓只读，禁止改后端仓。",
-                task = task_path.display()
-            ),
-            worktree_path: worktree_path.clone(),
-            system_prompt: Some(system_prompt),
+            prompt,
+            worktree_path: workspace_path,
+            system_prompt: None,
             model: None,
             max_budget_usd: Some(10.0),
             max_turns: Some(100),
@@ -197,7 +173,7 @@ impl Skill for GenCodeSkill {
         };
 
         let result = agent_pool.dispatch(agent_input).await;
-        adopt_task_md_from_worktree(&feature_ctx, &worktree_path);
+        adopt_task_md_from_worktree(&feature_ctx, &frontend_worktree);
         let task_exists = feature_ctx.has_artifact(ARTIFACT_TASK);
         if !result.success && !task_exists {
             return Err(format!(
@@ -210,14 +186,14 @@ impl Skill for GenCodeSkill {
             return Err("TASK.md was not written".into());
         }
 
-        let porcelain = git_porcelain(&worktree_path).await;
+        let porcelain = git_porcelain(&frontend_worktree).await;
         let changed_files = collect_changed_files(&porcelain);
 
         Ok(SkillOutput {
             output: json!({
-                "taskPath": task_path,
+                "taskPath": feature_ctx.artifact_path(ARTIFACT_TASK),
                 "taskExists": true,
-                "worktreePath": worktree_path,
+                "worktreePath": frontend_worktree,
                 "changedFiles": changed_files,
                 "agentSessionId": result.session_id,
                 "costUsd": result.cost_usd,

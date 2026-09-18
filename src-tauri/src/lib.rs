@@ -83,6 +83,7 @@ pub fn run() {
             commands::pipeline::get_pipeline_events,
             commands::pipeline::execute_stage,
             commands::pipeline::skip_stage,
+            commands::pipeline::open_workspace,
             commands::auth::get_auth_status,
             commands::auth::start_login,
             commands::auth::logout,

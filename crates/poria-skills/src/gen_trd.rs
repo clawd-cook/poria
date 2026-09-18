@@ -1,21 +1,20 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::json;
 
 use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
-use poria_core::feature_context::{
-    FeatureContext, ARTIFACT_PRD, ARTIFACT_PRD_REVIEW, ARTIFACT_TRD,
-};
+use poria_core::feature_context::{FeatureContext, ARTIFACT_PRD, ARTIFACT_TRD};
 use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
 use crate::artifacts::adopt_and_remove_from_worktree;
-use crate::backend_aid::insert_backend_coding_aid_vars;
+use crate::claude_prompt::{
+    backend_dir, backend_trd_url, build_claude_skill_prompt, extra_nonempty, frontend_base_branch,
+    resolve_feature_dir, resolve_workspace_cwd, SKILL_GEN_TRD,
+};
 use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
-use crate::prompt_templates::{render_prompt, TRD_GEN_PROMPT};
 
 pub struct GenTrdSkill {
     metadata: CapabilityMetadata,
@@ -77,66 +76,38 @@ impl Skill for GenTrdSkill {
             .as_ref()
             .ok_or_else(|| SkillError::NotImplemented("GenTrdSkill: no agent pool".into()))?;
 
-        let feature_dir = input
-            .extra
-            .get("feature_dir")
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
+        let feature_dir = resolve_feature_dir(&input)?;
+        let workspace_path = resolve_workspace_cwd(&input, &ctx.workdir)?;
+        let frontend_worktree = extra_nonempty(&input, "worktree_path")
             .map(str::to_string)
-            .or_else(|| input.pipeline.config.project_dir.clone())
-            .ok_or("missing feature_dir in skill input")?;
+            .unwrap_or_else(|| workspace_path.clone());
+        let backend = backend_dir(&input);
 
         let feature_ctx = FeatureContext::from_root(std::path::Path::new(&feature_dir))
             .ok_or("feature context not found")?;
 
-        let prd_content = feature_ctx
+        if feature_ctx
             .read_artifact(ARTIFACT_PRD)?
-            .ok_or("PRD.md not found")?;
+            .filter(|content| !content.trim().is_empty())
+            .is_none()
+        {
+            return Err("PRD.md not found".into());
+        }
 
-        let prd_review_content = feature_ctx
-            .read_artifact(ARTIFACT_PRD_REVIEW)?
-            .unwrap_or_default();
-
-        let title = input
-            .pipeline
-            .demand_name
-            .clone()
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| input.pipeline.demand_code.clone());
-        let repo_name = input
-            .pipeline
-            .config
-            .repos
-            .first()
-            .map(|repo| repo.name.clone())
-            .unwrap_or_default();
-
-        let mut vars = HashMap::new();
-        vars.insert("feature_dir".into(), feature_dir.clone());
-        vars.insert("project_root".into(), ctx.workdir.clone());
-        vars.insert("prd_content".into(), prd_content);
-        vars.insert("prd_review_content".into(), prd_review_content);
-        vars.insert("title".into(), title);
-        vars.insert("repo_name".into(), repo_name);
-        insert_backend_coding_aid_vars(&mut vars, &input.pipeline.config, &feature_ctx);
-
-        let system_prompt = format!(
-            "{rendered}\n\n## 桌面端非交互覆盖（优先于上文任何等待指令）\n\
-             没有用户可以回复。禁止提问。默认本期做完 PRD 前端可见项（明确二期/不做除外）。\n\
-             无 API.md 则用「仅高保真 UI」。grilling 用推荐答案写入附录 B。\n\
-             可以阅读前端代码和后端只读 worktree，禁止修改后端仓任何文件，禁止派生子 agent / Explore / Bash。\n\
-             第一个工具调用必须是 Write `{feature_dir}/TRD.md`。禁止把 TRD.md 写到 git 工作区根目录。",
-            rendered = render_prompt(TRD_GEN_PROMPT, &vars),
-            feature_dir = feature_dir
+        let prompt = build_claude_skill_prompt(
+            SKILL_GEN_TRD,
+            &input.pipeline.demand_code,
+            &workspace_path,
+            &frontend_worktree,
+            &backend,
+            backend_trd_url(&input),
+            &frontend_base_branch(&input),
         );
 
         let agent_input = AgentTaskInput {
-            prompt: format!(
-                "这是桌面端非交互执行。材料已在系统提示中。可以读前端代码和后端只读 worktree，不要改后端仓、不要子 agent、不要 Bash。第一个工具调用必须 Write `{feature_dir}/TRD.md`。grilling 推荐答案写入附录 B。不得覆盖或改名前端 TRD.md。"
-            ),
-            worktree_path: ctx.workdir.clone(),
-            system_prompt: Some(system_prompt),
+            prompt,
+            worktree_path: workspace_path,
+            system_prompt: None,
             model: None,
             max_budget_usd: Some(3.0),
             max_turns: Some(20),
@@ -150,7 +121,7 @@ impl Skill for GenTrdSkill {
         };
 
         let result = agent_pool.dispatch(agent_input).await;
-        adopt_and_remove_from_worktree(&feature_ctx, &ctx.workdir, ARTIFACT_TRD);
+        adopt_and_remove_from_worktree(&feature_ctx, &frontend_worktree, ARTIFACT_TRD);
         let trd_exists = feature_ctx.has_artifact(ARTIFACT_TRD);
         if !result.success && !trd_exists {
             return Err(format!(

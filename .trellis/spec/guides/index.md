@@ -38,7 +38,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] UI / command code starts casting raw payload fields directly
 - [ ] Xingyun demand list filter changes (`acceptedByMe` / `receiver` / `processor`)
 - [ ] Start-pipeline wizard / `submit_pipeline` / `backend_trd_url` / `BACKEND_TRD.md` vs frontend `TRD.md`
-- [ ] Init worktrees vs `~/.poria/projects` docs vs `pipeline.repos` vs registered `default_branch` sync
+- [ ] Init `~/.poria/workspaces/<id>` vs `~/.poria/projects` docs vs `pipeline.repos` vs registered `default_branch` sync (`workspacePath` ≠ frontend `worktreePath`)
 - [ ] `claude_path` / `probe_claude` / Agent `spawn("claude")` / `~/.poria/config.json` vs CWD `poria.config.json`
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)
@@ -49,8 +49,8 @@ These guides help you **ask the right questions before coding**.
 - [ ] If yes, is this the `poria-desktop` window (not Cursor browser on port 1420)?
 - [ ] Is port 1420 free, and was the app started with `cargo tauri dev` (not `pnpm tauri` unless a `tauri` binary is on PATH)?
 - [ ] If starting a pipeline, does invoke include `backendTrdUrl`, and is backend still out of `pipeline.repos`?
-- [ ] After Init: frontend feature worktree + backend detached worktree exist before ReviewPrd; docs only under `~/.poria/projects/<demand_code>/` (see [Pipeline Init Workspace](../frontend/pipeline-workspace.md))
-- [ ] If ReviewPrd/Design/Dev/Cr or Settings Claude status: Poria window only; path from login-shell `which` or saved absolute `claude_path` (see [Claude CLI Path](../frontend/claude-cli.md))
+- [ ] After Init: `~/.poria/workspaces/<id>/` has doc+skill symlinks, `CLAUDE.md`, frontend feature worktree + backend detached worktree before ReviewPrd; docs only under `~/.poria/projects/<demand_code>/` (see [Pipeline Init Workspace](../frontend/pipeline-workspace.md))
+- [ ] If ReviewPrd/Design/Dev/Cr: Agent cwd is the workspace root, short `-p` names the skill; Settings Claude status still Poria window only (see [Claude CLI Path](../frontend/claude-cli.md) and [Pipeline Init Workspace](../frontend/pipeline-workspace.md))
 
 → Read [Tauri Desktop Testing](../frontend/tauri-desktop-testing.md)
 
