@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use poria_core::pipeline::parse_duration_spec;
 use poria_core::types::{
     IssueClass, Pipeline, PipelineStatus, Stage, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS,
     ISSUE_POLICIES, OUT_OF_SCOPE_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
@@ -102,23 +103,7 @@ fn quality_gate_issue_class(message: &str) -> &'static str {
 
 /// Parse ISSUE_POLICIES `retry_delay` values like `5m`, `30s`, `1h`.
 pub fn parse_retry_delay(spec: &str) -> Duration {
-    let spec = spec.trim().to_ascii_lowercase();
-    if let Some(num) = spec.strip_suffix('h') {
-        if let Ok(n) = num.parse::<u64>() {
-            return Duration::from_secs(n.saturating_mul(3600));
-        }
-    }
-    if let Some(num) = spec.strip_suffix('m') {
-        if let Ok(n) = num.parse::<u64>() {
-            return Duration::from_secs(n.saturating_mul(60));
-        }
-    }
-    if let Some(num) = spec.strip_suffix('s') {
-        if let Ok(n) = num.parse::<u64>() {
-            return Duration::from_secs(n);
-        }
-    }
-    Duration::ZERO
+    parse_duration_spec(spec)
 }
 
 pub fn retry_delay_for_message(message: &str) -> Duration {

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use poria_core::pipeline::{
-    evaluate_gates, transition_pipeline, transition_stage, PipelineEvent, StageResult,
-    DEFAULT_GATES,
+    evaluate_gates, jme_notify_target, stamp_human_loop_notified, transition_pipeline,
+    transition_stage, PipelineEvent, StageResult, DEFAULT_GATES,
 };
 use poria_core::types::{
     GatePhase, Pipeline, PipelineStatus, RollbackCommand, RollbackCommandType, RollbackInstruction,
@@ -194,12 +194,11 @@ where
                 Ok(StageOutcome::Return) => return Ok(()),
                 Err(e) => {
                     let error_message = e.to_string();
-                    let hl_ref = self.human_loop.as_deref();
                     let result = handle_stage_error(
                         &mut pipeline.status,
                         &mut pipeline.stages[stage_idx],
                         &error_message,
-                        hl_ref,
+                        None,
                         None,
                     )
                     .await;
@@ -220,6 +219,12 @@ where
                             }
                         }
                         ErrorAction::Blocked => {
+                            let target = jme_notify_target(&pipeline, result.issue_class.as_str());
+                            stamp_human_loop_notified(
+                                &mut pipeline.stages[stage_idx],
+                                &target,
+                                Utc::now(),
+                            );
                             let stage = &pipeline.stages[stage_idx];
                             events.push(PipelineEvent::stage_blocked(
                                 &pipeline.id,
@@ -235,6 +240,18 @@ where
 
                     self.store
                         .save_stage_tx(Some(&pipeline.stages[stage_idx]), &pipeline, &events);
+
+                    if result.action == ErrorAction::Blocked {
+                        if let Some(hl) = self.human_loop.as_deref() {
+                            let _ = hl
+                                .notify(
+                                    &pipeline,
+                                    &pipeline.stages[stage_idx],
+                                    result.issue_class.as_str(),
+                                )
+                                .await;
+                        }
+                    }
 
                     if result.action == ErrorAction::Blocked || result.action == ErrorAction::Failed
                     {

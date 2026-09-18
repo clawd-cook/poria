@@ -44,6 +44,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] Dev exit OutputGuard: Design `trd_scope` / TRD `## 允许修改范围`; Block out-of-scope files or blocked deps — no CR
 - [ ] CI / coverage / security gates: EasyCI/Coding pipeline + report files / npm audit; missing data is fail, never agent self-score
 - [ ] Exception routing: `ISSUE_POLICIES` retry / CR regress once / HITL shows issue class, not a generic fail
+- [ ] HITL: Blocked → JME notify + desktop card; first reply wins; escalate_at then degrade to manual
 - [ ] Deploy success is WaitingMerge; poll MR; 一键确认 comments merge-ready and never clicks Merge
 - [ ] `claude_path` / `probe_claude` / Agent `spawn("claude")` / `~/.poria/config.json` vs CWD `poria.config.json`
 

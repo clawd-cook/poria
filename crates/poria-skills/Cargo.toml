@@ -7,6 +7,7 @@ edition = "2021"
 poria-core = { path = "../poria-core" }
 poria-resources = { path = "../poria-resources" }
 poria-channels = { path = "../poria-channels" }
+chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

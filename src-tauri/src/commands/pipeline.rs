@@ -14,9 +14,11 @@ use poria_commands::{
     is_requirement_ambiguous, is_security_violation, is_trd_unconfirmed, retry_delay_for_message,
     stage_error_outcome, try_regress_cr_to_dev, ErrorAction,
 };
-use poria_core::contracts::{Channel, ChannelContext, Skill, SkillContext};
+use poria_core::contracts::{Skill, SkillContext};
 use poria_core::pipeline::{
-    create_pipeline_id, evaluate_gates, parse_prd_review, parse_trd_scope, GatePhase,
+    blocked_stage_index, create_pipeline_id, escalate_after, evaluate_gates, jme_notify_target,
+    parse_prd_review, parse_trd_scope, read_human_loop_state, rfc3339_elapsed,
+    stamp_human_loop_notified, try_consume_human_reply, write_human_loop_state, GatePhase,
     PipelineEvent as CorePipelineEvent, StageResult, DEFAULT_GATES,
 };
 use poria_core::types::{
@@ -36,8 +38,8 @@ use poria_infrastructure::store::{
 };
 use poria_resources::WorktreeResource;
 use poria_skills::{
-    prepare_pipeline_workspace, CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, InitSkill,
-    ReviewPrdSkill,
+    prepare_pipeline_workspace, CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill,
+    HumanLoopCoordinator, InitSkill, ReviewPrdSkill,
 };
 
 use crate::AppState;
@@ -507,9 +509,13 @@ pub async fn cancel_pipeline(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    cancel_pipeline_inner(&id, &app, &state).await
+}
+
+async fn cancel_pipeline_inner(id: &str, app: &AppHandle, state: &AppState) -> Result<(), String> {
     let mut pipeline = state
         .store
-        .load(&id)?
+        .load(id)?
         .ok_or_else(|| format!("Pipeline not found: {}", id))?;
 
     pipeline.status = PipelineStatus::Cancelled;
@@ -522,17 +528,17 @@ pub async fn cancel_pipeline(
         }
     }
 
-    let cancel_event = CorePipelineEvent::pipeline_cancelled(&id, "user");
+    let cancel_event = CorePipelineEvent::pipeline_cancelled(id, "user");
 
     state
         .store
         .save_stage_tx(None, &pipeline, &[cancel_event])?;
 
     if let Ok(mut scheduler) = state.auto_run.lock() {
-        scheduler.drop_queued(&id);
+        scheduler.drop_queued(id);
     }
 
-    app.emit("pipeline:cancelled", &id)
+    app.emit("pipeline:cancelled", id)
         .map_err(|e| e.to_string())?;
 
     Ok(())
@@ -547,22 +553,82 @@ pub async fn human_loop_respond(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    match action.as_str() {
+    apply_human_loop_action(&pipeline_id, &action, &app, &state).await
+}
+
+async fn apply_human_loop_action(
+    pipeline_id: &str,
+    action: &str,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<(), String> {
+    match action {
+        "resume" | "skip" | "cancel" => {}
+        _ => {
+            return Err(format!(
+                "Invalid action '{action}': must be resume, skip, or cancel"
+            ))
+        }
+    }
+    {
+        let mut inflight = state
+            .human_reply_inflight
+            .lock()
+            .map_err(|e| e.to_string())?;
+        if !inflight.insert(pipeline_id.to_string()) {
+            return Ok(());
+        }
+    }
+    let consume = (|| -> Result<bool, String> {
+        let mut pipeline = state
+            .store
+            .load(pipeline_id)?
+            .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+        let Some(idx) = blocked_stage_index(&pipeline) else {
+            return Ok(true);
+        };
+        if !try_consume_human_reply(&mut pipeline.stages[idx]) {
+            return Ok(false);
+        }
+        pipeline.updated_at = Utc::now();
+        state
+            .store
+            .save_stage_tx(Some(&pipeline.stages[idx]), &pipeline, &[])
+            .map_err(|e| e.to_string())?;
+        Ok(true)
+    })();
+    let should_apply = match consume {
+        Ok(apply) => apply,
+        Err(err) => {
+            if let Ok(mut inflight) = state.human_reply_inflight.lock() {
+                inflight.remove(pipeline_id);
+            }
+            return Err(err);
+        }
+    };
+    if !should_apply {
+        if let Ok(mut inflight) = state.human_reply_inflight.lock() {
+            inflight.remove(pipeline_id);
+        }
+        return Ok(());
+    }
+    let result = match action {
         "resume" => {
-            enqueue_auto_run(app, &state, pipeline_id);
+            enqueue_auto_run(app.clone(), state, pipeline_id.to_string());
             Ok(())
         }
         "skip" => {
-            skip_actionable_stage(&pipeline_id, &app, &state)?;
-            enqueue_auto_run(app, &state, pipeline_id);
+            skip_actionable_stage(pipeline_id, app, state)?;
+            enqueue_auto_run(app.clone(), state, pipeline_id.to_string());
             Ok(())
         }
-        "cancel" => cancel_pipeline(pipeline_id, app, state).await,
-        _ => Err(format!(
-            "Invalid action '{}': must be resume, skip, or cancel",
-            action
-        )),
+        "cancel" => cancel_pipeline_inner(pipeline_id, app, state).await,
+        _ => Ok(()),
+    };
+    if let Ok(mut inflight) = state.human_reply_inflight.lock() {
+        inflight.remove(pipeline_id);
     }
+    result
 }
 
 /// Confirm frontend `TRD.md` (or explicitly skip confirmation) and resume Dev.
@@ -850,6 +916,10 @@ fn persist_stage_failure(
         message: message.clone(),
         retryable: blocked,
     });
+    if blocked {
+        let target = jme_notify_target(pipeline, &issue_class);
+        stamp_human_loop_notified(&mut pipeline.stages[stage_idx], &target, Utc::now());
+    }
     pipeline.updated_at = Utc::now();
     let event = if blocked {
         if is_auth_expired(&message) {
@@ -1039,6 +1109,84 @@ pub(crate) async fn poll_waiting_merges_once(
                         }),
                     );
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) async fn poll_human_loops_once(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    let coordinator = HumanLoopCoordinator::new();
+    let pipelines = state.store.find_by_status(PipelineStatus::Blocked)?;
+    for pipeline in pipelines {
+        let Some(idx) = blocked_stage_index(&pipeline) else {
+            continue;
+        };
+        let loop_state = read_human_loop_state(&pipeline.stages[idx]);
+        if loop_state.reply_consumed || loop_state.manual_at.is_some() {
+            continue;
+        }
+        match coordinator.poll_reply(&pipeline).await {
+            Ok(Some(reply)) => {
+                let action = match reply.action {
+                    poria_skills::HumanAction::Resume => "resume",
+                    poria_skills::HumanAction::Skip => "skip",
+                    poria_skills::HumanAction::Cancel => "cancel",
+                };
+                let _ = apply_human_loop_action(&pipeline.id, action, app, state).await;
+                continue;
+            }
+            Ok(None) | Err(_) => {}
+        }
+        let issue_class = pipeline.stages[idx]
+            .issue
+            .as_ref()
+            .map(|issue| issue.class.clone())
+            .unwrap_or_else(|| "unknown".into());
+        let Some(limit) = escalate_after(&issue_class) else {
+            continue;
+        };
+        let now = Utc::now();
+        let mut pipeline = pipeline;
+        if let Some(escalated) = loop_state.escalated_at.as_deref() {
+            if rfc3339_elapsed(escalated, now)
+                .map(|duration| duration >= limit)
+                .unwrap_or(false)
+            {
+                let mut hitl = loop_state.clone();
+                hitl.manual_at = Some(now.to_rfc3339());
+                write_human_loop_state(&mut pipeline.stages[idx], &hitl);
+                pipeline.updated_at = now;
+                let _ = state
+                    .store
+                    .save_stage_tx(Some(&pipeline.stages[idx]), &pipeline, &[]);
+                let stage_name = serde_json::to_value(pipeline.stages[idx].name)
+                    .ok()
+                    .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                    .unwrap_or_default();
+                let _ = app.emit(
+                    "human:request",
+                    serde_json::json!({
+                        "pipelineId": pipeline.id,
+                        "stage": stage_name,
+                        "issueClass": issue_class,
+                        "detail": "京ME 超时未回复，已降级为手动处理。请在桌面卡片操作。",
+                    }),
+                );
+            }
+        } else if let Some(notified) = loop_state.notified_at.as_deref() {
+            if rfc3339_elapsed(notified, now)
+                .map(|duration| duration >= limit)
+                .unwrap_or(false)
+            {
+                let _ = coordinator.escalate(&pipeline, "超时未回复").await;
+                let mut hitl = loop_state.clone();
+                hitl.escalated_at = Some(now.to_rfc3339());
+                write_human_loop_state(&mut pipeline.stages[idx], &hitl);
+                pipeline.updated_at = now;
+                let _ = state
+                    .store
+                    .save_stage_tx(Some(&pipeline.stages[idx]), &pipeline, &[]);
             }
         }
     }
@@ -1246,7 +1394,18 @@ fn emit_human_request(
             "detail": detail,
         }),
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    if pipeline.status == PipelineStatus::Blocked {
+        if let Some(stage) = stage.cloned() {
+            let pipeline = pipeline.clone();
+            let issue_class = issue_class.clone();
+            tauri::async_runtime::spawn(async move {
+                let coordinator = HumanLoopCoordinator::new();
+                let _ = coordinator.notify(&pipeline, &stage, &issue_class).await;
+            });
+        }
+    }
+    Ok(())
 }
 
 fn is_skippable_status(status: StageStatus) -> bool {
@@ -1709,28 +1868,6 @@ fn blocking_gate_message(eval: &poria_core::pipeline::GateEvaluation) -> String 
         .join("; ")
 }
 
-async fn notify_product_p0(pipeline: &Pipeline, detail: &str) {
-    let channel = poria_channels::jme::create_jme_channel();
-    let demand_name = pipeline.demand_name.as_deref().unwrap_or("-");
-    let input = serde_json::json!({
-        "action": "send",
-        "send": {
-            "target": "product",
-            "message": format!(
-                "【Poria】需求 {} ({}) P0 未答，Design 已阻塞。{}",
-                pipeline.demand_code, demand_name, detail
-            ),
-        }
-    });
-    let ctx = ChannelContext {
-        credentials: serde_json::json!({}),
-        pipeline_id: Some(pipeline.id.clone()),
-    };
-    if let Err(err) = channel.execute(input, ctx).await {
-        tracing::warn!(error = %err, "JME P0 notify failed");
-    }
-}
-
 async fn enforce_prd_review_p0(
     pipeline: &mut Pipeline,
     stage_idx: usize,
@@ -1762,7 +1899,6 @@ async fn enforce_prd_review_p0(
     if let Some(warn) = review_status.warn_message() {
         message = format!("{message}\n{warn}");
     }
-    notify_product_p0(pipeline, &message).await;
     fail_or_block_stage(
         pipeline,
         stage_idx,

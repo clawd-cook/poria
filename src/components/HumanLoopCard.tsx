@@ -194,7 +194,7 @@ export function HumanLoopCard({
               <Descriptions.Item label="阶段">{stage}</Descriptions.Item>
             </Descriptions>
             <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-              {detail}
+              {waitingMerge ? detail : `${detail} 已同时通过京ME 通知；桌面或京ME 回复只处理一次。`}
             </Typography.Text>
             <Flex gap={token.marginXS} wrap="wrap">
               {authExpired ? (

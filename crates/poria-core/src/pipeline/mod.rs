@@ -1,5 +1,6 @@
 mod events;
 mod gates;
+mod human_loop_state;
 mod id;
 mod mr_urls;
 mod multi_repo;
@@ -11,6 +12,7 @@ mod trd_scope;
 
 pub use events::*;
 pub use gates::*;
+pub use human_loop_state::*;
 pub use id::*;
 pub use mr_urls::*;
 pub use multi_repo::*;

@@ -43,6 +43,27 @@ pub enum IssueClass {
 }
 
 impl IssueClass {
+    pub fn from_key(key: &str) -> Self {
+        match key.trim().to_ascii_lowercase().as_str() {
+            "compilation_error" => IssueClass::CompilationError,
+            "test_failure" | "test_coverage" => IssueClass::TestFailure,
+            "agent_timeout" => IssueClass::AgentTimeout,
+            "llm_rate_limit" => IssueClass::LlmRateLimit,
+            "requirement_ambiguous" => IssueClass::RequirementAmbiguous,
+            "prd_invalid" => IssueClass::PrdInvalid,
+            "merge_conflict" => IssueClass::MergeConflict,
+            "low_cr_score" => IssueClass::LowCrScore,
+            "diff_too_large" => IssueClass::DiffTooLarge,
+            "permission_denied" => IssueClass::PermissionDenied,
+            "infra_failure" | "ci_build" => IssueClass::InfraFailure,
+            "security_violation" => IssueClass::SecurityViolation,
+            "out_of_scope_change" => IssueClass::OutOfScopeChange,
+            "auth_expired" => IssueClass::AuthExpired,
+            "trd_unconfirmed" => IssueClass::TrdUnconfirmed,
+            _ => IssueClass::Unknown,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             IssueClass::CompilationError => "compilation_error",
@@ -250,5 +271,15 @@ mod tests {
         assert_eq!(IssueClass::CompilationError.as_str(), "compilation_error");
         assert_eq!(IssueClass::LowCrScore.as_str(), "low_cr_score");
         assert_eq!(IssueClass::AuthExpired.as_str(), AUTH_EXPIRED_ISSUE_CLASS);
+    }
+
+    #[test]
+    fn from_key_maps_quality_aliases() {
+        assert_eq!(IssueClass::from_key("ci_build"), IssueClass::InfraFailure);
+        assert_eq!(
+            IssueClass::from_key("test_coverage"),
+            IssueClass::TestFailure
+        );
+        assert_eq!(IssueClass::from_key("waiting_merge"), IssueClass::Unknown);
     }
 }
