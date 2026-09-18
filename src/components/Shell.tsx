@@ -1,31 +1,47 @@
 import {
+  ApiOutlined,
   FolderOutlined,
   HomeOutlined,
+  NodeIndexOutlined,
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
-import { Layout, Menu, theme } from "antd";
+import { Layout, Menu, Typography, theme } from "antd";
+import type { MenuProps } from "antd";
 import type { ReactNode } from "react";
 
 import type { ViewType } from "../lib/types";
 import { useStore } from "../state/store";
 import { AuthStatus } from "./AuthStatus";
+import { ChannelsPage } from "./ChannelsPage";
 import { DemandListPage } from "./DemandListPage";
 import { HomeBoard } from "./HomeBoard";
 import { RepoListPage } from "./RepoListPage";
 import { SettingsPage } from "./SettingsPage";
+import { SkillsPage } from "./SkillsPage";
 
-const { Header, Content } = Layout;
+const { Content, Sider } = Layout;
+const { Text } = Typography;
 
-const NAV_ITEMS: { icon: ReactNode; key: ViewType; label: string }[] = [
-  { key: "home", icon: <HomeOutlined />, label: "首页" },
-  { key: "demands", icon: <UnorderedListOutlined />, label: "需求列表" },
-  { key: "repos", icon: <FolderOutlined />, label: "仓库列表" },
+const VIEW_KEYS: ViewType[] = ["home", "demands", "channels", "skills", "repos", "settings"];
+
+const NAV_ITEMS: MenuProps["items"] = [
+  { key: "home", icon: <HomeOutlined />, label: "看板" },
+  { key: "demands", icon: <UnorderedListOutlined />, label: "需求" },
+  {
+    children: [
+      { key: "channels", icon: <NodeIndexOutlined />, label: "渠道" },
+      { key: "skills", icon: <ApiOutlined />, label: "技能" },
+      { key: "repos", icon: <FolderOutlined />, label: "仓库" },
+    ],
+    key: "resources",
+    label: "资源",
+  },
   { key: "settings", icon: <SettingOutlined />, label: "设置" },
 ];
 
 function isViewType(key: string): key is ViewType {
-  return NAV_ITEMS.some((item) => item.key === key);
+  return VIEW_KEYS.includes(key as ViewType);
 }
 
 function PersistentTab({ active, children }: { active: boolean; children: ReactNode }) {
@@ -51,36 +67,51 @@ export function Shell() {
   const currentView = state.ui.view;
 
   return (
-    <Layout style={{ height: "100vh", overflow: "hidden" }}>
-      <Header
+    <Layout hasSider style={{ height: "100vh", overflow: "hidden" }}>
+      <Sider
+        theme="light"
+        width={220}
         style={{
-          alignItems: "center",
-          background: token.colorBgContainer,
-          borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          display: "flex",
-          flex: "0 0 48px",
-          height: 48,
-          lineHeight: "48px",
-          padding: 0,
+          borderRight: `1px solid ${token.colorBorderSecondary}`,
+          height: "100%",
+          overflow: "hidden",
         }}
       >
-        <Menu
-          items={NAV_ITEMS.map((item) => ({
-            icon: item.icon,
-            key: item.key,
-            label: item.label,
-          }))}
-          mode="horizontal"
-          onClick={({ key }) => {
-            if (isViewType(key)) {
-              dispatch({ type: "viewChanged", view: key });
-            }
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
           }}
-          selectedKeys={[currentView]}
-          style={{ borderBottom: "none", flex: 1, minWidth: 0 }}
-        />
-        <AuthStatus />
-      </Header>
+        >
+          <div style={{ flex: "0 0 auto", padding: "16px 20px 8px" }}>
+            <Text strong style={{ fontSize: 16 }}>
+              Poria
+            </Text>
+          </div>
+          <Menu
+            defaultOpenKeys={["resources"]}
+            inlineIndent={16}
+            items={NAV_ITEMS}
+            mode="inline"
+            onClick={({ key }) => {
+              if (isViewType(key)) {
+                dispatch({ type: "viewChanged", view: key });
+              }
+            }}
+            selectedKeys={[currentView]}
+            style={{ borderInlineEnd: "none", flex: 1, minHeight: 0, overflow: "auto" }}
+          />
+          <div
+            style={{
+              borderTop: `1px solid ${token.colorBorderSecondary}`,
+              flex: "0 0 auto",
+            }}
+          >
+            <AuthStatus />
+          </div>
+        </div>
+      </Sider>
 
       <Content style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
         <PersistentTab active={currentView === "home"}>
@@ -88,6 +119,12 @@ export function Shell() {
         </PersistentTab>
         <PersistentTab active={currentView === "demands"}>
           <DemandListPage />
+        </PersistentTab>
+        <PersistentTab active={currentView === "channels"}>
+          <ChannelsPage />
+        </PersistentTab>
+        <PersistentTab active={currentView === "skills"}>
+          <SkillsPage />
         </PersistentTab>
         <PersistentTab active={currentView === "repos"}>
           <RepoListPage />
