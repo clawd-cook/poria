@@ -86,6 +86,10 @@ export async function skipStage(pipelineId: string, stageName: string): Promise<
   return invoke<void>("skip_stage", { pipelineId, stageName });
 }
 
+export async function openWorkspace(pipelineId: string): Promise<void> {
+  return invoke<void>("open_workspace", { pipelineId });
+}
+
 export async function listRepos(): Promise<RegisteredRepo[]> {
   return invoke<RegisteredRepo[]>("list_repos");
 }

@@ -54,6 +54,12 @@ fn build_rollback_instructions(stage: &Stage, _pipeline: &Pipeline) -> Option<Ro
                     params: [("path".into(), path.into())].into_iter().collect(),
                 });
             }
+            if let Some(path) = output.get("workspacePath").and_then(|v| v.as_str()) {
+                commands.push(RollbackCommand {
+                    command_type: RollbackCommandType::RemoveDirectory,
+                    params: [("path".into(), path.into())].into_iter().collect(),
+                });
+            }
             if let Some(branch) = output
                 .get("repos")
                 .and_then(|repos| repos.as_array())
@@ -621,11 +627,12 @@ mod tests {
     #[test]
     fn init_rollback_includes_frontend_and_backend_worktrees() {
         let stage = init_stage_with_output(json!({
-            "worktreePath": "/tmp/.poria/worktrees/p1/fe",
-            "backendWorktreePath": "/tmp/.poria/worktrees/p1/be",
+            "workspacePath": "/tmp/.poria/workspaces/p1",
+            "worktreePath": "/tmp/.poria/workspaces/p1/fe",
+            "backendWorktreePath": "/tmp/.poria/workspaces/p1/be",
             "repos": [{
                 "branch": "feature_R1",
-                "worktreePath": "/tmp/.poria/worktrees/p1/fe"
+                "worktreePath": "/tmp/.poria/workspaces/p1/fe"
             }]
         }));
         let rollback = build_rollback_instructions(&stage, &dummy_pipeline()).unwrap();
@@ -638,10 +645,15 @@ mod tests {
         assert_eq!(
             paths,
             vec![
-                "/tmp/.poria/worktrees/p1/fe",
-                "/tmp/.poria/worktrees/p1/be"
+                "/tmp/.poria/workspaces/p1/fe",
+                "/tmp/.poria/workspaces/p1/be"
             ]
         );
+        assert!(rollback.commands.iter().any(|cmd| {
+            cmd.command_type == RollbackCommandType::RemoveDirectory
+                && cmd.params.get("path").map(String::as_str)
+                    == Some("/tmp/.poria/workspaces/p1")
+        }));
         assert!(rollback.commands.iter().any(|cmd| {
             cmd.command_type == RollbackCommandType::DeleteBranch
                 && cmd.params.get("branch").map(String::as_str) == Some("feature_R1")

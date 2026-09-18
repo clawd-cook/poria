@@ -53,6 +53,7 @@ export interface PipelineDetail {
   operator: string;
   has_regressed: boolean;
   stages: StageDetail[];
+  workspace_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -104,7 +105,14 @@ export interface ChannelInfo {
   version: string;
 }
 
-export type ViewType = "channels" | "demands" | "home" | "repos" | "settings" | "skills";
+export type ViewType =
+  | "channels"
+  | "demands"
+  | "home"
+  | "repos"
+  | "settings"
+  | "skills"
+  | "workspace";
 
 export type CloneStatus = "cloning" | "failed" | "ready";
 

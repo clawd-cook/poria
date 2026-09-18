@@ -18,6 +18,13 @@ const PROJECT_DOC_ARTIFACTS: &[&str] = &[
 /// demand project dir and delete the worktree copy so Deploy cannot commit it.
 pub fn adopt_and_remove_from_worktree(feature_ctx: &FeatureContext, worktree: &str, name: &str) {
     let candidate = Path::new(worktree).join(name);
+    if candidate
+        .symlink_metadata()
+        .map(|meta| meta.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return;
+    }
     if !candidate.is_file() {
         return;
     }
@@ -33,6 +40,13 @@ pub fn adopt_and_remove_from_worktree(feature_ctx: &FeatureContext, worktree: &s
 pub fn strip_project_docs_from_worktree(worktree: &Path) {
     for name in PROJECT_DOC_ARTIFACTS {
         let path = worktree.join(name);
+        if path
+            .symlink_metadata()
+            .map(|meta| meta.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            continue;
+        }
         if path.is_file() {
             let _ = std::fs::remove_file(path);
         }
@@ -50,6 +64,34 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn adopt_and_remove_skips_symlink_into_projects() {
+        let base = temp_dir("adopt-symlink");
+        let project = base.join("project");
+        let workspace = base.join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+        let ctx = FeatureContext::create_at(project.clone(), "pipe", 1).unwrap();
+        ctx.write_artifact(ARTIFACT_PRD_REVIEW, "from-projects")
+            .unwrap();
+        std::os::unix::fs::symlink(
+            ctx.artifact_path(ARTIFACT_PRD_REVIEW),
+            workspace.join(ARTIFACT_PRD_REVIEW),
+        )
+        .unwrap();
+        adopt_and_remove_from_worktree(&ctx, &workspace.to_string_lossy(), ARTIFACT_PRD_REVIEW);
+        assert!(workspace
+            .join(ARTIFACT_PRD_REVIEW)
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            ctx.read_artifact(ARTIFACT_PRD_REVIEW).unwrap().unwrap(),
+            "from-projects"
+        );
+        fs::remove_dir_all(&base).ok();
     }
 
     #[test]
@@ -74,6 +116,27 @@ mod tests {
         strip_project_docs_from_worktree(&base);
         assert!(!base.join(ARTIFACT_TRD).exists());
         assert!(base.join("src.rs").exists());
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn strip_project_docs_skips_symlink_into_projects() {
+        let base = temp_dir("strip-symlink");
+        let project = base.join("project");
+        let worktree = base.join("worktree");
+        fs::create_dir_all(&worktree).unwrap();
+        let ctx = FeatureContext::create_at(project, "pipe", 1).unwrap();
+        ctx.write_artifact(ARTIFACT_TRD, "keep").unwrap();
+        std::os::unix::fs::symlink(ctx.artifact_path(ARTIFACT_TRD), worktree.join(ARTIFACT_TRD))
+            .unwrap();
+        strip_project_docs_from_worktree(&worktree);
+        assert!(worktree
+            .join(ARTIFACT_TRD)
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(ctx.read_artifact(ARTIFACT_TRD).unwrap().unwrap(), "keep");
         fs::remove_dir_all(&base).ok();
     }
 }

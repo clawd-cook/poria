@@ -102,12 +102,7 @@ impl Skill for WorkspaceSkill {
 
         let worktree = WorktreeResource::new(Some(workspace_root));
         let created = worktree
-            .create(
-                repo,
-                &input.pipeline.id,
-                &repo.base_branch,
-                git_root_path,
-            )
+            .create(repo, &input.pipeline.id, &repo.base_branch, git_root_path)
             .await?;
 
         Ok(SkillOutput {

@@ -20,7 +20,7 @@ impl InitSkill {
             metadata: CapabilityMetadata {
                 id: "skill:init".into(),
                 name: "Init".into(),
-                description: "Export JoySpace docs and create frontend/backend worktrees".into(),
+                description: "Export JoySpace docs and create the pipeline workspace".into(),
                 version: "0.2.0".into(),
             },
         }
@@ -43,6 +43,7 @@ fn fixture_output() -> SkillOutput {
             "backendTrdTitle": "Fixture Backend TRD",
             "worktreePath": "/tmp/poria-fixture/frontend",
             "backendWorktreePath": "/tmp/poria-fixture/backend",
+            "workspacePath": "/tmp/poria-fixture/workspace",
             "repos": [
                 {
                     "name": "main",
@@ -65,7 +66,9 @@ fn fixture_output() -> SkillOutput {
     }
 }
 
-fn cookie_from_context(ctx: &SkillContext) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+fn cookie_from_context(
+    ctx: &SkillContext,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     ctx.credentials
         .get("cookie")
         .and_then(|v| v.as_str())
@@ -75,7 +78,10 @@ fn cookie_from_context(ctx: &SkillContext) -> Result<String, Box<dyn std::error:
         .ok_or_else(|| "请先登录后再导出 JoySpace 文档".into())
 }
 
-fn require_url(value: Option<&str>, label: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+fn require_url(
+    value: Option<&str>,
+    label: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let url = value.map(str::trim).unwrap_or("");
     if url.is_empty() {
         return Err(format!("缺少 {label}").into());
@@ -104,13 +110,13 @@ impl Skill for InitSkill {
         }
 
         let cookie = cookie_from_context(&ctx)?;
-        let team_id = ctx
-            .credentials
-            .get("team_id")
-            .and_then(|v| v.as_str());
+        let team_id = ctx.credentials.get("team_id").and_then(|v| v.as_str());
         let auth = JoySpaceAuth::new(cookie, team_id);
 
-        let prd_url = require_url(input.pipeline.config.prd_url.as_deref(), "JoySpace PRD 链接")?;
+        let prd_url = require_url(
+            input.pipeline.config.prd_url.as_deref(),
+            "JoySpace PRD 链接",
+        )?;
         let backend_trd_url = require_url(
             input.pipeline.config.backend_trd_url.as_deref(),
             "JoySpace 后端 TRD 链接",
@@ -158,6 +164,10 @@ mod tests {
     #[test]
     fn fixture_output_includes_worktree_paths() {
         let output = fixture_output().output;
+        assert_eq!(
+            output.get("workspacePath").and_then(|v| v.as_str()),
+            Some("/tmp/poria-fixture/workspace")
+        );
         assert_eq!(
             output.get("worktreePath").and_then(|v| v.as_str()),
             Some("/tmp/poria-fixture/frontend")

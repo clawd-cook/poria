@@ -30,8 +30,8 @@ pub struct WorktreeCreateResult {
 
 // ---------- Constants ----------
 
-/// Default workspace root where worktrees are created.
-const DEFAULT_WORKSPACE_ROOT: &str = "workspace/projects";
+/// Default workspace root where git worktrees are created.
+const DEFAULT_WORKSPACE_ROOT: &str = "workspaces";
 
 /// Timeout for git operations (2 minutes).
 const GIT_MEDIUM_TIMEOUT: u64 = 120_000;
@@ -383,7 +383,7 @@ mod tests {
         let resource = WorktreeResource::default();
         let repo = test_repo();
         let path = resource.path(&repo, "p1");
-        assert_eq!(path, PathBuf::from("workspace/projects/p1/test-repo"));
+        assert_eq!(path, PathBuf::from("workspaces/p1/test-repo"));
     }
 
     fn unique_temp(prefix: &str) -> PathBuf {
@@ -426,7 +426,7 @@ mod tests {
         .unwrap();
         assert_eq!(add_branch.code, 0, "{}", add_branch.stderr);
 
-        let resource = WorktreeResource::new(Some(root.join("worktrees").to_string_lossy().into_owned()));
+        let resource = WorktreeResource::new(Some(root.join("workspaces").to_string_lossy().into_owned()));
         let created = resource
             .create_detached("ls-api", "pipe-1", &hosted, "master")
             .await
@@ -454,7 +454,7 @@ mod tests {
         let root = unique_temp("poria-wt-feature");
         let hosted = root.join("hosted");
         init_repo_with_master(&hosted).await;
-        let resource = WorktreeResource::new(Some(root.join("worktrees").to_string_lossy().into_owned()));
+        let resource = WorktreeResource::new(Some(root.join("workspaces").to_string_lossy().into_owned()));
         let mut repo = test_repo();
         repo.name = "ls-entrance".into();
         repo.branch = "feature_TEST".into();

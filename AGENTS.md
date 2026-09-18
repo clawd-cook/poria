@@ -53,12 +53,12 @@ Shared Rust deps live in root `Cargo.toml` `[workspace.dependencies]`. Add versi
 
 | `StageEnum` | Skill id | Implementation |
 |---|---|---|
-| `Init` | `skill:init` | Export JoySpace docs into `~/.poria/projects/<demand_code>/`, then create frontend feature worktree + backend detached worktree |
-| `ReviewPrd` | `skill:review-prd` | Write `PRD_REVIEW.md` (P0/P1/P2) via `claude -p` in the frontend worktree |
-| `Design` | `skill:gen-trd` | Write frontend `TRD.md` into the demand project dir; cwd is the frontend worktree |
-| `Dev` | `skill:gen-code` | Codegen + `TASK.md`; `Dev`/`Cr`/`Deploy` only deliver the frontend repo |
-| `Cr` | `skill:code-review` | `CR.md` + gates |
-| `Deploy` | `skill:deploy` | Commit if dirty → **push** → EasyCI SELECT bind → find/create MR |
+| `Init` | `skill:init` | Export JoySpace docs into `~/.poria/projects/<demand_code>/`, create `~/.poria/workspaces/<pipeline_id>/` (doc + skill symlinks, `CLAUDE.md`), then frontend feature worktree + backend detached worktree |
+| `ReviewPrd` | `skill:review-prd` | Workspace-root `claude -p` short prompt naming `review-prd`; write `PRD_REVIEW.md` via symlink into projects |
+| `Design` | `skill:gen-trd` | Same cwd; write frontend `TRD.md` into the demand project dir via workspace symlink |
+| `Dev` | `skill:gen-code` | Same cwd; codegen + `TASK.md`; only the frontend worktree is modified |
+| `Cr` | `skill:code-review` | Same cwd; `CR.md` + gates |
+| `Deploy` | `skill:deploy` | Commit if dirty → **push** → EasyCI SELECT bind → find/create MR (frontend worktree cwd) |
 
 Map source of truth: `crates/poria-skills/src/stage_skill_map.rs` and `crates/poria-commands/src/traits.rs` (`stage_skill_id`). Keep both in sync.
 
@@ -239,11 +239,11 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 
 - **SSO**: Cookie in `~/.poria/auth.json`. Commands that hit Xingyun / JoySpace / Coding must fail with 请先登录 when cookie is missing. Logged-out demand list UI must not call `list_demands`.
 - **Demand list**: default is related-to-me (omit JACP `receiver`). 「由我受理」 is `acceptedByMe` → `receiver` = ERP. Do not stamp the logged-in ERP onto rows that have no receiver.
-- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Frontend `base_branch` is the registered `default_branch` (default `master`). Backend repo stays **out of** `pipeline.repos`. Init creates frontend feature worktree + backend detached worktree before ReviewPrd. Docs stay in `~/.poria/projects/<demand_code>/`.
-- **JoySpace export**: SSO cookie + POST `/v1/pages/content` (`poria-channels` joyspace). Init writes `PRD.md` / `BACKEND_TRD.md` under `~/.poria/projects/<demand_code>/`; ReviewPrd / Design write `PRD_REVIEW.md` / `TRD.md` there too — not into the git worktree.
+- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Frontend `base_branch` is the registered `default_branch` (default `master`). Backend repo stays **out of** `pipeline.repos`. Init creates `~/.poria/workspaces/<pipeline_id>/` (doc/skill symlinks + both worktrees) before ReviewPrd. Docs stay in `~/.poria/projects/<demand_code>/`.
+- **JoySpace export**: SSO cookie + POST `/v1/pages/content` (`poria-channels` joyspace). Init writes `PRD.md` / `BACKEND_TRD.md` under `~/.poria/projects/<demand_code>/`; ReviewPrd / Design write `PRD_REVIEW.md` / `TRD.md` there too via workspace-root symlinks — not into the git worktree.
 - **Deploy**: commit (`feat(<demand_code>): <name>`) → `git push -u` → `bind_branch` (EasyCI SELECT) → `find_mr_live` / `create_merge_request_live`. Do not bind before push.
 - **Clone dest**: `~/.poria/repos/<scope>/<name>`.
-- **Worktrees**: `~/.poria/worktrees/<pipeline_id>/<repo_name>`.
+- **Workspaces**: `~/.poria/workspaces/<pipeline_id>/` is Claude cwd. Frontend/backend git worktrees live in that directory. Bundled skills: repo `skills/<name>/SKILL.md`.
 
 Load `.trellis/spec/` for the layer you edit. Cross-layer payload / demand-filter / TRD changes: `.trellis/spec/guides/cross-layer-thinking-guide.md`.
 
@@ -254,7 +254,7 @@ Load `.trellis/spec/` for the layer you edit. Cross-layer payload / demand-filte
 | Auth | `~/.poria/auth.json` |
 | Hosted clones | `~/.poria/repos/` |
 | Demand markdown | `~/.poria/projects/<demand_code>/` |
-| Worktrees | `~/.poria/worktrees/` |
+| Pipeline workspaces | `~/.poria/workspaces/<pipeline_id>/` |
 | App config | `~/.poria/config.json` |
 | SQLite (release / default) | `~/Library/Application Support/com.poria.desktop/poria.db` |
 | SQLite (dev override) | `workspace/db/poria.db` if that file exists |

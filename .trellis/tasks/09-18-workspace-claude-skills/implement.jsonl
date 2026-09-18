@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "workspacePath vs worktreePath、projects 真源 vs 工作区软链、backend_context 跨层"}
+{"file": ".trellis/spec/frontend/pipeline-workspace.md", "reason": "现行 Init worktree 与文档路径，本任务要改根目录"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "Init / Claude cwd / Finder 只能在 Poria 窗口验证"}
+{"file": ".trellis/spec/frontend/claude-cli.md", "reason": "仍 claude -p；改 cwd 为工作区根与短指令"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "侧栏 ViewType 走现有 store"}
+{"file": ".trellis/tasks/09-18-init-workspace-before-docs/design.md", "reason": "双 worktree、文档不进 git、STAGE_ORDER 基线"}
+{"file": "AGENTS.md", "reason": "数据路径表与阶段 skill 映射"}

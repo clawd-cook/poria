@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -10,10 +9,12 @@ use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
 use crate::artifacts::adopt_and_remove_from_worktree;
-use crate::backend_aid::insert_backend_coding_aid_vars;
+use crate::claude_prompt::{
+    backend_dir, backend_trd_url, build_claude_skill_prompt, extra_nonempty, frontend_base_branch,
+    resolve_feature_dir, resolve_workspace_cwd, SKILL_REVIEW_PRD,
+};
 use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
-use crate::prompt_templates::{render_prompt, PRD_REVIEW_PROMPT};
 
 pub struct ReviewPrdSkill {
     metadata: CapabilityMetadata,
@@ -77,76 +78,48 @@ impl Skill for ReviewPrdSkill {
             .as_ref()
             .ok_or_else(|| SkillError::NotImplemented("ReviewPrdSkill: no agent pool".into()))?;
 
-        let feature_dir = input
-            .extra
-            .get("feature_dir")
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
+        let feature_dir = resolve_feature_dir(&input)?;
+        let workspace_path = resolve_workspace_cwd(&input, &ctx.workdir)?;
+        let frontend_worktree = extra_nonempty(&input, "worktree_path")
             .map(str::to_string)
-            .or_else(|| input.pipeline.config.project_dir.clone())
-            .ok_or("missing feature_dir in skill input")?;
+            .unwrap_or_else(|| workspace_path.clone());
+        let backend = backend_dir(&input);
 
         let feature_ctx = FeatureContext::from_root(std::path::Path::new(&feature_dir))
             .ok_or("feature context not found")?;
 
-        let prd_content = feature_ctx
+        if feature_ctx
             .read_artifact(ARTIFACT_PRD)?
-            .ok_or("PRD.md not found in feature context")?;
+            .filter(|content| !content.trim().is_empty())
+            .is_none()
+        {
+            return Err("PRD.md not found in feature context".into());
+        }
 
-        let prd_source = input
-            .pipeline
-            .config
-            .prd_url
-            .clone()
-            .filter(|url| !url.trim().is_empty())
-            .unwrap_or_else(|| "file".into());
-        let title = input
-            .pipeline
-            .demand_name
-            .clone()
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| input.pipeline.demand_code.clone());
-        let reviewed_at = input
-            .extra
-            .get("reviewed_at")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let mut vars = HashMap::new();
-        vars.insert("feature_dir".into(), feature_dir.clone());
-        vars.insert("project_root".into(), ctx.workdir.clone());
-        vars.insert("prd_content".into(), prd_content.clone());
-        vars.insert("prd_source".into(), prd_source);
-        vars.insert("title".into(), title);
-        vars.insert("reviewed_at".into(), reviewed_at);
-        insert_backend_coding_aid_vars(&mut vars, &input.pipeline.config, &feature_ctx);
-
-        let system_prompt = format!(
-            "{system_prompt}\n\n## 桌面端非交互覆盖（优先于上文任何等待指令）\n\
-             没有用户可以回复。禁止提问、禁止等待范围确认。默认全部模块纳入本期（PRD 明确写二期/不做的除外）。\n\
-             必须用 Write 工具把完整 `PRD_REVIEW.md` 写到 `{feature_dir}/PRD_REVIEW.md`（绝对路径）。\n\
-             禁止把 PRD_REVIEW.md 写到 git 工作区根目录。可以阅读前端代码和后端只读 worktree。`An` 行留空。",
-            system_prompt = render_prompt(PRD_REVIEW_PROMPT, &vars),
-            feature_dir = feature_dir
-        );
-
-        let prompt = format!(
-            "这是桌面端非交互执行。默认全部模块纳入本期（PRD 明确写二期/不做的除外），不要停下来等用户确认范围。\
-             根据下面的 PRD 从前端视角生成 PRD_REVIEW.md：An 行留空给产品回填。读完即可 Write 到 `{feature_dir}/PRD_REVIEW.md`，不要追问。\n\n\
-             # PRD.md\n\n{prd_content}"
+        let prompt = build_claude_skill_prompt(
+            SKILL_REVIEW_PRD,
+            &input.pipeline.demand_code,
+            &workspace_path,
+            &frontend_worktree,
+            &backend,
+            backend_trd_url(&input),
+            &frontend_base_branch(&input),
         );
 
         let agent_input = AgentTaskInput {
             prompt,
-            worktree_path: ctx.workdir.clone(),
-            system_prompt: Some(system_prompt),
+            worktree_path: workspace_path,
+            system_prompt: None,
             model: None,
             max_budget_usd: Some(1.0),
             max_turns: Some(10),
             timeout_ms: Some(12 * 60_000),
-            extra_tools: Some(vec!["Read".into(), "Write".into(), "Grep".into(), "Glob".into()]),
+            extra_tools: Some(vec![
+                "Read".into(),
+                "Write".into(),
+                "Grep".into(),
+                "Glob".into(),
+            ]),
         };
 
         let review_already_exists = feature_ctx.has_artifact(ARTIFACT_PRD_REVIEW);
@@ -154,7 +127,7 @@ impl Skill for ReviewPrdSkill {
             (None, None)
         } else {
             let result = agent_pool.dispatch(agent_input).await;
-            adopt_and_remove_from_worktree(&feature_ctx, &ctx.workdir, ARTIFACT_PRD_REVIEW);
+            adopt_and_remove_from_worktree(&feature_ctx, &frontend_worktree, ARTIFACT_PRD_REVIEW);
             let review_exists = feature_ctx.has_artifact(ARTIFACT_PRD_REVIEW);
             if !result.success && !review_exists {
                 return Err(format!(
@@ -166,7 +139,7 @@ impl Skill for ReviewPrdSkill {
             (result.session_id, result.cost_usd)
         };
 
-        adopt_and_remove_from_worktree(&feature_ctx, &ctx.workdir, ARTIFACT_PRD_REVIEW);
+        adopt_and_remove_from_worktree(&feature_ctx, &frontend_worktree, ARTIFACT_PRD_REVIEW);
 
         let review_exists = feature_ctx.has_artifact(ARTIFACT_PRD_REVIEW);
         if !review_exists {

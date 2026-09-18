@@ -1,10 +1,12 @@
 mod artifacts;
 mod backend_aid;
+mod claude_prompt;
 mod error;
 mod fixture;
 mod human_loop;
 pub mod prompt_templates;
 mod stage_skill_map;
+mod workspace_layout;
 
 mod code_review;
 mod deploy;
@@ -16,8 +18,17 @@ mod workspace;
 
 // --- Public re-exports ---
 
+pub use crate::backend_aid::insert_backend_coding_aid_vars;
+pub use claude_prompt::{
+    build_claude_skill_prompt, BUNDLED_SKILL_DIRS, SKILL_CODE_REVIEW, SKILL_GEN_CODE,
+    SKILL_GEN_TRD, SKILL_REVIEW_PRD,
+};
 pub use error::SkillError;
 pub use fixture::is_fixture_mode;
+pub use workspace_layout::{
+    bundled_skills_complete, prepare_pipeline_workspace, repo_bundled_skills_dir,
+    workspace_claude_md, ARTIFACT_SYMLINK_NAMES,
+};
 
 pub use human_loop::{parse_human_reply, HumanAction, HumanLoop, HumanLoopCoordinator, HumanReply};
 

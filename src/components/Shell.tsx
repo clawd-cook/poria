@@ -1,5 +1,6 @@
 import {
   ApiOutlined,
+  DesktopOutlined,
   FolderOutlined,
   HomeOutlined,
   NodeIndexOutlined,
@@ -19,11 +20,20 @@ import { HomeBoard } from "./HomeBoard";
 import { RepoListPage } from "./RepoListPage";
 import { SettingsPage } from "./SettingsPage";
 import { SkillsPage } from "./SkillsPage";
+import { WorkspacePage } from "./WorkspacePage";
 
 const { Content, Sider } = Layout;
 const { Text } = Typography;
 
-const VIEW_KEYS: ViewType[] = ["home", "demands", "channels", "skills", "repos", "settings"];
+const VIEW_KEYS: ViewType[] = [
+  "channels",
+  "demands",
+  "home",
+  "repos",
+  "settings",
+  "skills",
+  "workspace",
+];
 
 const NAV_ITEMS: MenuProps["items"] = [
   { key: "home", icon: <HomeOutlined />, label: "看板" },
@@ -33,6 +43,7 @@ const NAV_ITEMS: MenuProps["items"] = [
       { key: "channels", icon: <NodeIndexOutlined />, label: "渠道" },
       { key: "skills", icon: <ApiOutlined />, label: "技能" },
       { key: "repos", icon: <FolderOutlined />, label: "仓库" },
+      { key: "workspace", icon: <DesktopOutlined />, label: "工作区" },
     ],
     key: "resources",
     label: "资源",
@@ -128,6 +139,9 @@ export function Shell() {
         </PersistentTab>
         <PersistentTab active={currentView === "repos"}>
           <RepoListPage />
+        </PersistentTab>
+        <PersistentTab active={currentView === "workspace"}>
+          <WorkspacePage />
         </PersistentTab>
         <PersistentTab active={currentView === "settings"}>
           <SettingsPage />

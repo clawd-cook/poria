@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 workspacePath 与 worktreePath 未被混用、文档仍只在 projects"}
+{"file": ".trellis/spec/frontend/pipeline-workspace.md", "reason": "检查实现后规格已改成 workspaces 根，而不是仍写 worktrees"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "检查未用 Vite 1420 冒充 Init/Claude"}
+{"file": ".trellis/spec/frontend/claude-cli.md", "reason": "检查仍非交互 claude -p，且 cwd 为工作区根"}
+{"file": ".trellis/tasks/09-18-init-workspace-before-docs/prd.md", "reason": "检查后端仍不进 pipeline.repos、文档不进 git"}
+{"file": "AGENTS.md", "reason": "检查阶段表、产物路径、skill 目录与实现一致"}
