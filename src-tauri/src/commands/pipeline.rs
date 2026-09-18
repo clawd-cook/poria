@@ -10,8 +10,9 @@ use tauri_plugin_opener::OpenerExt;
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
 use poria_commands::{
-    is_auth_expired, is_out_of_scope, is_quality_gate_block, is_requirement_ambiguous,
-    is_security_violation, is_trd_unconfirmed, stage_error_outcome,
+    classify, handle_stage_error, is_auth_expired, is_out_of_scope, is_quality_gate_block,
+    is_requirement_ambiguous, is_security_violation, is_trd_unconfirmed, retry_delay_for_message,
+    stage_error_outcome, try_regress_cr_to_dev, ErrorAction,
 };
 use poria_core::contracts::{Channel, ChannelContext, Skill, SkillContext};
 use poria_core::pipeline::{
@@ -691,7 +692,7 @@ pub(crate) fn resume_auth_blocked_after_login(app: &AppHandle) {
     }
 }
 
-fn fail_or_block_stage(
+async fn fail_or_block_stage(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &AppHandle,
@@ -700,24 +701,102 @@ fn fail_or_block_stage(
     fallback_class: &str,
 ) -> Result<(), String> {
     let outcome = stage_error_outcome(&message, fallback_class);
+    if outcome.pipeline_status == PipelineStatus::Blocked {
+        return persist_stage_failure(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            message,
+            outcome.issue_class,
+            true,
+        );
+    }
+
+    let result = handle_stage_error(
+        &mut pipeline.status,
+        &mut pipeline.stages[stage_idx],
+        &message,
+        None,
+        None,
+    )
+    .await;
+    match result.action {
+        ErrorAction::Retry => {
+            pipeline.status = PipelineStatus::Running;
+            pipeline.updated_at = Utc::now();
+            store
+                .save_stage_tx(
+                    Some(&pipeline.stages[stage_idx]),
+                    pipeline,
+                    &[CorePipelineEvent::stage_failed(
+                        &pipeline.id,
+                        pipeline.stages[stage_idx].name,
+                        &message,
+                        pipeline.stages[stage_idx].retry_count,
+                    )],
+                )
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, pipeline)?;
+            let delay = retry_delay_for_message(&message);
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+            }
+            Ok(())
+        }
+        ErrorAction::Blocked => persist_stage_failure(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            message,
+            result.issue_class.as_str().to_string(),
+            true,
+        ),
+        ErrorAction::Failed => persist_stage_failure(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            message,
+            result.issue_class.as_str().to_string(),
+            false,
+        ),
+    }
+}
+
+fn persist_stage_failure(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    message: String,
+    issue_class: String,
+    blocked: bool,
+) -> Result<(), String> {
     let stage_name = pipeline.stages[stage_idx].name;
-    pipeline.status = outcome.pipeline_status;
-    pipeline.stages[stage_idx].status = outcome.stage_status;
+    if blocked {
+        pipeline.status = PipelineStatus::Blocked;
+        pipeline.stages[stage_idx].status = StageStatus::Blocked;
+    } else {
+        pipeline.status = PipelineStatus::Failed;
+        pipeline.stages[stage_idx].status = StageStatus::Failed;
+    }
     pipeline.stages[stage_idx].completed_at = Some(Utc::now());
     pipeline.stages[stage_idx].issue = Some(StageIssue {
-        class: outcome.issue_class.clone(),
+        class: issue_class.clone(),
         message: message.clone(),
-        retryable: outcome.retryable,
+        retryable: blocked,
     });
     pipeline.updated_at = Utc::now();
-    let event = if outcome.pipeline_status == PipelineStatus::Blocked {
+    let event = if blocked {
         if is_auth_expired(&message) {
             emit_cookie_invalid(app);
         }
         CorePipelineEvent::stage_blocked(
             &pipeline.id,
             stage_name,
-            blocked_issue_class(&outcome.issue_class),
+            blocked_issue_class(&issue_class),
         )
     } else {
         CorePipelineEvent::stage_failed(
@@ -953,7 +1032,7 @@ fn emit_human_request(
                     "ci_build".into()
                 }
             } else {
-                "stage_failed".into()
+                classify(detail).as_str().to_string()
             }
         });
     app.emit(
@@ -1232,7 +1311,7 @@ async fn fail_init_stage(
     store: &std::sync::Arc<SqlitePipelineStore>,
     message: String,
 ) -> Result<(), String> {
-    fail_or_block_stage(pipeline, stage_idx, app, store, message, "init_failed")
+    fail_or_block_stage(pipeline, stage_idx, app, store, message, "init_failed").await
 }
 
 fn merge_init_workspace_output(
@@ -1327,33 +1406,14 @@ fn resolve_demand_project_dir(pipeline: &Pipeline) -> Result<PathBuf, String> {
 }
 
 fn blocked_issue_class(class: &str) -> IssueClass {
-    if class.eq_ignore_ascii_case(AUTH_EXPIRED_ISSUE_CLASS)
-        || class.eq_ignore_ascii_case("AuthExpired")
-    {
-        IssueClass::AuthExpired
-    } else if class.eq_ignore_ascii_case(REQUIREMENT_AMBIGUOUS_ISSUE_CLASS)
-        || class.eq_ignore_ascii_case("RequirementAmbiguous")
-    {
-        IssueClass::RequirementAmbiguous
-    } else if class.eq_ignore_ascii_case(TRD_UNCONFIRMED_ISSUE_CLASS)
-        || class.eq_ignore_ascii_case("TrdUnconfirmed")
-    {
-        IssueClass::TrdUnconfirmed
-    } else if class.eq_ignore_ascii_case(OUT_OF_SCOPE_ISSUE_CLASS)
-        || class.eq_ignore_ascii_case("OutOfScopeChange")
-    {
-        IssueClass::OutOfScopeChange
-    } else if class.eq_ignore_ascii_case(SECURITY_VIOLATION_ISSUE_CLASS)
-        || class.eq_ignore_ascii_case("SecurityViolation")
-    {
-        IssueClass::SecurityViolation
-    } else if class.eq_ignore_ascii_case("ci_build") {
-        IssueClass::InfraFailure
-    } else if class.eq_ignore_ascii_case("test_coverage") {
-        IssueClass::TestFailure
-    } else {
-        IssueClass::Unknown
+    let normalized = class.trim().to_ascii_lowercase();
+    if normalized == "ci_build" {
+        return IssueClass::InfraFailure;
     }
+    if normalized == "test_coverage" {
+        return IssueClass::TestFailure;
+    }
+    serde_json::from_value(serde_json::Value::String(normalized)).unwrap_or(IssueClass::Unknown)
 }
 
 fn load_prd_review_status(project_dir: &Path) -> poria_core::pipeline::PrdReviewStatus {
@@ -1509,9 +1569,10 @@ async fn enforce_prd_review_p0(
         message,
         REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
     )
+    .await
 }
 
-fn enforce_trd_confirmed(
+async fn enforce_trd_confirmed(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &AppHandle,
@@ -1559,6 +1620,7 @@ fn enforce_trd_confirmed(
         TRD_UNCONFIRMED_USER_MESSAGE.to_string(),
         TRD_UNCONFIRMED_ISSUE_CLASS,
     )
+    .await
 }
 
 async fn run_review_prd_stage(
@@ -1652,14 +1714,17 @@ async fn run_review_prd_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => fail_or_block_stage(
-            pipeline,
-            stage_idx,
-            app,
-            store,
-            err.to_string(),
-            "review_prd_failed",
-        ),
+        Err(err) => {
+            fail_or_block_stage(
+                pipeline,
+                stage_idx,
+                app,
+                store,
+                err.to_string(),
+                "review_prd_failed",
+            )
+            .await
+        }
     }
 }
 
@@ -1755,14 +1820,17 @@ async fn run_design_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => fail_or_block_stage(
-            pipeline,
-            stage_idx,
-            app,
-            store,
-            err.to_string(),
-            "design_failed",
-        ),
+        Err(err) => {
+            fail_or_block_stage(
+                pipeline,
+                stage_idx,
+                app,
+                store,
+                err.to_string(),
+                "design_failed",
+            )
+            .await
+        }
     }
 }
 
@@ -1900,7 +1968,7 @@ async fn run_dev_stage(
     if !worktree.join(".git").exists() {
         return Err(format!("前端工作区无效: {}", worktree.display()));
     }
-    enforce_trd_confirmed(pipeline, stage_idx, app, store)?;
+    enforce_trd_confirmed(pipeline, stage_idx, app, store).await?;
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -1984,7 +2052,7 @@ async fn run_dev_stage(
             if is_out_of_scope(&message) || is_security_violation(&message) {
                 pipeline.stages[stage_idx].gate_results = Some(output_guard_gate_results(false));
             }
-            fail_or_block_stage(pipeline, stage_idx, app, store, message, "dev_failed")
+            fail_or_block_stage(pipeline, stage_idx, app, store, message, "dev_failed").await
         }
     }
 }
@@ -2083,6 +2151,46 @@ async fn run_cr_stage(
             pipeline.stages[stage_idx].output = Some(output.output.clone());
             pipeline.stages[stage_idx].gate_results = Some(ui_from_gate_evaluation(&evaluation));
             if !evaluation.all_pass {
+                let security_failed = evaluation
+                    .blocking_failures
+                    .iter()
+                    .any(|detail| detail.rule_id == "security_scan");
+                let cr_score_failed = evaluation
+                    .details
+                    .iter()
+                    .any(|detail| detail.rule_id == "cr_score" && !detail.pass);
+                if cr_score_failed && !security_failed {
+                    let findings = output.output.get("findings").cloned();
+                    if try_regress_cr_to_dev(
+                        pipeline,
+                        cr_result.cr_score.as_deref(),
+                        findings.as_ref(),
+                    ) {
+                        pipeline.updated_at = Utc::now();
+                        store
+                            .save_stage_tx(
+                                Some(&pipeline.stages[stage_idx]),
+                                pipeline,
+                                &[
+                                    CorePipelineEvent::stage_regressed(
+                                        &pipeline.id,
+                                        StageEnum::Cr,
+                                        StageEnum::Dev,
+                                        format!("CR score: {:?}", cr_result.cr_score),
+                                    ),
+                                    CorePipelineEvent::gate_regress_triggered(
+                                        &pipeline.id,
+                                        "cr_score",
+                                        StageEnum::Cr,
+                                        StageEnum::Dev,
+                                    ),
+                                ],
+                            )
+                            .map_err(|e| e.to_string())?;
+                        emit_pipeline_updated(app, pipeline)?;
+                        return Ok(());
+                    }
+                }
                 let mut message = blocking_gate_message(&evaluation);
                 if let Some(detail) = output
                     .output
@@ -2094,9 +2202,14 @@ async fn run_cr_stage(
                     message = format!("{message}; {detail}");
                 }
                 if message.is_empty() {
-                    message = "CR 门禁未通过".into();
+                    message = if cr_score_failed && !security_failed {
+                        "LOW_CR_SCORE: CR 评分未达标，已回退一次仍失败".into()
+                    } else {
+                        "CR 门禁未通过".into()
+                    };
                 }
-                return fail_or_block_stage(pipeline, stage_idx, app, store, message, "cr_failed");
+                return fail_or_block_stage(pipeline, stage_idx, app, store, message, "cr_failed")
+                    .await;
             }
             pipeline.stages[stage_idx].status = StageStatus::Completed;
             pipeline.stages[stage_idx].completed_at = Some(Utc::now());
@@ -2115,14 +2228,17 @@ async fn run_cr_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => fail_or_block_stage(
-            pipeline,
-            stage_idx,
-            app,
-            store,
-            err.to_string(),
-            "cr_failed",
-        ),
+        Err(err) => {
+            fail_or_block_stage(
+                pipeline,
+                stage_idx,
+                app,
+                store,
+                err.to_string(),
+                "cr_failed",
+            )
+            .await
+        }
     }
 }
 
@@ -2160,7 +2276,8 @@ async fn run_deploy_stage(
     let creds = match ensure_sso_credentials().await {
         Ok(creds) => creds,
         Err(message) => {
-            return fail_or_block_stage(pipeline, stage_idx, app, store, message, "deploy_failed");
+            return fail_or_block_stage(pipeline, stage_idx, app, store, message, "deploy_failed")
+                .await;
         }
     };
 
@@ -2269,7 +2386,8 @@ async fn run_deploy_stage(
                     store,
                     message,
                     "deploy_failed",
-                );
+                )
+                .await;
             }
             pipeline.status = PipelineStatus::Completed;
             pipeline.stages[stage_idx].status = StageStatus::Completed;
@@ -2289,14 +2407,17 @@ async fn run_deploy_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => fail_or_block_stage(
-            pipeline,
-            stage_idx,
-            app,
-            store,
-            err.to_string(),
-            "deploy_failed",
-        ),
+        Err(err) => {
+            fail_or_block_stage(
+                pipeline,
+                stage_idx,
+                app,
+                store,
+                err.to_string(),
+                "deploy_failed",
+            )
+            .await
+        }
     }
 }
 
@@ -2550,6 +2671,11 @@ mod tests {
             blocked_issue_class("test_coverage"),
             IssueClass::TestFailure
         );
+        assert_eq!(
+            blocked_issue_class("compilation_error"),
+            IssueClass::CompilationError
+        );
+        assert_eq!(blocked_issue_class("low_cr_score"), IssueClass::LowCrScore);
     }
 
     #[test]

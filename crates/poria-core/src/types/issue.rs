@@ -42,6 +42,29 @@ pub enum IssueClass {
     Unknown,
 }
 
+impl IssueClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IssueClass::CompilationError => "compilation_error",
+            IssueClass::TestFailure => "test_failure",
+            IssueClass::AgentTimeout => "agent_timeout",
+            IssueClass::LlmRateLimit => "llm_rate_limit",
+            IssueClass::RequirementAmbiguous => "requirement_ambiguous",
+            IssueClass::PrdInvalid => "prd_invalid",
+            IssueClass::MergeConflict => "merge_conflict",
+            IssueClass::LowCrScore => "low_cr_score",
+            IssueClass::DiffTooLarge => "diff_too_large",
+            IssueClass::PermissionDenied => "permission_denied",
+            IssueClass::InfraFailure => "infra_failure",
+            IssueClass::SecurityViolation => "security_violation",
+            IssueClass::OutOfScopeChange => "out_of_scope_change",
+            IssueClass::AuthExpired => "auth_expired",
+            IssueClass::TrdUnconfirmed => "trd_unconfirmed",
+            IssueClass::Unknown => "unknown",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IssuePolicy {
     pub auto_retry: i32,
@@ -217,3 +240,15 @@ pub static ISSUE_POLICIES: Lazy<HashMap<IssueClass, IssuePolicy>> = Lazy::new(||
     );
     m
 });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn as_str_is_snake_case() {
+        assert_eq!(IssueClass::CompilationError.as_str(), "compilation_error");
+        assert_eq!(IssueClass::LowCrScore.as_str(), "low_cr_score");
+        assert_eq!(IssueClass::AuthExpired.as_str(), AUTH_EXPIRED_ISSUE_CLASS);
+    }
+}

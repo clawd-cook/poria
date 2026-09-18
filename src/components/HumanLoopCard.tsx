@@ -24,6 +24,7 @@ import { useState } from "react";
 
 import { isAuthExpiredIssue, isAuthExpiredMessage } from "../lib/auth";
 import { invokeErrorMessage } from "../lib/errors";
+import { issueClassLabel, issueClassTitle } from "../lib/issueClass";
 import { isOutputGuardBlock } from "../lib/outputGuard";
 import { isP0UnansweredMessage, isRequirementAmbiguousIssue } from "../lib/prdReview";
 import { isQualityGateBlock, qualityGateTitle } from "../lib/qualityGates";
@@ -71,6 +72,7 @@ export function HumanLoopCard({
     !trdBlocked &&
     !outputGuardBlocked &&
     isQualityGateBlock(issueClass, detail);
+  const routedTitle = issueClassTitle(issueClass, detail);
 
   async function handleAction(action: string) {
     setLoading(action);
@@ -155,12 +157,17 @@ export function HumanLoopCard({
                   ? "代码超出 TRD 允许范围，无法进入 CR"
                   : qualityGateBlocked
                     ? qualityGateTitle(issueClass, detail)
-                    : "Pipeline 需要协助"
+                    : (routedTitle ?? "Pipeline 需要协助")
         }
         description={
           <Space direction="vertical" style={{ width: "100%" }}>
             <Descriptions column={1} size="small">
-              <Descriptions.Item label="问题">{issueClass}</Descriptions.Item>
+              <Descriptions.Item label="问题">
+                {issueClassLabel(issueClass)}
+                <Typography.Text type="secondary" style={{ marginLeft: token.marginXS }}>
+                  ({issueClass})
+                </Typography.Text>
+              </Descriptions.Item>
               <Descriptions.Item label="阶段">{stage}</Descriptions.Item>
             </Descriptions>
             <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>

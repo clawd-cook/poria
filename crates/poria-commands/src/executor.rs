@@ -4,8 +4,8 @@ use poria_core::pipeline::{
     DEFAULT_GATES,
 };
 use poria_core::types::{
-    GateOnFail, GatePhase, Pipeline, PipelineStatus, RollbackCommand, RollbackCommandType,
-    RollbackInstruction, SkillInput, SkillOutput, Stage, StageEnum, StageStatus, STAGE_ORDER,
+    GatePhase, Pipeline, PipelineStatus, RollbackCommand, RollbackCommandType, RollbackInstruction,
+    SkillInput, SkillOutput, Stage, StageEnum, StageStatus, STAGE_ORDER,
 };
 
 use crate::handle_error::{handle_stage_error, ErrorAction};
@@ -200,23 +200,7 @@ where
                 }
             };
 
-            // Check retry exhaustion
-            if pipeline.stages[stage_idx].status == StageStatus::Failed
-                && pipeline.stages[stage_idx].retry_count >= pipeline.stages[stage_idx].max_retries
-            {
-                transition_pipeline(&mut pipeline.status, PipelineStatus::Failed)?;
-                let stage_name = pipeline.stages[stage_idx].name;
-                self.store.save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    &pipeline,
-                    &[PipelineEvent::pipeline_failed(
-                        &pipeline.id,
-                        format!("Stage {:?} exhausted retries", stage_name),
-                    )],
-                );
-                return Ok(());
-            }
-
+            // Retry / block / fail from ISSUE_POLICIES, not stage.max_retries
             match self.run_single_stage(&mut pipeline, stage_idx).await {
                 Ok(StageOutcome::Continue) => continue,
                 Ok(StageOutcome::Return) => return Ok(()),
@@ -242,6 +226,10 @@ where
                                 &error_message,
                                 stage.retry_count,
                             ));
+                            let delay = crate::retry_delay_for_message(&error_message);
+                            if !delay.is_zero() {
+                                tokio::time::sleep(delay).await;
+                            }
                         }
                         ErrorAction::Blocked => {
                             let stage = &pipeline.stages[stage_idx];
@@ -450,61 +438,45 @@ where
             return GateAction::Pass;
         }
 
-        // Look for a regress rule that failed
-        let regress_rule_data = pipeline_gate_rules(pipeline)
+        if evaluation
+            .blocking_failures
             .iter()
-            .find(|r| {
-                r.enabled
-                    && r.on_fail == GateOnFail::Regress
-                    && evaluation
-                        .details
-                        .iter()
-                        .any(|d| d.rule_id == r.id && !d.pass)
-            })
-            .map(|r| (r.id.clone(), r.regress_to));
+            .any(|detail| detail.rule_id == "security_scan")
+        {
+            pipeline.stages[stage_idx].status = StageStatus::Blocked;
+            pipeline.status = PipelineStatus::Blocked;
+            events.push(PipelineEvent::stage_blocked(
+                &pipeline.id,
+                pipeline.stages[stage_idx].name,
+                poria_core::types::IssueClass::SecurityViolation,
+            ));
+            return GateAction::Blocked;
+        }
 
-        if let Some((rule_id, regress_to_opt)) = regress_rule_data {
-            if !pipeline.has_regressed {
-                pipeline.has_regressed = true;
-                let regress_to = regress_to_opt.unwrap_or(StageEnum::Dev);
-
-                // Reset dev + cr stages to pending
-                for s in pipeline.stages.iter_mut() {
-                    if s.name == StageEnum::Dev {
-                        s.status = StageStatus::Pending;
-                        let cr_feedback = serde_json::json!({
-                            "crScore": cr_result.cr_score,
-                            "findings": findings,
-                        });
-                        let mut input = s
-                            .input
-                            .as_ref()
-                            .and_then(|v| v.as_object().cloned())
-                            .unwrap_or_default();
-                        input.insert("crFeedback".into(), cr_feedback);
-                        s.input = Some(serde_json::Value::Object(input));
-                    }
-                    if s.name == StageEnum::Cr {
-                        s.status = StageStatus::Pending;
-                    }
-                }
-
+        let cr_score_failed = evaluation
+            .details
+            .iter()
+            .any(|detail| detail.rule_id == "cr_score" && !detail.pass);
+        if cr_score_failed {
+            if crate::try_regress_cr_to_dev(
+                pipeline,
+                cr_result.cr_score.as_deref(),
+                findings.as_ref(),
+            ) {
                 events.push(PipelineEvent::stage_regressed(
                     &pipeline.id,
                     StageEnum::Cr,
-                    regress_to,
+                    StageEnum::Dev,
                     format!("CR score: {:?}", cr_result.cr_score),
                 ));
                 events.push(PipelineEvent::gate_regress_triggered(
                     &pipeline.id,
-                    &rule_id,
+                    "cr_score",
                     StageEnum::Cr,
-                    regress_to,
+                    StageEnum::Dev,
                 ));
                 return GateAction::Regress;
             }
-
-            // Already regressed once -> block
             pipeline.stages[stage_idx].status = StageStatus::Blocked;
             pipeline.status = PipelineStatus::Blocked;
             events.push(PipelineEvent::stage_blocked(
