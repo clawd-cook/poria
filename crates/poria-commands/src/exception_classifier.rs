@@ -24,6 +24,9 @@ pub fn classify(error_message: &str) -> IssueClass {
     if is_requirement_ambiguous(msg) {
         return IssueClass::RequirementAmbiguous;
     }
+    if is_trd_unconfirmed(msg) {
+        return IssueClass::TrdUnconfirmed;
+    }
     if msg.contains("PRD")
         && (lower.contains("empty") || lower.contains("invalid") || lower.contains("export failed"))
     {
@@ -82,6 +85,15 @@ pub fn is_requirement_ambiguous(error_message: &str) -> bool {
         || lower.contains("requirementambiguous")
 }
 
+/// True when Dev is blocked until frontend TRD.md is confirmed.
+pub fn is_trd_unconfirmed(error_message: &str) -> bool {
+    let lower = error_message.to_ascii_lowercase();
+    error_message.contains("TRD unconfirmed")
+        || lower.contains("trd unconfirmed")
+        || error_message.contains("trd_unconfirmed")
+        || lower.contains("trdunconfirmed")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +146,17 @@ mod tests {
         );
         assert!(is_requirement_ambiguous(
             "P0 unanswered: Q1 请在 PRD_REVIEW.md 填写后再进入设计"
+        ));
+    }
+
+    #[test]
+    fn test_classify_trd_unconfirmed() {
+        assert_eq!(
+            classify("TRD unconfirmed: 请确认前端 TRD.md 后再进入开发"),
+            IssueClass::TrdUnconfirmed
+        );
+        assert!(is_trd_unconfirmed(
+            "TRD unconfirmed: 请确认前端 TRD.md 后再进入开发"
         ));
     }
 

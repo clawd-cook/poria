@@ -46,6 +46,8 @@ pub struct StageResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trd_exists: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub trd_confirmed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub code_changes_exist: Option<bool>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
@@ -126,6 +128,15 @@ pub static DEFAULT_GATES: Lazy<Vec<GateRule>> = Lazy::new(|| {
             regress_to: None,
         },
         GateRule {
+            id: "trd_confirmed".into(),
+            name: "TRD 已确认".into(),
+            enabled: true,
+            threshold: serde_json::Value::Null,
+            on_fail: GateOnFail::Block,
+            gate_phase: GatePhase::StageEntry,
+            regress_to: None,
+        },
+        GateRule {
             id: "code_changes_exist".into(),
             name: "代码变更存在".into(),
             enabled: true,
@@ -190,6 +201,11 @@ fn evaluate_one(rule: &GateRule, result: &StageResult) -> GateResult {
             rule,
             result.trd_exists == Some(true),
             &serde_json::json!(result.trd_exists),
+        ),
+        "trd_confirmed" => gate_result(
+            rule,
+            result.trd_confirmed == Some(true),
+            &serde_json::json!(result.trd_confirmed),
         ),
         "code_changes_exist" => gate_result(
             rule,
@@ -387,6 +403,7 @@ mod tests {
     fn test_trd_exists_gate_pass() {
         let result = StageResult {
             trd_exists: Some(true),
+            trd_confirmed: Some(true),
             prd_review_p0_done: Some(true),
             code_changes_exist: Some(true),
             ..Default::default()
@@ -399,6 +416,7 @@ mod tests {
     fn test_trd_exists_gate_fail() {
         let result = StageResult {
             trd_exists: Some(false),
+            trd_confirmed: Some(true),
             prd_review_p0_done: Some(true),
             code_changes_exist: Some(true),
             ..Default::default()
@@ -417,6 +435,7 @@ mod tests {
             code_changes_exist: Some(true),
             prd_review_p0_done: Some(true),
             trd_exists: Some(true),
+            trd_confirmed: Some(true),
             ..Default::default()
         };
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
@@ -429,6 +448,7 @@ mod tests {
             code_changes_exist: Some(false),
             prd_review_p0_done: Some(true),
             trd_exists: Some(true),
+            trd_confirmed: Some(true),
             ..Default::default()
         };
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
@@ -444,22 +464,40 @@ mod tests {
         let result = StageResult {
             prd_review_p0_done: Some(true),
             trd_exists: Some(true),
+            trd_confirmed: Some(true),
             code_changes_exist: Some(true),
             ..Default::default()
         };
         let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
         assert!(eval.all_pass);
         assert!(eval.blocking_failures.is_empty());
-        assert_eq!(eval.details.len(), 3);
+        assert_eq!(eval.details.len(), 4);
+    }
+
+    #[test]
+    fn test_trd_confirmed_gate_fail() {
+        let result = StageResult {
+            prd_review_p0_done: Some(true),
+            trd_exists: Some(true),
+            trd_confirmed: Some(false),
+            code_changes_exist: Some(true),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageEntry);
+        assert!(!eval.all_pass);
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "trd_confirmed"));
     }
 
     #[test]
     fn test_default_gates_count() {
-        assert_eq!(DEFAULT_GATES.len(), 9);
+        assert_eq!(DEFAULT_GATES.len(), 10);
         let entry_gates: Vec<_> = DEFAULT_GATES
             .iter()
             .filter(|g| g.gate_phase == GatePhase::StageEntry)
             .collect();
-        assert_eq!(entry_gates.len(), 3);
+        assert_eq!(entry_gates.len(), 4);
     }
 }

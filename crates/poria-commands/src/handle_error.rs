@@ -1,6 +1,6 @@
 use poria_core::types::{
     IssueClass, Pipeline, PipelineStatus, Stage, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS,
-    ISSUE_POLICIES, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+    ISSUE_POLICIES, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, TRD_UNCONFIRMED_ISSUE_CLASS,
 };
 
 use crate::exception_classifier;
@@ -45,6 +45,13 @@ pub fn stage_error_outcome(message: &str, fallback_class: &str) -> StageErrorOut
             pipeline_status: PipelineStatus::Blocked,
             stage_status: StageStatus::Blocked,
             issue_class: REQUIREMENT_AMBIGUOUS_ISSUE_CLASS.to_string(),
+            retryable: true,
+        }
+    } else if exception_classifier::is_trd_unconfirmed(message) {
+        StageErrorOutcome {
+            pipeline_status: PipelineStatus::Blocked,
+            stage_status: StageStatus::Blocked,
+            issue_class: TRD_UNCONFIRMED_ISSUE_CLASS.to_string(),
             retryable: true,
         }
     } else {
@@ -128,7 +135,7 @@ mod tests {
     use super::*;
     use poria_core::types::{
         IssueClass, PipelineConfig, PipelineStatus, StageEnum, StageStatus,
-        AUTH_EXPIRED_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+        AUTH_EXPIRED_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, TRD_UNCONFIRMED_ISSUE_CLASS,
     };
 
     fn make_stage() -> Stage {
@@ -272,5 +279,17 @@ mod tests {
         assert_eq!(stage.status, StageStatus::Blocked);
         assert_eq!(status, PipelineStatus::Blocked);
         assert_eq!(stage.retry_count, 0);
+    }
+
+    #[test]
+    fn test_stage_error_outcome_trd_blocks() {
+        let outcome = stage_error_outcome(
+            "TRD unconfirmed: 请确认前端 TRD.md 后再进入开发",
+            "dev_failed",
+        );
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
+        assert_eq!(outcome.stage_status, StageStatus::Blocked);
+        assert_eq!(outcome.issue_class, TRD_UNCONFIRMED_ISSUE_CLASS);
+        assert!(outcome.retryable);
     }
 }

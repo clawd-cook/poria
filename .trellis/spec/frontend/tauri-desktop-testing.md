@@ -333,6 +333,26 @@ JME `send` is best-effort placeholder; desktop fill-in is the required loop.
 - Unit: `cargo test -p poria-core -- prd_review`; `cargo test -p poria-commands -- stage_error_outcome_p0`; `cargo test -p poria-desktop --lib -- load_prd_review_status`.
 - Manual: after ReviewPrd, Design hangs 阻塞; fill P0 in HITL modal or 文档 drawer; 答完后继续.
 
+## Scenario: Dev blocked until frontend TRD is confirmed
+
+### 1. Scope / Trigger
+
+Use when changing `trd_confirmed`, `confirm_trd`, or HumanLoopCard TRD actions. Verify in `poria-desktop`. Confirm **frontend** `TRD.md` only.
+
+### 2. Signatures
+
+```typescript
+invoke("confirm_trd", { pipelineId, skipped: false });
+invoke("confirm_trd", { pipelineId, skipped: true }); // skip confirmation, still enter Dev
+```
+
+`PipelineConfig.trd_confirmed` defaults false. Dev entry evaluates `trd_exists` + `trd_confirmed` only. HITL 「跳过确认」 must **not** skip the Dev stage.
+
+### 3. Tests Required
+
+- Unit: `cargo test -p poria-core -- trd_confirmed`; `cargo test -p poria-commands -- stage_error_outcome_trd`.
+- Manual: after Design, Dev hangs 阻塞; 查看 TRD.md; 确认 TRD; Dev continues.
+
 ## Common Mistake: Vite tab vs desktop window
 
 **Symptom**: 1420 shows the UI but 登记/登录/需求列表 fail or the store listener throws `transformCallback`.

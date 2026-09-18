@@ -80,6 +80,7 @@ pub fn run() {
             commands::pipeline::submit_pipeline,
             commands::pipeline::cancel_pipeline,
             commands::pipeline::human_loop_respond,
+            commands::pipeline::confirm_trd,
             commands::pipeline::get_pipeline_events,
             commands::pipeline::execute_stage,
             commands::pipeline::skip_stage,
