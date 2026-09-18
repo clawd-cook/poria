@@ -110,6 +110,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::pipeline::list_pipelines,
             commands::pipeline::get_pipeline,
+            commands::pipeline::get_pipeline_stats,
             commands::pipeline::submit_pipeline,
             commands::pipeline::cancel_pipeline,
             commands::pipeline::human_loop_respond,

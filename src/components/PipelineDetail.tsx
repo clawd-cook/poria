@@ -69,6 +69,13 @@ export function PipelineDetail() {
             </Space>
           </Link>
         </Descriptions.Item>
+        <Descriptions.Item label="耗时">
+          {detail.duration_ms != null ? `${Math.round(detail.duration_ms / 1000)} s` : "-"}
+        </Descriptions.Item>
+        <Descriptions.Item label="费用">
+          {detail.cost_usd != null ? `$${detail.cost_usd.toFixed(2)}` : "-"}
+        </Descriptions.Item>
+        <Descriptions.Item label="人工介入">{detail.hitl_count}</Descriptions.Item>
       </Descriptions>
 
       <StageProgress pipelineId={detail.id} stages={detail.stages} />

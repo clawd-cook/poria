@@ -5,6 +5,7 @@ import { probeClaude, updateConfig } from "../lib/tauri";
 import type { AppConfig, ClaudeProbeResult } from "../lib/types";
 import { useStore } from "../state/store";
 import { PageFrame } from "./PageFrame";
+import { PipelineStatsPanel } from "./PipelineStatsPanel";
 
 const { Text } = Typography;
 
@@ -167,6 +168,9 @@ export function SettingsPage() {
           type={probe.ok ? "success" : "error"}
         />
       ) : null}
+      <div style={{ marginTop: token.marginLG, maxWidth: 960 }}>
+        <PipelineStatsPanel />
+      </div>
     </PageFrame>
   );
 }

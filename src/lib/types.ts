@@ -55,8 +55,38 @@ export interface PipelineDetail {
   has_regressed: boolean;
   stages: StageDetail[];
   workspace_path: string | null;
+  cost_usd: number | null;
+  duration_ms: number | null;
+  hitl_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface StageObservability {
+  stage: StageEnum | string;
+  completed: number;
+  failed: number;
+  blocked: number;
+  success_rate: number | null;
+  duration_p50_ms: number | null;
+  duration_p95_ms: number | null;
+  cost_usd: number;
+}
+
+export interface ObservabilitySummary {
+  pipeline_total: number;
+  pipeline_completed: number;
+  pipeline_failed: number;
+  pipeline_cancelled: number;
+  pipeline_blocked: number;
+  pipeline_waiting_merge: number;
+  pipeline_running: number;
+  success_rate: number | null;
+  hitl_count: number;
+  hitl_pipelines: number;
+  hitl_rate: number | null;
+  cost_usd_total: number;
+  stages: StageObservability[];
 }
 
 export interface PipelineEvent {
