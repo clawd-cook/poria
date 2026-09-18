@@ -1,0 +1,37 @@
+name: Warm Rust cache
+
+# Tag-only publish jobs cannot reuse caches saved on previous tags.
+# Saving the release target on main lets pre-publish / publish restore it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.lock
+      - Cargo.toml
+      - crates/**
+      - src-tauri/**
+      - .github/actions/setup-macos-tauri/**
+      - .github/workflows/warm-rust-cache.yml
+  workflow_dispatch:
+
+concurrency:
+  group: warm-rust-cache
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    name: Compile release deps (aarch64)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-macos-tauri
+        with:
+          target: aarch64-apple-darwin
+          save-cache: "true"
+
+      - name: Build desktop crate
+        run: cargo build --release --target aarch64-apple-darwin -p poria-desktop

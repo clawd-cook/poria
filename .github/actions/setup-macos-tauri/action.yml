@@ -1,0 +1,36 @@
+name: Setup macOS Tauri toolchain
+description: Install Rust, restore cargo target cache, and install a prebuilt tauri-cli
+
+inputs:
+  target:
+    description: rustc target triple
+    required: true
+  save-cache:
+    description: Save rust-cache (true only on the main-branch warmer)
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.target }}
+
+    - name: Cache Cargo registry and target
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: ". -> target"
+        key: ${{ inputs.target }}-release
+        cache-on-failure: true
+        save-if: ${{ inputs.save-cache == 'true' }}
+
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@main
+
+    - name: Install Tauri CLI (prebuilt)
+      shell: bash
+      run: |
+        cargo binstall --no-confirm --disable-strategies compile tauri-cli --version "^2"
+        cargo tauri --version
