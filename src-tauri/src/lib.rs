@@ -53,7 +53,14 @@ pub fn run() {
             if let Err(e) = repo_store.fail_interrupted_clones() {
                 tracing::warn!(error = %e, "failed to mark interrupted clones as failed");
             }
-            let agent_pool = Arc::new(poria_resources::ClaudeAgentPool::new_with_cli(3, None));
+            let agent_pool = Arc::new(poria_resources::ClaudeAgentPool::new_with_path_provider(
+                3,
+                || {
+                    poria_infrastructure::config::load_config(None)
+                        .effective_claude_path()
+                        .map(str::to_string)
+                },
+            ));
             let session_tracker = Arc::new(poria_resources::SessionTracker::new());
 
             app.manage(AppState {
@@ -86,6 +93,7 @@ pub fn run() {
             commands::projects::read_demand_project_file,
             commands::config::get_config,
             commands::config::update_config,
+            commands::config::probe_claude,
             commands::skills::list_skills,
             commands::channels::list_channels,
             commands::repos::register_repo,

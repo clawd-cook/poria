@@ -3,6 +3,7 @@ use std::path::{Component, Path, PathBuf};
 
 const USER_DIR_NAME: &str = ".poria";
 const AUTH_FILE_NAME: &str = "auth.json";
+const CONFIG_FILE_NAME: &str = "config.json";
 const REPOS_DIR_NAME: &str = "repos";
 const PROJECTS_DIR_NAME: &str = "projects";
 const ERP_COOKIE_NAME: &str = "erp_erp";
@@ -38,6 +39,13 @@ pub fn get_auth_file_path(user_root: Option<&Path>) -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| get_user_root(None));
     root.join(AUTH_FILE_NAME)
+}
+
+pub fn get_config_file_path(user_root: Option<&Path>) -> PathBuf {
+    let root = user_root
+        .map(PathBuf::from)
+        .unwrap_or_else(|| get_user_root(None));
+    root.join(CONFIG_FILE_NAME)
 }
 
 pub fn get_repos_root(home: Option<&Path>) -> PathBuf {

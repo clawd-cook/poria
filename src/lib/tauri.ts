@@ -4,6 +4,7 @@ import type {
   AppConfig,
   AuthStatus,
   ChannelInfo,
+  ClaudeProbeResult,
   DemandListItem,
   DemandPage,
   DemandPrdPreview,
@@ -63,6 +64,10 @@ export async function getConfig(): Promise<AppConfig> {
 
 export async function updateConfig(config: AppConfig): Promise<void> {
   return invoke<void>("update_config", { config });
+}
+
+export async function probeClaude(pathOverride?: string | null): Promise<ClaudeProbeResult> {
+  return invoke<ClaudeProbeResult>("probe_claude", { pathOverride: pathOverride ?? null });
 }
 
 export async function listSkills(): Promise<SkillInfo[]> {

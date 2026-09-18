@@ -1,4 +1,7 @@
-use poria_infrastructure::config::{load_config, PoriaConfig};
+use poria_infrastructure::config::{
+    get_config_file_path, load_config, normalize_claude_path, PoriaConfig,
+};
+use poria_resources::ClaudeProbeResult;
 use serde::{Deserialize, Serialize};
 
 /// Frontend-facing config view that matches the full PoriaConfig structure.
@@ -16,6 +19,9 @@ pub struct AppConfig {
     pub max_retries: i32,
     /// Path to the SQLite database directory
     pub db_path: String,
+    /// Optional absolute `claude` CLI path. Empty/null means auto `which`.
+    #[serde(default)]
+    pub claude_path: Option<String>,
 }
 
 /// Convert a full PoriaConfig to the frontend AppConfig view.
@@ -27,6 +33,7 @@ fn poria_config_to_app_config(c: &PoriaConfig) -> AppConfig {
         agent_timeout_ms: c.timeouts.agent,
         max_retries: c.retry.max_stage_retries,
         db_path: c.paths.db_path.clone(),
+        claude_path: c.effective_claude_path().map(str::to_string),
     }
 }
 
@@ -40,9 +47,7 @@ pub async fn get_config() -> Result<AppConfig, String> {
 /// Persist configuration to ~/.poria/config.json.
 #[tauri::command]
 pub async fn update_config(config: AppConfig) -> Result<(), String> {
-    let config_path = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".poria/config.json");
+    let config_path = get_config_file_path(None);
 
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -68,10 +73,19 @@ pub async fn update_config(config: AppConfig) -> Result<(), String> {
             db_path: config.db_path,
             ..base.paths
         },
+        claude_path: normalize_claude_path(config.claude_path.as_deref()),
     };
 
     let json = serde_json::to_string_pretty(&full).map_err(|e| e.to_string())?;
     std::fs::write(&config_path, json).map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// Probe the Claude CLI using the same resolve path as Agent spawn.
+///
+/// `path_override` is the settings field (may be unsaved). Empty/null → auto `which`.
+#[tauri::command]
+pub async fn probe_claude(path_override: Option<String>) -> Result<ClaudeProbeResult, String> {
+    Ok(poria_resources::probe_claude_cli(path_override.as_deref()).await)
 }
