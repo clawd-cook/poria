@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { invokeErrorMessage } from "../lib/errors";
 import { listDemandProject, readDemandProjectFile } from "../lib/tauri";
 import type { DemandListItem, DemandProjectFile } from "../lib/types";
+import { PrdReviewEditor } from "./PrdReviewEditor";
 
 const { Text, Title } = Typography;
 
@@ -82,7 +83,8 @@ export function DemandProjectDrawer({
         setExists(project.exists);
         setFiles(project.files);
         setProjectDir(project.project_dir);
-        setActiveFile(project.files[0]?.name ?? null);
+        const review = project.files.find((file) => file.name === "PRD_REVIEW.md");
+        setActiveFile(review?.name ?? project.files[0]?.name ?? null);
       } catch (err) {
         if (!cancelled) {
           setError(invokeErrorMessage(err, "项目文档加载失败"));
@@ -100,7 +102,7 @@ export function DemandProjectDrawer({
   }, [demandCode, demandId, open]);
 
   useEffect(() => {
-    if (!open || !demandCode || !activeFile) {
+    if (!open || !demandCode || !activeFile || activeFile === "PRD_REVIEW.md") {
       return;
     }
 
@@ -171,7 +173,9 @@ export function DemandProjectDrawer({
                 {projectDir}
               </Text>
             ) : null}
-            {error ? (
+            {activeFile === "PRD_REVIEW.md" ? (
+              <PrdReviewEditor demandCode={demandCode} demandId={demandId} />
+            ) : error ? (
               <Text type="danger">{error}</Text>
             ) : contentLoading ? (
               <Spin />

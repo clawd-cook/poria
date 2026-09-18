@@ -151,6 +151,20 @@ export async function readDemandProjectFile(input: {
   });
 }
 
+export async function writeDemandProjectFile(input: {
+  content: string;
+  demandCode: string;
+  demandId?: number;
+  fileName: string;
+}): Promise<DemandProjectFileContent> {
+  return invoke<DemandProjectFileContent>("write_demand_project_file", {
+    content: input.content,
+    demandCode: input.demandCode,
+    demandId: input.demandId,
+    fileName: input.fileName,
+  });
+}
+
 export async function listRepoBranches(id: string): Promise<string[]> {
   return invoke<string[]>("list_repo_branches", { id });
 }

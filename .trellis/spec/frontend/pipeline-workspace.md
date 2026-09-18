@@ -34,7 +34,7 @@ Frontend (`src/lib/tauri.ts`): `syncRepo(id)`, `updateRepoDefaultBranch(id, defa
 | --- | --- |
 | Init | JoySpace export to `~/.poria/projects/<demand_code>/` **then** sync both hosted clones **then** mkdir workspace, symlink docs + skills, write `CLAUDE.md`, frontend feature worktree + backend detached worktree. Any failure fails Init and deletes the workspace dir (not projects). |
 | `submit_pipeline` | `pipeline.repos` = frontend only. `base_branch` = registered `default_branch` (not `git_current_branch`). Backend stays in `backend_context`. After Init, `backend_context.local_path` is the **backend worktree**. |
-| ReviewPrd / Design / Dev / Cr | Agent `cwd` = workspace root. `claude -p` is a short prompt that names `review-prd` / `gen-trd` / `gen-code` / `code-review`. Write docs to workspace-root filenames (symlinks to projects). Code only in the frontend worktree. |
+| ReviewPrd / Design / Dev / Cr | Agent `cwd` = workspace root. `claude -p` is a short prompt that names `review-prd` / `gen-trd` / `gen-code` / `code-review`. Write docs to workspace-root filenames (symlinks to projects). Code only in the frontend worktree. Design entry evaluates **only** `prd_review_p0` (not `trd_exists` / `code_changes_exist`). Unanswered P0 (blank / TODO / 待填写 / 待确认) → pipeline `blocked` + `requirement_ambiguous`; ReviewPrd itself still completes. P1/P2 unanswered warn only. Desktop `write_demand_project_file` may save `PRD_REVIEW.md`; HITL resume re-checks P0. JME send is best-effort placeholder. |
 | Deploy | Commit frontend worktree code only; strip leaked `PRD.md` / `PRD_REVIEW.md` / `TRD.md` / `BACKEND_TRD.md` from the worktree before `git add`. cwd remains the frontend git worktree. |
 | Repo tab | Default branch defaults to `master`, editable. Save branch then sync immediately (sync fail does not roll back the field). Manual sync uses the same primitive. Clone success also syncs. |
 | Sidebar 工作区 | Shows selected pipeline `workspacePath`; Finder via opener. Empty if no pipeline selected. |
@@ -52,6 +52,8 @@ Backend worktree must be **detached** so it does not lock the same branch as the
 | Save `default_branch` then sync fails | Branch field already saved; status failed; no rollback of the branch |
 | Backend branch == hosted `default_branch` without detach | `git worktree add` fails (branch already checked out) — must use `--detach` |
 | ReviewPrd before Init worktrees | Stage must fail before marking Running; no Workspace stage to wait on |
+| Design with unanswered P0 in `PRD_REVIEW.md` | Design `blocked` (`requirement_ambiguous` / `P0 unanswered`); HITL 填写 P0 答案; P1/P2 仅提醒 |
+| Design with no `PRD_REVIEW.md` | Same P0 block; do not start `gen-trd` |
 | Docs written into git root | Adopt into project dir / strip before Deploy; authority remains `~/.poria/projects` |
 | Missing bundled `SKILL.md` | Init fails: 随包 skill 不完整 / 找不到随包 skill 目录 |
 | Init fails after `git worktree add` | `git worktree remove` both paths **then** delete the workspace dir. Bare `rm -rf` leaves a stale worktree in the hosted clone |
@@ -66,6 +68,7 @@ Backend worktree must be **detached** so it does not lock the same branch as the
 
 ## 6. Tests Required
 
+- `cargo test -p poria-core -- prd_review`
 - `cargo test -p poria-core -- stage_order`
 - `cargo test -p poria-infrastructure -- registered_repo` / `schema_v3` / `workspace`
 - `cargo test -p poria-resources -- worktree` / `git_sync`

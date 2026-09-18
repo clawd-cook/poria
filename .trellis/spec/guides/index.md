@@ -39,6 +39,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] Xingyun demand list filter changes (`acceptedByMe` / `receiver` / `processor`)
 - [ ] Start-pipeline wizard / `submit_pipeline` / `backend_trd_url` / `BACKEND_TRD.md` vs frontend `TRD.md`
 - [ ] Init `~/.poria/workspaces/<id>` vs `~/.poria/projects` docs vs `pipeline.repos` vs registered `default_branch` sync (`workspacePath` ≠ frontend `worktreePath`)
+- [ ] Design entry `prd_review_p0`: unanswered P0 (blank / TODO / 待填写 / 待确认) Blocked; desktop `write_demand_project_file` + HITL resume; P1/P2 warn only
 - [ ] `claude_path` / `probe_claude` / Agent `spawn("claude")` / `~/.poria/config.json` vs CWD `poria.config.json`
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)

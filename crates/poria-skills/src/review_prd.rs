@@ -5,6 +5,7 @@ use serde_json::json;
 
 use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
 use poria_core::feature_context::{FeatureContext, ARTIFACT_PRD, ARTIFACT_PRD_REVIEW};
+use poria_core::pipeline::parse_prd_review;
 use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
@@ -146,10 +147,21 @@ impl Skill for ReviewPrdSkill {
             return Err("PRD_REVIEW.md was not written".into());
         }
 
+        let review_status = feature_ctx
+            .read_artifact(ARTIFACT_PRD_REVIEW)?
+            .map(|content| parse_prd_review(&content))
+            .unwrap_or_default();
+
         Ok(SkillOutput {
             output: json!({
                 "reviewPath": feature_ctx.artifact_path(ARTIFACT_PRD_REVIEW),
                 "reviewExists": review_exists,
+                "p0Answered": review_status.p0_done,
+                "p1Answered": review_status.p1_done,
+                "p2Answered": review_status.p2_done,
+                "p0Unanswered": review_status.p0_unanswered,
+                "p1Unanswered": review_status.p1_unanswered,
+                "p2Unanswered": review_status.p2_unanswered,
                 "agentSessionId": session_id,
                 "costUsd": cost_usd,
             }),

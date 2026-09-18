@@ -180,9 +180,19 @@ export interface DemandProject {
   project_dir: string;
 }
 
+export interface PrdReviewStatus {
+  p0_done: boolean;
+  p0_unanswered: string[];
+  p1_done: boolean;
+  p1_unanswered: string[];
+  p2_done: boolean;
+  p2_unanswered: string[];
+}
+
 export interface DemandProjectFileContent {
   content: string;
   name: string;
+  review_status?: PrdReviewStatus | null;
 }
 
 export interface SubmitPipelineInput {

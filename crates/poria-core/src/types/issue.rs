@@ -8,6 +8,9 @@ pub const AUTH_EXPIRED_ISSUE_CLASS: &str = "auth_expired";
 /// User-facing copy for 401 / missing cookie (Xingyun / JoySpace / Coding).
 pub const AUTH_EXPIRED_USER_MESSAGE: &str = "SSO Cookie 已过期，请重新登录";
 
+/// Stored on `Stage.issue.class` when Design is blocked on unanswered P0.
+pub const REQUIREMENT_AMBIGUOUS_ISSUE_CLASS: &str = "requirement_ambiguous";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueClass {
