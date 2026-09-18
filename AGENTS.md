@@ -2,7 +2,7 @@
 
 Poria is an AI-native delivery platform: a Tauri v2 macOS desktop app that turns a Xingyun demand into a Coding merge request. Frontend is React 19 + TypeScript + Vite + Ant Design 6 / Ant Design X. Backend is Rust, a Cargo workspace of six domain crates plus the Tauri shell (`poria-desktop`).
 
-This file is for coding agents. Human product docs live in `README.md`. Contribution process lives in `CONTRIBUTING.md`.
+This file is for coding agents. Human product docs live in `README.md`. Architecture overview lives in `ARCHITECTURE.md`. Contribution process lives in `CONTRIBUTING.md`.
 
 Pinned frontend toolchain (also in `package.json` / CI `env`): Node.js **24.20.0**, pnpm **11.23.0**. App identifier: `com.poria.desktop`. Window title: `Poria`. Process: `poria-desktop`.
 

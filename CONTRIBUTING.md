@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢参与 Poria。产品说明见 [README.md](README.md)；给编码代理的分层与契约见 [AGENTS.md](AGENTS.md)。参与即表示同意 [行为准则](CODE_OF_CONDUCT.md)。
+感谢参与 Poria。产品说明见 [README.md](README.md)；分层与流水线见 [ARCHITECTURE.md](ARCHITECTURE.md)；给编码代理的契约见 [AGENTS.md](AGENTS.md)。参与即表示同意 [行为准则](CODE_OF_CONDUCT.md)。
 
 ## 报告问题
 
@@ -37,7 +37,7 @@ pnpm install
 
 本仓库 **没有** `@tauri-apps/cli` 依赖。`package.json` 的 `"tauri": "tauri"` 只有系统 `PATH` 上已有 `tauri` 二进制时才可用。本地请用 `cargo tauri`（见下）。不要为了跑通脚本去加 `@tauri-apps/cli`，除非维护者明确要求。
 
-更完整的产品说明见 README「快速开始」；分层与契约以 [AGENTS.md](AGENTS.md) 为准。
+更完整的产品说明见 README「快速开始」。分层以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准；编码代理契约以 [AGENTS.md](AGENTS.md) 为准。
 
 ## 日常开发
 
