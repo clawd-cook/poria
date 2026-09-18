@@ -51,6 +51,10 @@ export async function confirmTrd(pipelineId: string, skipped = false): Promise<v
   return invoke<void>("confirm_trd", { pipelineId, skipped });
 }
 
+export async function confirmMergeReady(pipelineId: string): Promise<void> {
+  return invoke<void>("confirm_merge_ready", { pipelineId });
+}
+
 export async function getAuthStatus(): Promise<AuthStatus> {
   return invoke<AuthStatus>("get_auth_status");
 }

@@ -84,6 +84,17 @@ export function PipelineDetail() {
             stage={humanRequest.stage}
           />
         </div>
+      ) : detail.status === "waiting_merge" ? (
+        <div style={{ margin: `${token.margin}px 0` }}>
+          <HumanLoopCard
+            demandCode={detail.demand_code}
+            demandId={detail.demand_id}
+            detail="MR 已创建，等待审查人确认后在 Coding 合入（Poria 不会自动点合并）。"
+            issueClass="waiting_merge"
+            pipelineId={detail.id}
+            stage="deploy"
+          />
+        </div>
       ) : null}
 
       <Divider />

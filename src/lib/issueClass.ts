@@ -17,6 +17,7 @@ export const ISSUE_CLASS_LABELS: Record<string, string> = {
   test_failure: "测试失败",
   trd_unconfirmed: "TRD 未确认",
   unknown: "未分类异常",
+  waiting_merge: "待合并确认",
 };
 
 export function issueClassKey(issueClass: string | null | undefined): string {
@@ -60,6 +61,8 @@ export function issueClassTitle(issueClass: string, message: string): string | n
     case "infra_failure":
     case "ci_build":
       return "基础设施或 CI 失败，需要运维协助";
+    case "waiting_merge":
+      return "MR 待审查人确认后合入（不会自动点合并）";
     default:
       if (message.includes("链接无效") || message.toLowerCase().includes("invalid url")) {
         return "需求链接无效，需要产品处理";

@@ -43,7 +43,9 @@ fn fixture_output() -> SkillOutput {
     SkillOutput {
         output: json!({
             "mrUrl": "https://coding.jd.com/group/repo/-/merge_requests/1",
+            "mrUrls": ["https://coding.jd.com/group/repo/-/merge_requests/1"],
             "mrIid": 1,
+            "gitlabProjectPath": "group/repo",
             "repo": "main",
             "changeId": "chg-fixture-001",
             "branch": "feature_TEST",
@@ -231,7 +233,9 @@ impl Skill for DeploySkill {
         Ok(SkillOutput {
             output: json!({
                 "mrUrl": mr_url,
+                "mrUrls": [mr_url],
                 "mrIid": mr_iid,
+                "gitlabProjectPath": project_path,
                 "repo": repo.name,
                 "changeId": bound.change_id,
                 "branch": branch,
@@ -272,6 +276,22 @@ mod tests {
         assert_eq!(
             output.output.get("mrUrl").and_then(|v| v.as_str()),
             Some("https://coding.jd.com/group/repo/-/merge_requests/1")
+        );
+        assert_eq!(
+            output
+                .output
+                .get("mrUrls")
+                .and_then(|v| v.as_array())
+                .and_then(|items| items.first())
+                .and_then(|v| v.as_str()),
+            Some("https://coding.jd.com/group/repo/-/merge_requests/1")
+        );
+        assert_eq!(
+            output
+                .output
+                .get("gitlabProjectPath")
+                .and_then(|v| v.as_str()),
+            Some("group/repo")
         );
         assert_eq!(
             output.output.get("ciBuildPass").and_then(|v| v.as_bool()),

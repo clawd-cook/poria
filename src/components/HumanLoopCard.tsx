@@ -24,11 +24,17 @@ import { useState } from "react";
 
 import { isAuthExpiredIssue, isAuthExpiredMessage } from "../lib/auth";
 import { invokeErrorMessage } from "../lib/errors";
-import { issueClassLabel, issueClassTitle } from "../lib/issueClass";
+import { issueClassKey, issueClassLabel, issueClassTitle } from "../lib/issueClass";
 import { isOutputGuardBlock } from "../lib/outputGuard";
 import { isP0UnansweredMessage, isRequirementAmbiguousIssue } from "../lib/prdReview";
 import { isQualityGateBlock, qualityGateTitle } from "../lib/qualityGates";
-import { confirmTrd, humanLoopRespond, readDemandProjectFile, startLogin } from "../lib/tauri";
+import {
+  confirmMergeReady,
+  confirmTrd,
+  humanLoopRespond,
+  readDemandProjectFile,
+  startLogin,
+} from "../lib/tauri";
 import { isTrdUnconfirmedIssue, isTrdUnconfirmedMessage } from "../lib/trd";
 import type { PrdReviewStatus } from "../lib/types";
 import { useStore } from "../state/store";
@@ -72,6 +78,8 @@ export function HumanLoopCard({
     !trdBlocked &&
     !outputGuardBlocked &&
     isQualityGateBlock(issueClass, detail);
+  const waitingMerge =
+    issueClassKey(issueClass) === "waiting_merge" || detail.includes("不会自动点合并");
   const routedTitle = issueClassTitle(issueClass, detail);
 
   async function handleAction(action: string) {
@@ -93,6 +101,19 @@ export function HumanLoopCard({
       message.info("请在浏览器完成登录，成功后将从当前阶段继续");
     } catch (error) {
       message.error(invokeErrorMessage(error, "打开登录页失败"));
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function handleConfirmMerge() {
+    setLoading("confirm-merge");
+    try {
+      await confirmMergeReady(pipelineId);
+      dispatch({ type: "humanRequestDismissed", pipelineId });
+      message.success("已在 MR 留下可合并确认，请在 Coding 上合入");
+    } catch (error) {
+      message.error(invokeErrorMessage(error, "确认可合并失败"));
     } finally {
       setLoading(null);
     }
@@ -157,7 +178,9 @@ export function HumanLoopCard({
                   ? "代码超出 TRD 允许范围，无法进入 CR"
                   : qualityGateBlocked
                     ? qualityGateTitle(issueClass, detail)
-                    : (routedTitle ?? "Pipeline 需要协助")
+                    : waitingMerge
+                      ? "MR 待审查人确认后合入"
+                      : (routedTitle ?? "Pipeline 需要协助")
         }
         description={
           <Space direction="vertical" style={{ width: "100%" }}>
@@ -215,37 +238,56 @@ export function HumanLoopCard({
                   </Button>
                 </>
               ) : null}
-              <Button
-                disabled={loading !== null}
-                icon={<ReloadOutlined />}
-                loading={loading === "resume"}
-                onClick={() => void handleAction("resume")}
-                type={
-                  authExpired || p0Blocked || trdBlocked || outputGuardBlocked || qualityGateBlocked
-                    ? "default"
-                    : "primary"
-                }
-              >
-                {authExpired
-                  ? "登录后继续"
-                  : p0Blocked
-                    ? "答完后继续"
-                    : trdBlocked
-                      ? "确认后继续"
-                      : outputGuardBlocked
-                        ? "收回越界改动后继续"
-                        : qualityGateBlocked
-                          ? "补齐报告后继续"
-                          : "修复并重试"}
-              </Button>
-              <Button
-                icon={<ForwardOutlined />}
-                loading={loading === "skip" || loading === "skip-confirm"}
-                disabled={loading !== null}
-                onClick={() => void (trdBlocked ? handleConfirmTrd(true) : handleAction("skip"))}
-              >
-                {trdBlocked ? "跳过确认" : "跳过"}
-              </Button>
+              {waitingMerge ? (
+                <Button
+                  disabled={loading !== null}
+                  icon={<CheckOutlined />}
+                  loading={loading === "confirm-merge"}
+                  onClick={() => void handleConfirmMerge()}
+                  type="primary"
+                >
+                  确认可合并
+                </Button>
+              ) : null}
+              {waitingMerge ? null : (
+                <Button
+                  disabled={loading !== null}
+                  icon={<ReloadOutlined />}
+                  loading={loading === "resume"}
+                  onClick={() => void handleAction("resume")}
+                  type={
+                    authExpired ||
+                    p0Blocked ||
+                    trdBlocked ||
+                    outputGuardBlocked ||
+                    qualityGateBlocked
+                      ? "default"
+                      : "primary"
+                  }
+                >
+                  {authExpired
+                    ? "登录后继续"
+                    : p0Blocked
+                      ? "答完后继续"
+                      : trdBlocked
+                        ? "确认后继续"
+                        : outputGuardBlocked
+                          ? "收回越界改动后继续"
+                          : qualityGateBlocked
+                            ? "补齐报告后继续"
+                            : "修复并重试"}
+                </Button>
+              )}
+              {waitingMerge ? null : (
+                <Button
+                  icon={<ForwardOutlined />}
+                  loading={loading === "skip" || loading === "skip-confirm"}
+                  disabled={loading !== null}
+                  onClick={() => void (trdBlocked ? handleConfirmTrd(true) : handleAction("skip"))}
+                >
+                  {trdBlocked ? "跳过确认" : "跳过"}
+                </Button>
+              )}
               <Button
                 danger
                 icon={<CloseCircleOutlined />}

@@ -111,19 +111,7 @@ fn build_rollback_instructions(stage: &Stage, _pipeline: &Pipeline) -> Option<Ro
 
 /// Collects MR URLs from the deploy stage output.
 fn collect_mr_urls(pipeline: &Pipeline) -> Vec<String> {
-    pipeline
-        .stages
-        .iter()
-        .find(|s| s.name == StageEnum::Deploy)
-        .and_then(|s| s.output.as_ref())
-        .and_then(|o| o.get("mrUrls"))
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default()
+    poria_core::pipeline::collect_deploy_mr_urls(pipeline)
 }
 
 /// The main pipeline execution engine.
