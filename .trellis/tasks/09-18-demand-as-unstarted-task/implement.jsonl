@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Xingyun 过滤、submit_pipeline、demand_code 跨层"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "list_demands / acceptedByMe / 请先登录，验证必须在 Poria 窗口"}
+{"file": ".trellis/spec/frontend/pipeline-workspace.md", "reason": "开工仍 backendTrdUrl、backend 不进 repos"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "侧栏 ViewType 与需求列表现行约定"}
+{"file": "AGENTS.md", "reason": "SSO、需求列表默认 related-to-me、submit_pipeline 契约"}
