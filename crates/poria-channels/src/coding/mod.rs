@@ -128,7 +128,7 @@ fn coding_base_url() -> String {
 // EasyCI GraphQL
 // ---------------------------------------------------------------------------
 
-const DEFAULT_EASYCI_GQL_URL: &str = "http://easyci.jd.com/gql";
+const DEFAULT_EASYCI_GQL_URL: &str = "https://easyci.jd.com/gql";
 
 #[derive(serde::Deserialize)]
 struct GqlResponse<T> {
