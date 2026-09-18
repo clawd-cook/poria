@@ -60,8 +60,6 @@ jobs:
         include:
           - arch: aarch64
             target: aarch64-apple-darwin
-          - arch: x64
-            target: x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v5
         with:
@@ -242,11 +240,10 @@ jobs:
           | 平台 | 架构 | 文件 |
           |------|------|------|
           | macOS | Apple Silicon (M1/M2/M3/M4) | \`Poria-${VERSION}-aarch64.dmg\` |
-          | macOS | Intel | \`Poria-${VERSION}-x64.dmg\` |
 
           ### 安装
 
-          1. 下载对应架构的 \`.dmg\` 文件
+          1. 下载 \`.dmg\` 文件
           2. 双击打开，将 Poria 拖入 Applications 文件夹
           3. **首次打开前**，若系统提示已损坏，在终端执行：
              \`\`\`bash
