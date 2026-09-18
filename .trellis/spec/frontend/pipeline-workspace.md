@@ -38,6 +38,7 @@ Frontend (`src/lib/tauri.ts`): `syncRepo(id)`, `updateRepoDefaultBranch(id, defa
 | Deploy | Commit frontend worktree code only; strip leaked `PRD.md` / `PRD_REVIEW.md` / `TRD.md` / `BACKEND_TRD.md` from the worktree before `git add`. cwd remains the frontend git worktree. |
 | Repo tab | Default branch defaults to `master`, editable. Save branch then sync immediately (sync fail does not roll back the field). Manual sync uses the same primitive. Clone success also syncs. |
 | Sidebar 工作区 | Shows selected pipeline `workspacePath`; Finder via opener. Empty if no pipeline selected. |
+| Sidebar 技能 | `list_skills` / `get_skill` scan bundled `skills/*/SKILL.md` only. `id` is the directory name (`review-prd`); `name`/`description` come from YAML; `markdown` is the body without frontmatter. Init / Deploy are pipeline stages, not skills. Drawer portals to `document.body` and scrolls only on the Drawer body. |
 
 Worktree paths: `~/.poria/workspaces/<pipeline_id>/<repo_name>`. Hosted clones: `~/.poria/repos/<scope>/<name>` stay on `default_branch` and are not a dev directory.
 
@@ -61,7 +62,7 @@ Backend worktree must be **detached** so it does not lock the same branch as the
 
 - **Good**: Init completes → `~/.poria/workspaces/<id>/` has `CLAUDE.md`, six doc symlinks, `.claude/skills/{review-prd,gen-trd,gen-code,code-review}`, both worktrees. ReviewPrd cwd is the workspace root; `PRD_REVIEW.md` lands in projects via symlink. Sidebar 工作区 opens Finder.
 - **Base**: Existing `registered_repos` rows migrate to `default_branch=master`.
-- **Bad**: `STAGE_ORDER` still has Workspace after Design; `base_branch` from current checkout; backend in `pipeline.repos`; Agent cwd = frontend worktree or project dir only; dump old prompt templates into `--system-prompt`; commit `TRD.md` from the worktree; worktrees still under `~/.poria/worktrees`.
+- **Bad**: `STAGE_ORDER` still has Workspace after Design; `base_branch` from current checkout; backend in `pipeline.repos`; Agent cwd = frontend worktree or project dir only; dump old prompt templates into `--system-prompt`; commit `TRD.md` from the worktree; worktrees still under `~/.poria/worktrees`; `list_skills` enumerates Rust `Skill` trait (Init / Deploy).
 
 ## 6. Tests Required
 

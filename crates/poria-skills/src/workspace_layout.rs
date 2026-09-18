@@ -18,6 +18,77 @@ pub const ARTIFACT_SYMLINK_NAMES: &[&str] = &[
     ARTIFACT_CR,
 ];
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BundledSkillDoc {
+    pub body: String,
+    pub description: String,
+    pub name: String,
+}
+
+pub fn parse_skill_markdown(raw: &str) -> Result<BundledSkillDoc, String> {
+    let raw = raw.trim_start_matches('\u{feff}');
+    let Some(after_open) = raw.strip_prefix("---") else {
+        return Err("SKILL.md 缺少 YAML frontmatter".into());
+    };
+    let after_open = after_open
+        .strip_prefix('\n')
+        .or_else(|| after_open.strip_prefix("\r\n"))
+        .ok_or("SKILL.md frontmatter 格式无效")?;
+    let close = after_open
+        .find("\n---")
+        .ok_or("SKILL.md frontmatter 未结束")?;
+    let front = &after_open[..close];
+    let after_close = &after_open[close + 1..];
+    let body = after_close
+        .strip_prefix("---")
+        .unwrap_or(after_close)
+        .trim_start_matches(['\r', '\n'])
+        .to_string();
+    Ok(BundledSkillDoc {
+        body,
+        description: frontmatter_field(front, "description").unwrap_or_default(),
+        name: frontmatter_field(front, "name").ok_or("SKILL.md 缺少 name")?,
+    })
+}
+
+fn frontmatter_field(front: &str, key: &str) -> Option<String> {
+    let prefix = format!("{key}:");
+    for line in front.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix(&prefix) else {
+            continue;
+        };
+        let value = rest.trim().trim_matches('"').trim_matches('\'').trim();
+        if !value.is_empty() {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+pub fn read_bundled_skill_markdown(bundled_root: &Path, dir_name: &str) -> Result<String, String> {
+    if !BUNDLED_SKILL_DIRS.contains(&dir_name) {
+        return Err(format!("不是随包 Claude skill: {dir_name}"));
+    }
+    let path = bundled_root.join(dir_name).join("SKILL.md");
+    fs::read_to_string(&path).map_err(|e| format!("无法读取 {}: {e}", path.display()))
+}
+
+/// Bundled Claude skills only (`review-prd` / `gen-trd` / `gen-code` / `code-review`).
+/// The first tuple field is the directory id, not the YAML `name`.
+pub fn list_bundled_skill_docs(
+    bundled_root: &Path,
+) -> Result<Vec<(&'static str, BundledSkillDoc)>, String> {
+    BUNDLED_SKILL_DIRS
+        .iter()
+        .copied()
+        .map(|dir| {
+            let raw = read_bundled_skill_markdown(bundled_root, dir)?;
+            Ok((dir, parse_skill_markdown(&raw)?))
+        })
+        .collect()
+}
+
 pub fn bundled_skills_complete(dir: &Path) -> bool {
     BUNDLED_SKILL_DIRS
         .iter()
@@ -127,7 +198,7 @@ pub fn repo_bundled_skills_dir() -> PathBuf {
 mod tests {
     use super::*;
     use crate::claude_prompt::{
-        SKILL_CODE_REVIEW, SKILL_GEN_CODE, SKILL_GEN_TRD, SKILL_REVIEW_PRD,
+        BUNDLED_SKILL_DIRS, SKILL_CODE_REVIEW, SKILL_GEN_CODE, SKILL_GEN_TRD, SKILL_REVIEW_PRD,
     };
 
     fn temp_dir(suffix: &str) -> PathBuf {
@@ -212,6 +283,64 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("随包 skill 不完整"));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn read_bundled_skill_markdown_returns_skill_md() {
+        let bundled = repo_bundled_skills_dir();
+        let body = read_bundled_skill_markdown(&bundled, "review-prd").unwrap();
+        assert!(body.contains("name: review-prd"));
+        assert!(read_bundled_skill_markdown(&bundled, "init")
+            .unwrap_err()
+            .contains("不是随包"));
+        let parsed = parse_skill_markdown(&body).unwrap();
+        assert_eq!(parsed.name, "review-prd");
+        assert!(!parsed.description.is_empty());
+        assert!(parsed.body.starts_with('#'));
+        assert!(!parsed.body.starts_with("---"));
+        assert!(!parsed.body.contains("name: review-prd"));
+    }
+
+    #[test]
+    fn parse_skill_markdown_rejects_missing_frontmatter() {
+        let err = parse_skill_markdown("# just a heading\n").unwrap_err();
+        assert!(err.contains("frontmatter"));
+    }
+
+    #[test]
+    fn list_bundled_skill_docs_uses_directory_id_and_excludes_pipeline_stages() {
+        let bundled = repo_bundled_skills_dir();
+        let listed = list_bundled_skill_docs(&bundled).unwrap();
+        let ids: Vec<&str> = listed.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ids, BUNDLED_SKILL_DIRS);
+        assert!(!ids.iter().any(|id| *id == "init" || *id == "deploy"));
+        for (id, doc) in &listed {
+            assert!(
+                doc.body.starts_with('#'),
+                "{id} body should start with markdown, not YAML"
+            );
+            assert!(!doc.body.starts_with("---"));
+            assert!(!doc.description.is_empty());
+        }
+
+        let base = temp_dir("list-ids");
+        for name in BUNDLED_SKILL_DIRS {
+            let dir = base.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(
+                dir.join("SKILL.md"),
+                format!("---\nname: Display {name}\ndescription: demo\n---\n# Body\n"),
+            )
+            .unwrap();
+        }
+        let renamed = list_bundled_skill_docs(&base).unwrap();
+        let renamed_ids: Vec<&str> = renamed.iter().map(|(id, _)| *id).collect();
+        assert_eq!(renamed_ids, BUNDLED_SKILL_DIRS);
+        for (id, doc) in &renamed {
+            assert_eq!(doc.name, format!("Display {id}"));
+            assert_eq!(doc.body, "# Body\n");
+        }
         let _ = fs::remove_dir_all(&base);
     }
 }

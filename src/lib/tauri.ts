@@ -13,6 +13,7 @@ import type {
   PipelineDetail,
   PipelineSummary,
   RegisteredRepo,
+  SkillDetail,
   SkillInfo,
   SubmitPipelineInput,
 } from "./types";
@@ -72,6 +73,10 @@ export async function probeClaude(pathOverride?: string | null): Promise<ClaudeP
 
 export async function listSkills(): Promise<SkillInfo[]> {
   return invoke<SkillInfo[]>("list_skills");
+}
+
+export async function getSkill(skillId: string): Promise<SkillDetail> {
+  return invoke<SkillDetail>("get_skill", { skillId });
 }
 
 export async function listChannels(): Promise<ChannelInfo[]> {

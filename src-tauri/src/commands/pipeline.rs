@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
@@ -22,8 +22,8 @@ use poria_infrastructure::auth::{
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, SqlitePipelineStore};
 use poria_resources::WorktreeResource;
 use poria_skills::{
-    bundled_skills_complete, prepare_pipeline_workspace, CodeReviewSkill, DeploySkill,
-    GenCodeSkill, GenTrdSkill, InitSkill, ReviewPrdSkill,
+    prepare_pipeline_workspace, CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, InitSkill,
+    ReviewPrdSkill,
 };
 
 use crate::AppState;
@@ -844,7 +844,7 @@ async fn run_init_stage(
             return fail_init_stage(pipeline, stage_idx, app, store, err).await;
         }
     };
-    let bundled_skills = match bundled_skills_dir(app) {
+    let bundled_skills = match crate::commands::skills::bundled_skills_dir(app) {
         Ok(path) => path,
         Err(err) => {
             return fail_init_stage(pipeline, stage_idx, app, store, err).await;
@@ -1371,26 +1371,6 @@ fn resolve_pipeline_workspace(pipeline: &Pipeline) -> Result<PathBuf, String> {
         return Err(format!("工作区不存在: {}", workspace.display()));
     }
     Ok(workspace)
-}
-
-fn bundled_skills_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../skills");
-    if bundled_skills_complete(&dev) {
-        return Ok(dev.canonicalize().unwrap_or(dev));
-    }
-    let resource = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("无法解析资源目录: {e}"))?;
-    let bundled = resource.join("skills");
-    if bundled_skills_complete(&bundled) {
-        return Ok(bundled);
-    }
-    Err(format!(
-        "找不到随包 skill 目录（已试 {} 与 {}）",
-        dev.display(),
-        bundled.display()
-    ))
 }
 
 fn cleanup_pipeline_workspace(workspace_dir: &Path) -> Result<(), String> {
