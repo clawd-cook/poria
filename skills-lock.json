@@ -55,11 +55,23 @@
       "skillPath": ".agents/skills/technical-writing/SKILL.md",
       "computedHash": "99be8fec19ea801cc708abea5d3a1ffa1fecc76c52cff90c1dfc45e39271a092"
     },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "4080ff883b26b670a5a224fb332e89ecc15319535f4d14279947ad7812fec558"
+    },
     "vercel-react-best-practices": {
       "source": "vercel-labs/openreview",
       "sourceType": "github",
       "skillPath": ".agents/skills/vercel-react-best-practices/SKILL.md",
       "computedHash": "090ba7e6666985d200d366d0683590947c8ce365976c8e79dfb06c6bdc561fec"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "a6a44d5498f7e8f68289902f3dedfc6f38ae0cee1e96527c80724cf27f727c2a"
     }
   }
 }
