@@ -1,4 +1,4 @@
-import { Alert, App, Button, Checkbox, Empty, Flex, Input, Table, Typography } from "antd";
+import { Alert, App, Button, Checkbox, Empty, Flex, Input, Table, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 
@@ -7,9 +7,8 @@ import { listDemands, resolveDemandLink, startLogin } from "../lib/tauri";
 import type { DemandListItem, DemandPage } from "../lib/types";
 import { useStore } from "../state/store";
 import { DemandProjectDrawer } from "./DemandProjectDrawer";
+import { PageFrame } from "./PageFrame";
 import { StartPipelineWizard } from "./StartPipelineWizard";
-
-const { Title } = Typography;
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -85,6 +84,7 @@ function demandColumns(
 export function DemandListPage() {
   const { state } = useStore();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const loggedIn = state.auth.logged_in;
   const active = state.ui.view === "demands";
 
@@ -169,21 +169,23 @@ export function DemandListPage() {
 
   if (!loggedIn) {
     return (
-      <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
-        <Title level={4}>需求列表</Title>
-        <Empty description="请先登录后再查看与你相关的需求" style={{ marginTop: 64 }}>
+      <PageFrame title="需求">
+        <Empty description="请先登录后再查看与你相关的需求">
           <Button onClick={() => void startLogin()} type="primary">
             登录
           </Button>
         </Empty>
-      </div>
+      </PageFrame>
     );
   }
 
   return (
-    <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
-      <Title level={4}>需求列表</Title>
-      <Flex align="center" gap={12} style={{ marginBottom: 12, maxWidth: 720 }}>
+    <PageFrame title="需求">
+      <Flex
+        align="center"
+        gap={token.marginSM}
+        style={{ marginBottom: token.marginSM, maxWidth: 720 }}
+      >
         <Input.Search
           allowClear
           onChange={(event) => setKeywordInput(event.target.value)}
@@ -208,14 +210,14 @@ export function DemandListPage() {
         onChange={(event) => setLinkInput(event.target.value)}
         onSearch={(value) => void handleResolveLink(value)}
         placeholder="粘贴行云需求链接，例如 http://xingyun.jd.com/demands/view/CODE/-1?demandId=123"
-        style={{ marginBottom: 16, maxWidth: 720 }}
+        style={{ marginBottom: token.margin, maxWidth: 720 }}
         value={linkInput}
       />
 
       {error ? (
         <Alert
           action={
-            <Flex gap={8}>
+            <Flex gap={token.marginXS}>
               {isAuthError(error) ? (
                 <Button onClick={() => void startLogin()} size="small">
                   登录
@@ -232,7 +234,7 @@ export function DemandListPage() {
           }
           message={error}
           showIcon
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: token.margin }}
           type="error"
         />
       ) : null}
@@ -267,6 +269,6 @@ export function DemandListPage() {
       />
       <StartPipelineWizard demand={starting} onClose={() => setStarting(null)} />
       <DemandProjectDrawer demand={viewing} onClose={() => setViewing(null)} />
-    </div>
+    </PageFrame>
   );
 }

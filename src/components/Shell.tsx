@@ -78,7 +78,10 @@ export function Shell() {
   const currentView = state.ui.view;
 
   return (
-    <Layout hasSider style={{ height: "100vh", overflow: "hidden" }}>
+    <Layout
+      hasSider
+      style={{ background: token.colorBgLayout, height: "100vh", overflow: "hidden" }}
+    >
       <Sider
         theme="light"
         width={220}
@@ -95,14 +98,30 @@ export function Shell() {
             height: "100%",
           }}
         >
-          <div style={{ flex: "0 0 auto", padding: "16px 20px 8px" }}>
-            <Text strong style={{ fontSize: 16 }}>
+          <div
+            style={{
+              borderBottom: `1px solid ${token.colorBorderSecondary}`,
+              flex: "0 0 auto",
+              padding: `${token.paddingMD}px ${token.paddingLG}px`,
+            }}
+          >
+            <Text
+              style={{
+                color: token.colorText,
+                display: "block",
+                fontSize: token.fontSizeSM,
+                fontWeight: token.fontWeightStrong,
+                letterSpacing: "0.22em",
+                lineHeight: token.lineHeight,
+                textTransform: "uppercase",
+              }}
+            >
               Poria
             </Text>
           </div>
           <Menu
             defaultOpenKeys={["resources"]}
-            inlineIndent={16}
+            inlineIndent={token.padding}
             items={NAV_ITEMS}
             mode="inline"
             onClick={({ key }) => {
@@ -124,7 +143,15 @@ export function Shell() {
         </div>
       </Sider>
 
-      <Content style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
+      <Content
+        style={{
+          background: token.colorBgLayout,
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
         <PersistentTab active={currentView === "home"}>
           <HomeBoard />
         </PersistentTab>

@@ -33,7 +33,9 @@ function timeAgo(dateStr: string): string {
 }
 
 function stageLabel(stage: string | null): string | null {
-  if (!stage) return null;
+  if (!stage) {
+    return null;
+  }
   if (stage in STAGE_LABELS) {
     return STAGE_LABELS[stage as StageEnum];
   }
@@ -41,17 +43,17 @@ function stageLabel(stage: string | null): string | null {
 }
 
 export function HomeBoard() {
-  const { state, dispatch } = useStore();
+  const { dispatch, state } = useStore();
   const { token } = theme.useToken();
 
   if (state.selectedPipelineId) {
     return (
       <Flex vertical style={{ height: "100%" }}>
-        <div style={{ padding: "8px 16px 0" }}>
+        <div style={{ padding: `${token.paddingSM}px ${token.paddingMD}px 0` }}>
           <Button
-            type="text"
             icon={<ArrowLeftOutlined />}
             onClick={() => dispatch({ type: "pipelineSelected", id: null })}
+            type="text"
           >
             返回看板
           </Button>
@@ -69,24 +71,28 @@ export function HomeBoard() {
   }));
 
   return (
-    <Flex gap={12} style={{ height: "100%", overflowX: "auto", padding: 16 }}>
+    <Flex
+      gap={token.marginMD}
+      style={{ height: "100%", overflowX: "auto", padding: token.paddingLG }}
+    >
       {columns.map((column) => (
         <Flex
           key={column.key}
-          vertical
-          gap={8}
+          gap={token.marginSM}
           style={{
-            background: token.colorFillAlter,
-            borderRadius: token.borderRadiusLG,
+            background: token.colorBgContainer,
+            border: `1px solid ${token.colorBorderSecondary}`,
+            borderRadius: token.borderRadius,
             flex: "0 0 260px",
             minWidth: 260,
-            padding: 12,
+            padding: token.paddingMD,
           }}
+          vertical
         >
           <Text strong>
             {column.label} ({column.items.length})
           </Text>
-          <Flex vertical gap={8} style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          <Flex gap={token.marginSM} style={{ flex: 1, minHeight: 0, overflowY: "auto" }} vertical>
             {column.items.map((pipeline) => (
               <KanbanCard
                 key={pipeline.id}
@@ -101,20 +107,21 @@ export function HomeBoard() {
   );
 }
 
-function KanbanCard({ pipeline, onSelect }: { pipeline: PipelineSummary; onSelect: () => void }) {
+function KanbanCard({ onSelect, pipeline }: { onSelect: () => void; pipeline: PipelineSummary }) {
+  const { token } = theme.useToken();
   const stage = stageLabel(pipeline.current_stage);
 
   return (
-    <Card hoverable size="small" onClick={onSelect} styles={{ body: { padding: 12 } }}>
-      <Flex align="flex-start" justify="space-between" gap={8}>
+    <Card hoverable onClick={onSelect} size="small" styles={{ body: { padding: token.paddingMD } }}>
+      <Flex align="flex-start" gap={token.marginSM} justify="space-between">
         <Text ellipsis strong style={{ flex: 1 }}>
           {pipeline.demand_name}
         </Text>
         <StatusBadge status={pipeline.status} />
       </Flex>
-      <Flex align="center" gap={8} style={{ marginTop: 8 }}>
-        {stage ? <Tag style={{ fontSize: 11, margin: 0 }}>{stage}</Tag> : null}
-        <Text type="secondary" style={{ fontSize: 11 }}>
+      <Flex align="center" gap={token.marginSM} style={{ marginTop: token.marginSM }}>
+        {stage ? <Tag style={{ margin: 0 }}>{stage}</Tag> : null}
+        <Text type="secondary">
           {pipeline.demand_code} · {timeAgo(pipeline.updated_at)}
         </Text>
       </Flex>

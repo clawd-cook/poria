@@ -1,4 +1,4 @@
-/* Reset and base styles — Tailwind removed, antd handles everything */
+/* Reset — Ant Design tokens own color, type, and radius */
 html,
 body,
 #root {
@@ -7,4 +7,23 @@ body,
   height: 100%;
   overflow: hidden;
   color-scheme: light;
+}
+
+button,
+[role="button"],
+a,
+.ant-btn,
+.ant-menu-item {
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

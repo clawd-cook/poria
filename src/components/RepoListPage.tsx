@@ -1,13 +1,14 @@
 import { ReloadOutlined, SyncOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Flex, Input, Tag, Typography } from "antd";
+import { App, Button, Empty, Flex, Input, Tag, Typography, theme } from "antd";
 import { useEffect, useState } from "react";
 
 import { invokeErrorMessage } from "../lib/errors";
 import { registerRepo, retryClone, syncRepo, updateRepoDefaultBranch } from "../lib/tauri";
 import type { CloneStatus, RegisteredRepo, RepoSyncStatus } from "../lib/types";
 import { useStore } from "../state/store";
+import { PageFrame } from "./PageFrame";
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 const STATUS_CONFIG: Record<CloneStatus, { color: string; label: string }> = {
   cloning: { color: "processing", label: "进行中" },
@@ -51,6 +52,7 @@ function formatSyncTime(value: string | null): string {
 export function RepoListPage() {
   const { state } = useStore();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [gitUrl, setGitUrl] = useState("");
   const [registering, setRegistering] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
@@ -127,9 +129,8 @@ export function RepoListPage() {
   }
 
   return (
-    <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
-      <Title level={4}>仓库列表</Title>
-      <Flex gap={8} style={{ marginBottom: 24, maxWidth: 720 }}>
+    <PageFrame description="登记 git URL 后会克隆到 ~/.poria/repos/scope/name" title="仓库">
+      <Flex gap={token.marginXS} style={{ marginBottom: token.marginLG, maxWidth: 720 }}>
         <Input
           disabled={registering}
           onChange={(event) => setGitUrl(event.target.value)}
@@ -152,15 +153,15 @@ export function RepoListPage() {
       </Flex>
 
       {groups.length === 0 ? (
-        <Empty description="登记 git URL 后会克隆到 ~/.poria/repos/scope/name" />
+        <Empty description="暂无已登记仓库" />
       ) : (
-        <Flex gap={16} vertical>
+        <Flex gap={token.margin} vertical>
           {groups.map((group) => (
             <div key={group.scope}>
-              <Text strong style={{ display: "block", marginBottom: 8 }}>
+              <Text strong style={{ display: "block", marginBottom: token.marginXS }}>
                 {group.scope}
               </Text>
-              <Flex gap={8} vertical>
+              <Flex gap={token.marginXS} vertical>
                 {group.repos.map((repo) => (
                   <RepoRow
                     key={repo.id}
@@ -184,7 +185,7 @@ export function RepoListPage() {
           ))}
         </Flex>
       )}
-    </div>
+    </PageFrame>
   );
 }
 
@@ -211,22 +212,24 @@ function RepoRow({
   useEffect(() => {
     setBranch(repo.default_branch || "master");
   }, [repo.default_branch]);
+  const { token } = theme.useToken();
   const branchDirty = branch.trim() !== (repo.default_branch || "master");
   const ready = repo.clone_status === "ready";
 
   return (
     <Flex
       align="flex-start"
-      gap={12}
+      gap={token.marginSM}
       justify="space-between"
       style={{
-        border: "1px solid var(--ant-color-border, #303030)",
-        borderRadius: 8,
-        padding: 12,
+        background: token.colorBgContainer,
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: token.borderRadius,
+        padding: token.paddingMD,
       }}
     >
-      <Flex gap={4} style={{ minWidth: 0 }} vertical>
-        <Flex align="center" gap={8} wrap>
+      <Flex gap={token.marginXXS} style={{ minWidth: 0 }} vertical>
+        <Flex align="center" gap={token.marginXS} wrap>
           <Text ellipsis strong>
             {repo.name}
           </Text>
@@ -244,7 +247,7 @@ function RepoRow({
           {repo.local_path}
         </Text>
         <Text type="secondary">最近同步：{formatSyncTime(repo.last_synced_at)}</Text>
-        <Flex align="center" gap={8}>
+        <Flex align="center" gap={token.marginXS}>
           <Text style={{ flex: "0 0 auto" }}>主分支</Text>
           <Input
             aria-label="主分支"
@@ -277,7 +280,7 @@ function RepoRow({
           <Text type="danger">{repo.sync_error}</Text>
         ) : null}
       </Flex>
-      <Flex gap={8}>
+      <Flex gap={token.marginXS}>
         {ready ? (
           <Button icon={<SyncOutlined />} loading={syncing} onClick={onSync} size="small">
             同步

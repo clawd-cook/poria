@@ -1,11 +1,12 @@
-import { Alert, App, Button, Flex, Form, Input, InputNumber, Spin, Typography } from "antd";
+import { Alert, App, Button, Flex, Form, Input, InputNumber, Spin, Typography, theme } from "antd";
 import { useEffect, useState } from "react";
 
 import { probeClaude, updateConfig } from "../lib/tauri";
 import type { AppConfig, ClaudeProbeResult } from "../lib/types";
 import { useStore } from "../state/store";
+import { PageFrame } from "./PageFrame";
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 function emptyToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
@@ -15,6 +16,7 @@ function emptyToNull(value: string | null | undefined): string | null {
 export function SettingsPage() {
   const { dispatch, state } = useStore();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [saving, setSaving] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probe, setProbe] = useState<ClaudeProbeResult | null>(null);
@@ -62,11 +64,13 @@ export function SettingsPage() {
 
   if (!config) {
     return (
-      <div
-        style={{ alignItems: "center", display: "flex", height: "100%", justifyContent: "center" }}
-      >
-        <Spin tip="加载设置..." />
-      </div>
+      <PageFrame title="设置">
+        <div
+          style={{ alignItems: "center", display: "flex", height: 240, justifyContent: "center" }}
+        >
+          <Spin tip="加载设置..." />
+        </div>
+      </PageFrame>
     );
   }
 
@@ -94,8 +98,7 @@ export function SettingsPage() {
     probe?.source === "config" ? "手动配置" : probe?.source === "which" ? "自动 which" : null;
 
   return (
-    <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
-      <Title level={4}>设置</Title>
+    <PageFrame title="设置">
       <Form
         form={form}
         initialValues={config}
@@ -131,7 +134,7 @@ export function SettingsPage() {
           <Input allowClear placeholder={probe?.resolvedPath ?? "/opt/homebrew/bin/claude"} />
         </Form.Item>
         <Form.Item>
-          <Flex gap={8} wrap="wrap">
+          <Flex gap={token.marginXS} wrap="wrap">
             <Button htmlType="submit" loading={saving} type="primary">
               保存
             </Button>
@@ -151,7 +154,7 @@ export function SettingsPage() {
       ) : probe ? (
         <Alert
           description={
-            <Flex vertical gap={4}>
+            <Flex vertical gap={token.marginXXS}>
               {probe.resolvedPath ? <Text>路径：{probe.resolvedPath}</Text> : null}
               {sourceLabel ? <Text type="secondary">来源：{sourceLabel}</Text> : null}
               {probe.version ? <Text>版本：{probe.version}</Text> : null}
@@ -164,6 +167,6 @@ export function SettingsPage() {
           type={probe.ok ? "success" : "error"}
         />
       ) : null}
-    </div>
+    </PageFrame>
   );
 }

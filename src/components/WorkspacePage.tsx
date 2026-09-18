@@ -1,13 +1,14 @@
 import { FolderOpenOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Flex, Typography } from "antd";
+import { App, Button, Empty, Typography } from "antd";
 import { useState } from "react";
 
 import { usePipeline } from "../hooks/usePipeline";
 import { invokeErrorMessage } from "../lib/errors";
 import { openWorkspace } from "../lib/tauri";
 import { useStore } from "../state/store";
+import { PageFrame } from "./PageFrame";
 
-const { Paragraph, Text, Title } = Typography;
+const { Text } = Typography;
 
 export function WorkspacePage() {
   const { state } = useStore();
@@ -33,48 +34,44 @@ export function WorkspacePage() {
 
   if (!selectedId) {
     return (
-      <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
-        <Title level={4}>工作区</Title>
-        <Empty description="请先从看板打开一条流水线" style={{ marginTop: 64 }} />
-      </div>
+      <PageFrame title="工作区">
+        <Empty description="请先从看板打开一条流水线" />
+      </PageFrame>
     );
   }
 
   if (!detail) {
     return (
-      <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
-        <Title level={4}>工作区</Title>
-        <Empty description="正在读取工作区路径" style={{ marginTop: 64 }} />
-      </div>
+      <PageFrame title="工作区">
+        <Empty description="正在读取工作区路径" />
+      </PageFrame>
     );
   }
 
   return (
-    <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
-      <Title level={4}>工作区</Title>
-      <Paragraph type="secondary">
-        Claude 阶段的 cwd 是流水线工作区根。文档是指向 projects 的软链；前后端 git worktree
-        在该目录下。
-      </Paragraph>
+    <PageFrame
+      description="Claude 阶段的 cwd 是流水线工作区根。文档是指向 projects 的软链；前后端 git worktree 在该目录下。"
+      extra={
+        workspacePath ? (
+          <Button
+            icon={<FolderOpenOutlined />}
+            loading={opening}
+            onClick={() => void handleOpen()}
+            type="primary"
+          >
+            在 Finder 中打开
+          </Button>
+        ) : null
+      }
+      title="工作区"
+    >
       {workspacePath ? (
-        <Flex vertical gap={12} style={{ marginTop: 16 }}>
-          <Text code copyable>
-            {workspacePath}
-          </Text>
-          <div>
-            <Button
-              icon={<FolderOpenOutlined />}
-              loading={opening}
-              onClick={() => void handleOpen()}
-              type="primary"
-            >
-              在 Finder 中打开
-            </Button>
-          </div>
-        </Flex>
+        <Text code copyable>
+          {workspacePath}
+        </Text>
       ) : (
-        <Empty description="请先完成初始化，生成工作区" style={{ marginTop: 64 }} />
+        <Empty description="请先完成初始化，生成工作区" />
       )}
-    </div>
+    </PageFrame>
   );
 }

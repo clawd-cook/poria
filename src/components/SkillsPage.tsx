@@ -1,15 +1,17 @@
 import { ApiOutlined } from "@ant-design/icons";
-import { App, Card, Col, Drawer, Empty, Flex, Row, Spin, Typography } from "antd";
+import { App, Card, Col, Drawer, Empty, Flex, Row, Spin, Typography, theme } from "antd";
 import { useEffect, useState } from "react";
 
 import { invokeErrorMessage } from "../lib/errors";
 import { getSkill, listSkills } from "../lib/tauri";
 import type { SkillDetail, SkillInfo } from "../lib/types";
 import { useStore } from "../state/store";
+import { PageFrame } from "./PageFrame";
 
-const { Paragraph, Text, Title } = Typography;
+const { Paragraph, Text } = Typography;
 
 function SkillCard({ onOpen, skill }: { onOpen: (skill: SkillInfo) => void; skill: SkillInfo }) {
+  const { token } = theme.useToken();
   return (
     <Card hoverable onClick={() => onOpen(skill)} size="small">
       <div
@@ -17,26 +19,25 @@ function SkillCard({ onOpen, skill }: { onOpen: (skill: SkillInfo) => void; skil
           alignItems: "flex-start",
           display: "flex",
           justifyContent: "space-between",
-          marginBottom: 8,
+          marginBottom: token.marginSM,
         }}
       >
         <Text strong>
-          <ApiOutlined style={{ color: "#1677ff", marginRight: 6 }} />
+          <ApiOutlined style={{ color: token.colorPrimary, marginRight: token.marginXS }} />
           {skill.name}
         </Text>
       </div>
-      <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 4 }}>
+      <Paragraph type="secondary" style={{ marginBottom: token.marginXXS }}>
         {skill.description || "暂无描述"}
       </Paragraph>
-      <Text type="secondary" style={{ fontSize: 12 }}>
-        ID: {skill.id}
-      </Text>
+      <Text type="secondary">ID: {skill.id}</Text>
     </Card>
   );
 }
 
 function SkillDetailDrawer({ onClose, skill }: { onClose: () => void; skill: SkillInfo | null }) {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const open = skill !== null;
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -103,14 +104,12 @@ function SkillDetailDrawer({ onClose, skill }: { onClose: () => void; skill: Ski
       title={skill?.name ?? "技能"}
     >
       {loading ? (
-        <div style={{ padding: 48, textAlign: "center" }}>
+        <div style={{ padding: token.paddingXL, textAlign: "center" }}>
           <Spin />
         </div>
       ) : detail ? (
-        <Flex vertical gap={12}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {detail.id}
-          </Text>
+        <Flex gap={token.marginSM} vertical>
+          <Text type="secondary">{detail.id}</Text>
           {detail.description ? (
             <Paragraph type="secondary" style={{ marginBottom: 0 }}>
               {detail.description}
@@ -159,14 +158,14 @@ export function SkillsPage() {
   }, [dispatch, message]);
 
   return (
-    <div style={{ height: "100%", padding: 24 }}>
-      <Title level={4}>技能管理</Title>
-      <Text type="secondary">随包 {state.skills.length} 个 Claude skill，点击卡片查看详情</Text>
-
+    <PageFrame
+      description={`随包 ${state.skills.length} 个 Claude skill，点击卡片查看详情`}
+      title="技能"
+    >
       {state.skills.length === 0 ? (
-        <Empty description="暂无随包 Claude skill" style={{ marginTop: 64 }} />
+        <Empty description="暂无随包 Claude skill" />
       ) : (
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Row gutter={[16, 16]}>
           {state.skills.map((skill) => (
             <Col key={skill.id} md={12} xl={8} xs={24}>
               <SkillCard onOpen={setViewing} skill={skill} />
@@ -176,6 +175,6 @@ export function SkillsPage() {
       )}
 
       <SkillDetailDrawer onClose={() => setViewing(null)} skill={viewing} />
-    </div>
+    </PageFrame>
   );
 }
