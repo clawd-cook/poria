@@ -127,7 +127,11 @@ export function StageProgress({
             {stage.status === "pending" ? (
               <Button
                 icon={<ForwardOutlined />}
-                onClick={() => void skipStage(pid, stage.name)}
+                onClick={() => {
+                  void skipStage(pid, stage.name).catch((err) => {
+                    message.error(invokeErrorMessage(err, "跳过阶段失败"));
+                  });
+                }}
                 size="small"
               >
                 跳过

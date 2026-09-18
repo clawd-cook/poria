@@ -1,6 +1,8 @@
 use poria_channels::xingyun::{
-    list_demands as query_xingyun_demands, preview_demand_prd as query_preview_demand_prd,
-    DemandListQuery, DemandPage, DemandPrdPreview,
+    format_demand_status, get_demand_by_id, is_visible_demand_status,
+    list_demands as query_xingyun_demands, parse_xingyun_demand_url,
+    preview_demand_prd as query_preview_demand_prd, DemandListItem, DemandListQuery, DemandPage,
+    DemandPrdPreview,
 };
 use poria_infrastructure::auth;
 
@@ -60,4 +62,59 @@ pub async fn preview_demand_prd(demand_id: i64) -> Result<DemandPrdPreview, Stri
     query_preview_demand_prd(&credentials, demand_id)
         .await
         .map_err(map_list_demands_error)
+}
+
+fn reject_closed_demand(status: Option<i32>) -> Result<(), String> {
+    if is_visible_demand_status(status) {
+        return Ok(());
+    }
+    let label = format_demand_status(status);
+    if label.is_empty() {
+        return Err("需求无效或已关闭，无法启动流水线".into());
+    }
+    Err(format!("需求已关闭或不可启动（{label}）"))
+}
+
+/// Parse a Xingyun demand URL, fetch the card, and reject closed/unstartable demands.
+#[tauri::command]
+pub async fn resolve_demand_link(url: String) -> Result<DemandListItem, String> {
+    let credentials = require_jacp_credentials()?;
+    let parsed = parse_xingyun_demand_url(&url)?;
+    let detail = get_demand_by_id(&credentials, parsed.demand_id)
+        .await
+        .map_err(map_list_demands_error)?;
+    reject_closed_demand(detail.status)?;
+    Ok(DemandListItem {
+        demand_code: if detail.demand_code.trim().is_empty() {
+            parsed.demand_code.unwrap_or_default()
+        } else {
+            detail.demand_code
+        },
+        id: detail.id,
+        name: detail.name,
+        receiver_erp: detail.receiver.as_ref().and_then(|user| user.erp.clone()),
+        receiver_name: detail.receiver.as_ref().and_then(|user| user.name.clone()),
+        status: detail.status,
+        status_label: format_demand_status(detail.status),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reject_closed_demand;
+
+    #[test]
+    fn visible_demand_can_start() {
+        reject_closed_demand(Some(3)).unwrap();
+        reject_closed_demand(Some(13)).unwrap();
+    }
+
+    #[test]
+    fn completed_or_cancelled_demand_cannot_start() {
+        assert!(reject_closed_demand(Some(20)).unwrap_err().contains("完成"));
+        assert!(reject_closed_demand(Some(21))
+            .unwrap_err()
+            .contains("已取消"));
+        assert!(reject_closed_demand(None).unwrap_err().contains("关闭"));
+    }
 }

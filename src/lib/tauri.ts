@@ -4,6 +4,7 @@ import type {
   AppConfig,
   AuthStatus,
   ChannelInfo,
+  DemandListItem,
   DemandPage,
   DemandPrdPreview,
   DemandProject,
@@ -108,6 +109,10 @@ export async function listDemands(input: {
 
 export async function previewDemandPrd(demandId: number): Promise<DemandPrdPreview> {
   return invoke<DemandPrdPreview>("preview_demand_prd", { demandId });
+}
+
+export async function resolveDemandLink(url: string): Promise<DemandListItem> {
+  return invoke<DemandListItem>("resolve_demand_link", { url });
 }
 
 export async function listDemandProject(input: {

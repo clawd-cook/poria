@@ -1,9 +1,9 @@
-import { Alert, Button, Checkbox, Empty, Flex, Input, Table, Typography } from "antd";
+import { Alert, App, Button, Checkbox, Empty, Flex, Input, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 
 import { invokeErrorMessage } from "../lib/errors";
-import { listDemands, startLogin } from "../lib/tauri";
+import { listDemands, resolveDemandLink, startLogin } from "../lib/tauri";
 import type { DemandListItem, DemandPage } from "../lib/types";
 import { useStore } from "../state/store";
 import { DemandProjectDrawer } from "./DemandProjectDrawer";
@@ -84,6 +84,7 @@ function demandColumns(
 
 export function DemandListPage() {
   const { state } = useStore();
+  const { message } = App.useApp();
   const loggedIn = state.auth.logged_in;
   const active = state.ui.view === "demands";
 
@@ -98,6 +99,8 @@ export function DemandListPage() {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<DemandListItem | null>(null);
   const [viewing, setViewing] = useState<DemandListItem | null>(null);
+  const [linkInput, setLinkInput] = useState("");
+  const [linkLoading, setLinkLoading] = useState(false);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -147,6 +150,23 @@ export function DemandListPage() {
     setCurrent(1);
   }
 
+  async function handleResolveLink(value: string) {
+    const url = value.trim();
+    if (!url) {
+      return;
+    }
+    setLinkLoading(true);
+    try {
+      const demand = await resolveDemandLink(url);
+      setStarting(demand);
+      setLinkInput("");
+    } catch (err) {
+      message.error(invokeErrorMessage(err, "无法从链接打开需求"));
+    } finally {
+      setLinkLoading(false);
+    }
+  }
+
   if (!loggedIn) {
     return (
       <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
@@ -163,7 +183,7 @@ export function DemandListPage() {
   return (
     <div style={{ height: "100%", overflow: "auto", padding: 24 }}>
       <Title level={4}>需求列表</Title>
-      <Flex align="center" gap={12} style={{ marginBottom: 16, maxWidth: 640 }}>
+      <Flex align="center" gap={12} style={{ marginBottom: 12, maxWidth: 720 }}>
         <Input.Search
           allowClear
           onChange={(event) => setKeywordInput(event.target.value)}
@@ -181,6 +201,16 @@ export function DemandListPage() {
           由我受理
         </Checkbox>
       </Flex>
+      <Input.Search
+        allowClear
+        enterButton="从链接开始"
+        loading={linkLoading}
+        onChange={(event) => setLinkInput(event.target.value)}
+        onSearch={(value) => void handleResolveLink(value)}
+        placeholder="粘贴行云需求链接，例如 http://xingyun.jd.com/demands/view/CODE/-1?demandId=123"
+        style={{ marginBottom: 16, maxWidth: 720 }}
+        value={linkInput}
+      />
 
       {error ? (
         <Alert

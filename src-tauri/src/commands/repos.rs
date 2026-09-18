@@ -8,15 +8,13 @@ use poria_infrastructure::auth::{
 };
 use poria_infrastructure::store::{CloneStatus, RegisteredRepo, RegisteredRepoStore};
 use poria_resources::{git_clone, git_fetch, git_list_branches};
-use rand::Rng;
 use tauri::Emitter;
 use tauri::State;
 
 use crate::AppState;
 
 fn create_repo_id() -> String {
-    let bytes: [u8; 8] = rand::thread_rng().gen();
-    format!("repo-{}", hex::encode(bytes))
+    format!("repo-{}", hex::encode(rand::random::<[u8; 8]>()))
 }
 
 fn prepare_clone_dest(path: &Path) -> Result<(), String> {

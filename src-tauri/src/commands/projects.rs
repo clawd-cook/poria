@@ -38,7 +38,10 @@ fn is_safe_markdown_name(name: &str) -> bool {
         && !trimmed.contains('\\')
 }
 
-fn resolve_project_dir(demand_code: &str, demand_id: Option<i64>) -> Result<std::path::PathBuf, String> {
+fn resolve_project_dir(
+    demand_code: &str,
+    demand_id: Option<i64>,
+) -> Result<std::path::PathBuf, String> {
     let folder = demand_project_folder_name(demand_code, demand_id.unwrap_or(0));
     get_demand_project_dir(None, &folder)
 }

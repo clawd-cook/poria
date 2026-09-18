@@ -174,7 +174,7 @@ export function StartPipelineWizard({
       dispatch({ pipelines, type: "hydrate" });
       dispatch({ type: "viewChanged", view: "home" });
       dispatch({ id, type: "pipelineSelected" });
-      message.success("已创建流水线");
+      message.success("已创建流水线并开始自动执行");
       onClose();
     } catch (error) {
       message.error(invokeErrorMessage(error, "创建流水线失败"));
@@ -224,7 +224,7 @@ export function StartPipelineWizard({
                 onClick={() => void handleSubmit()}
                 type="primary"
               >
-                创建流水线
+                创建并自动执行
               </Button>
             )}
           </Flex>
@@ -236,7 +236,12 @@ export function StartPipelineWizard({
       width={640}
     >
       <Steps current={step} items={STEP_ITEMS} size="small" style={{ marginBottom: 24 }} />
-
+      <Alert
+        message="提交后将按 Init → Deploy 自动连跑。失败或阻塞会停住，不会跳过门禁。"
+        showIcon
+        style={{ marginBottom: 16 }}
+        type="info"
+      />
       {readyRepos.length < 2 ? (
         <Alert
           action={
