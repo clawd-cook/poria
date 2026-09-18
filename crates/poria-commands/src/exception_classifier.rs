@@ -15,11 +15,26 @@ pub fn classify(error_message: &str) -> IssueClass {
     if msg.contains("test fail") || lower.contains("vitest") || lower.contains("jest") {
         return IssueClass::TestFailure;
     }
-    if lower.contains("timeout") || msg.contains("AGENT_TIMEOUT") {
+    if lower.contains("timeout")
+        || msg.contains("AGENT_TIMEOUT")
+        || lower.contains("timed out")
+        || lower.contains("agent dispatch timed out")
+    {
         return IssueClass::AgentTimeout;
     }
-    if lower.contains("rate limit") || msg.contains("429") || lower.contains("overloaded") {
+    if lower.contains("rate limit")
+        || msg.contains("429")
+        || lower.contains("overloaded")
+        || lower.contains("llm_rate_limit")
+    {
         return IssueClass::LlmRateLimit;
+    }
+    if error_message.contains("链接无效")
+        || lower.contains("invalid link")
+        || lower.contains("invalid url")
+        || error_message.contains("无效链接")
+    {
+        return IssueClass::PrdInvalid;
     }
     if is_requirement_ambiguous(msg) {
         return IssueClass::RequirementAmbiguous;
@@ -35,7 +50,11 @@ pub fn classify(error_message: &str) -> IssueClass {
     if lower.contains("merge conflict") || msg.contains("CONFLICT") {
         return IssueClass::MergeConflict;
     }
-    if lower.contains("cr score") || msg.contains("LOW_CR_SCORE") {
+    if lower.contains("cr score")
+        || lower.contains("cr_score")
+        || msg.contains("LOW_CR_SCORE")
+        || error_message.contains("CR 评分")
+    {
         return IssueClass::LowCrScore;
     }
     if lower.contains("diff too large") || msg.contains("DIFF_TOO_LARGE") {
@@ -287,6 +306,15 @@ mod tests {
     #[test]
     fn test_classify_unknown() {
         assert_eq!(classify("some random error"), IssueClass::Unknown);
+        assert_eq!(classify("链接无效"), IssueClass::PrdInvalid);
+        assert_eq!(
+            classify("Agent dispatch timed out after 900000ms"),
+            IssueClass::AgentTimeout
+        );
+        assert_eq!(
+            classify("cr_score: CR 评分: 未通过 (actual=\"C\", threshold=\"B+\")"),
+            IssueClass::LowCrScore
+        );
     }
 
     #[test]

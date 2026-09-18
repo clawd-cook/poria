@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use poria_core::types::{
     IssueClass, Pipeline, PipelineStatus, Stage, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS,
     ISSUE_POLICIES, OUT_OF_SCOPE_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
@@ -98,6 +100,36 @@ fn quality_gate_issue_class(message: &str) -> &'static str {
     }
 }
 
+/// Parse ISSUE_POLICIES `retry_delay` values like `5m`, `30s`, `1h`.
+pub fn parse_retry_delay(spec: &str) -> Duration {
+    let spec = spec.trim().to_ascii_lowercase();
+    if let Some(num) = spec.strip_suffix('h') {
+        if let Ok(n) = num.parse::<u64>() {
+            return Duration::from_secs(n.saturating_mul(3600));
+        }
+    }
+    if let Some(num) = spec.strip_suffix('m') {
+        if let Ok(n) = num.parse::<u64>() {
+            return Duration::from_secs(n.saturating_mul(60));
+        }
+    }
+    if let Some(num) = spec.strip_suffix('s') {
+        if let Ok(n) = num.parse::<u64>() {
+            return Duration::from_secs(n);
+        }
+    }
+    Duration::ZERO
+}
+
+pub fn retry_delay_for_message(message: &str) -> Duration {
+    let class = exception_classifier::classify(message);
+    ISSUE_POLICIES
+        .get(&class)
+        .and_then(|policy| policy.retry_delay.as_deref())
+        .map(parse_retry_delay)
+        .unwrap_or_default()
+}
+
 /// Inspects an error, applies the issue-policy table, mutates stage status
 /// in-place, writes the recommended pipeline status to `pipeline_status_out`,
 /// and returns the recommended action.
@@ -122,7 +154,7 @@ pub async fn handle_stage_error(
         stage.status = StageStatus::Failed;
         stage.retry_count += 1;
         stage.issue = Some(StageIssue {
-            class: format!("{:?}", issue_class),
+            class: issue_class.as_str().to_string(),
             message: error_message.to_string(),
             retryable: true,
         });
@@ -136,13 +168,13 @@ pub async fn handle_stage_error(
     if !policy.notify_roles.is_empty() {
         stage.status = StageStatus::Blocked;
         stage.issue = Some(StageIssue {
-            class: format!("{:?}", issue_class),
+            class: issue_class.as_str().to_string(),
             message: error_message.to_string(),
             retryable: false,
         });
         *pipeline_status = PipelineStatus::Blocked;
         if let (Some(hl), Some(pl)) = (human_loop, pipeline_for_notify) {
-            let _ = hl.notify(pl, stage, &format!("{:?}", issue_class)).await;
+            let _ = hl.notify(pl, stage, issue_class.as_str()).await;
         }
         return HandleErrorResult {
             issue_class,
@@ -153,7 +185,7 @@ pub async fn handle_stage_error(
     // Terminal failure
     stage.status = StageStatus::Failed;
     stage.issue = Some(StageIssue {
-        class: format!("{:?}", issue_class),
+        class: issue_class.as_str().to_string(),
         message: error_message.to_string(),
         retryable: false,
     });
@@ -222,6 +254,7 @@ mod tests {
         assert_eq!(stage.status, StageStatus::Failed);
         assert_eq!(stage.retry_count, 1);
         assert!(stage.issue.as_ref().unwrap().retryable);
+        assert_eq!(stage.issue.as_ref().unwrap().class, "compilation_error");
     }
 
     #[tokio::test]
@@ -365,5 +398,15 @@ mod tests {
         let outcome = stage_error_outcome("security_scan missing: no scanner output", "cr_failed");
         assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
         assert_eq!(outcome.issue_class, SECURITY_VIOLATION_ISSUE_CLASS);
+    }
+
+    #[test]
+    fn parse_retry_delay_minutes() {
+        assert_eq!(parse_retry_delay("5m"), Duration::from_secs(300));
+        assert_eq!(parse_retry_delay("30s"), Duration::from_secs(30));
+        assert_eq!(
+            retry_delay_for_message("rate limit exceeded"),
+            Duration::from_secs(300)
+        );
     }
 }
