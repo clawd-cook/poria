@@ -77,7 +77,7 @@ fn credentials_from_ctx(
         .map(str::trim)
         .unwrap_or_default();
     if cookie.is_empty() {
-        return Err("请先登录".into());
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
     }
     Ok(JacpCredentials {
         cookie: cookie.to_string(),

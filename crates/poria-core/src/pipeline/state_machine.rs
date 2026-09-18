@@ -11,7 +11,11 @@ pub struct InvalidTransitionError {
 const PIPELINE_TRANSITIONS: &[(PipelineStatus, &[PipelineStatus])] = &[
     (
         PipelineStatus::Created,
-        &[PipelineStatus::Running, PipelineStatus::Cancelled],
+        &[
+            PipelineStatus::Running,
+            PipelineStatus::Blocked,
+            PipelineStatus::Cancelled,
+        ],
     ),
     (
         PipelineStatus::Running,
@@ -42,7 +46,11 @@ const PIPELINE_TRANSITIONS: &[(PipelineStatus, &[PipelineStatus])] = &[
 const STAGE_TRANSITIONS: &[(StageStatus, &[StageStatus])] = &[
     (
         StageStatus::Pending,
-        &[StageStatus::Running, StageStatus::Skipped],
+        &[
+            StageStatus::Running,
+            StageStatus::Skipped,
+            StageStatus::Blocked,
+        ],
     ),
     (
         StageStatus::Running,
@@ -186,6 +194,22 @@ mod tests {
         assert!(can_stage_transition(
             StageStatus::Pending,
             StageStatus::Skipped
+        ));
+    }
+
+    #[test]
+    fn test_pipeline_created_to_blocked() {
+        assert!(can_pipeline_transition(
+            PipelineStatus::Created,
+            PipelineStatus::Blocked
+        ));
+    }
+
+    #[test]
+    fn test_stage_pending_to_blocked() {
+        assert!(can_stage_transition(
+            StageStatus::Pending,
+            StageStatus::Blocked
         ));
     }
 

@@ -270,6 +270,39 @@ Auth: `~/.poria/auth.json` Cookie + `x-team-id: 00046419`. Files: `~/.poria/proj
 - Unit: `cargo test -p poria-channels -- joyspace`; `cargo test -p poria-infrastructure -- demand_project`; `cargo test -p poria-core -- feature_context`.
 - Manual: pipeline Init 执行 on R2026082156824, then 看板 「文档」 shows exported markdown.
 
+## Scenario: SSO cookie expires mid-pipeline
+
+### 1. Scope / Trigger
+
+Use when changing Xingyun / JoySpace / Coding 401 handling, `ensure_sso_credentials`, `HumanLoopCard`, or login-after-block resume. Verify in `poria-desktop`, not Vite `:1420`.
+
+### 2. Signatures
+
+401 / `请先登录` / `登录已过期` classify as `IssueClass::AuthExpired`. Desktop `fail_or_block_stage` sets pipeline + stage `blocked` with `issue.class = auth_expired` (does not cancel or delete worktrees). Init/Deploy probe Xingyun (`probe_sso`) before mutating git remotes. Silent refresh only re-reads `~/.poria/auth.json` when the cookie bytes changed; JD SSO is not minted locally.
+
+```typescript
+invoke("start_login");
+listen("auth:status-changed", ...); // cookie_valid: false on block; true after callback
+invoke("human_loop_respond", { pipelineId, action: "resume" });
+```
+
+After SSO callback, `resume_auth_blocked_after_login` enqueues every `blocked` pipeline whose stage issue is auth-expired.
+
+### 3. Contracts
+
+| Event | Pipeline | Stage | UI |
+| --- | --- | --- | --- |
+| 401 during Init/Deploy (or missing cookie) | `blocked` | `blocked` | HumanLoopCard 「重新登录」; sidebar cookie warning |
+| Login succeeds | `running` (resume current stage) | `running` | card dismissed on `pipeline:updated` |
+| User cancels | `cancelled` | unchanged / skipped | card dismissed |
+
+Do **not** `Failed` an auth miss after `git push` / EasyCI bind; resume retries Deploy (push is idempotent; bind/MR are find-or-create).
+
+### 4. Tests Required
+
+- Unit: `cargo test -p poria-commands -- classify`; `cargo test -p poria-commands -- auth_expired`; `cargo test -p poria-commands -- stage_error_outcome`; `cargo test -p poria-infrastructure -- ensure_valid`; `cargo test -p poria-core -- pending_to_blocked`.
+- Manual: start a pipeline, expire/remove cookie, confirm Deploy/Init hangs as 阻塞 not 已失败; log in; stage continues.
+
 ## Common Mistake: Vite tab vs desktop window
 
 **Symptom**: 1420 shows the UI but 登记/登录/需求列表 fail or the store listener throws `transformCallback`.

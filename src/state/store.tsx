@@ -74,6 +74,11 @@ function reducer(state: AppState, action: Action): AppState {
     case "pipelineUpdated":
       return {
         ...state,
+        humanRequest:
+          state.humanRequest?.pipelineId === action.id &&
+          (action.status === "running" || action.status === "cancelled")
+            ? null
+            : state.humanRequest,
         pipelines: state.pipelines.map((p) =>
           p.id === action.id
             ? {

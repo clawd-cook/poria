@@ -16,6 +16,7 @@ import {
 } from "antd";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { isAuthExpiredMessage } from "../lib/auth";
 import { invokeErrorMessage } from "../lib/errors";
 import { demandTaskKey } from "../lib/taskKey";
 import { listDemands, resolveDemandLink, startLogin } from "../lib/tauri";
@@ -54,17 +55,6 @@ type BoardCard = {
   status: PipelineStatus | "unstarted";
   updatedAt: string | null;
 };
-
-function isAuthError(message: string): boolean {
-  const lower = message.toLowerCase();
-  return (
-    message.includes("请先登录") ||
-    message.includes("登录已过期") ||
-    lower.includes("auth") ||
-    lower.includes("login") ||
-    lower.includes("cookie")
-  );
-}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -154,7 +144,7 @@ export function HomeBoard() {
   const { dispatch, state } = useStore();
   const { token } = theme.useToken();
   const { message } = App.useApp();
-  const loggedIn = state.auth.logged_in;
+  const loggedIn = state.auth.logged_in && state.auth.cookie_valid;
   const boardVisible = state.ui.view === "home" || state.ui.view === "demands";
 
   const [keywordInput, setKeywordInput] = useState("");
@@ -434,7 +424,7 @@ export function HomeBoard() {
                 <Alert
                   action={
                     <Flex gap={token.marginSM}>
-                      {isAuthError(error) ? (
+                      {isAuthExpiredMessage(error) ? (
                         <Button onClick={() => void startLogin()} size="small">
                           登录
                         </Button>

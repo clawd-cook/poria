@@ -126,14 +126,12 @@ impl Channel for JoySpaceChannel {
                     .as_ref()
                     .map(|c| c.cookie.trim())
                     .filter(|c| !c.is_empty())
-                    .ok_or("JoySpace 登录已过期，请重新登录")?;
+                    .ok_or(poria_core::types::AUTH_EXPIRED_USER_MESSAGE)?;
                 let auth = JoySpaceAuth::new(cookie, None);
                 let exported = export_page_markdown(&auth, &url).await?;
 
                 let output_dir = input.output_dir.unwrap_or_else(|| ".".to_string());
-                let output_name = input
-                    .output_name
-                    .unwrap_or_else(|| exported.title.clone());
+                let output_name = input.output_name.unwrap_or_else(|| exported.title.clone());
                 let output_path = format!(
                     "{}/{}.md",
                     output_dir.trim_end_matches('/'),

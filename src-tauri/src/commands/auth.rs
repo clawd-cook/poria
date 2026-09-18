@@ -230,6 +230,7 @@ pub async fn start_login(app: tauri::AppHandle) -> Result<(), String> {
                     cookie_valid: true,
                 };
                 let _ = app_handle.emit("auth:status-changed", status_view);
+                crate::commands::pipeline::resume_auth_blocked_after_login(&app_handle);
                 return;
             }
         })

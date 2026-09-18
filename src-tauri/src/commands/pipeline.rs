@@ -4,21 +4,24 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
+use poria_commands::{is_auth_expired, stage_error_outcome};
 use poria_core::contracts::{Skill, SkillContext};
 use poria_core::pipeline::{create_pipeline_id, PipelineEvent as CorePipelineEvent};
 use poria_core::types::{
-    BackendContext, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, SkillInput, Stage,
-    StageEnum, StageIssue, StageStatus, STAGE_ORDER,
+    BackendContext, IssueClass, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, SkillInput,
+    Stage, StageEnum, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS, AUTH_EXPIRED_USER_MESSAGE,
+    STAGE_ORDER,
 };
 use poria_infrastructure::auth::{
     assert_path_under_projects_root, assert_path_under_repos_root,
     assert_path_under_workspaces_root, demand_project_folder_name, get_credentials,
-    get_demand_project_dir, get_pipeline_workspace_dir, get_workspaces_root,
+    get_demand_project_dir, get_pipeline_workspace_dir, get_status, get_workspaces_root,
+    JacpCredentials,
 };
 use poria_infrastructure::store::{
     demand_task_key, CloneStatus, RegisteredRepo, SqlitePipelineStore,
@@ -580,6 +583,120 @@ pub async fn execute_stage(
     Ok(())
 }
 
+fn xingyun_creds(creds: &JacpCredentials) -> poria_channels::xingyun::JacpCredentials {
+    poria_channels::xingyun::JacpCredentials {
+        cookie: creds.cookie.clone(),
+        username: creds.username.clone(),
+    }
+}
+
+/// Probe Xingyun with the stored cookie. If it is 401, re-read `auth.json`
+/// in case login finished in another window; SSO cannot be minted silently.
+async fn ensure_sso_credentials() -> Result<JacpCredentials, String> {
+    let creds = get_credentials(None).ok_or_else(|| AUTH_EXPIRED_USER_MESSAGE.to_string())?;
+    if creds.cookie.trim().is_empty() {
+        return Err(AUTH_EXPIRED_USER_MESSAGE.into());
+    }
+    match poria_channels::xingyun::probe_sso(&xingyun_creds(&creds)).await {
+        Ok(()) => Ok(creds),
+        Err(err) => {
+            let msg = err.to_string();
+            if !is_auth_expired(&msg) {
+                return Err(msg);
+            }
+            let Some(fresh) = get_credentials(None) else {
+                return Err(AUTH_EXPIRED_USER_MESSAGE.into());
+            };
+            if fresh.cookie.trim() == creds.cookie.trim() {
+                return Err(AUTH_EXPIRED_USER_MESSAGE.into());
+            }
+            match poria_channels::xingyun::probe_sso(&xingyun_creds(&fresh)).await {
+                Ok(()) => Ok(fresh),
+                Err(err2) => {
+                    let msg2 = err2.to_string();
+                    if is_auth_expired(&msg2) {
+                        Err(AUTH_EXPIRED_USER_MESSAGE.into())
+                    } else {
+                        Err(msg2)
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn emit_cookie_invalid(app: &AppHandle) {
+    let status = get_status(None);
+    let _ = app.emit(
+        "auth:status-changed",
+        serde_json::json!({
+            "logged_in": status.logged_in,
+            "username": status.username,
+            "cookie_valid": false,
+        }),
+    );
+}
+
+fn stage_has_auth_issue(stage: &Stage) -> bool {
+    stage.issue.as_ref().is_some_and(|issue| {
+        issue.class.eq_ignore_ascii_case(AUTH_EXPIRED_ISSUE_CLASS)
+            || issue.class.eq_ignore_ascii_case("AuthExpired")
+            || is_auth_expired(&issue.message)
+    })
+}
+
+/// After a successful SSO callback, continue pipelines blocked on expired cookie.
+pub(crate) fn resume_auth_blocked_after_login(app: &AppHandle) {
+    let Some(state) = app.try_state::<crate::AppState>() else {
+        return;
+    };
+    let Ok(pipelines) = state.store.find_by_status(PipelineStatus::Blocked) else {
+        return;
+    };
+    for pipeline in pipelines {
+        if pipeline.stages.iter().any(stage_has_auth_issue) {
+            enqueue_auto_run(app.clone(), &*state, pipeline.id);
+        }
+    }
+}
+
+fn fail_or_block_stage(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    message: String,
+    fallback_class: &str,
+) -> Result<(), String> {
+    let outcome = stage_error_outcome(&message, fallback_class);
+    let stage_name = pipeline.stages[stage_idx].name;
+    pipeline.status = outcome.pipeline_status;
+    pipeline.stages[stage_idx].status = outcome.stage_status;
+    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+    pipeline.stages[stage_idx].issue = Some(StageIssue {
+        class: outcome.issue_class.clone(),
+        message: message.clone(),
+        retryable: outcome.retryable,
+    });
+    pipeline.updated_at = Utc::now();
+    let event = if outcome.pipeline_status == PipelineStatus::Blocked {
+        emit_cookie_invalid(app);
+        CorePipelineEvent::stage_blocked(&pipeline.id, stage_name, IssueClass::AuthExpired)
+    } else {
+        CorePipelineEvent::stage_failed(
+            &pipeline.id,
+            stage_name,
+            &message,
+            pipeline.stages[stage_idx].retry_count,
+        )
+    };
+    store
+        .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &[event])
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+    Err(message)
+}
+
 fn emit_pipeline_updated(app: &tauri::AppHandle, pipeline: &Pipeline) -> Result<(), String> {
     let current_stage = pipeline
         .stages
@@ -778,7 +895,13 @@ fn emit_human_request(
     let issue_class = stage
         .and_then(|s| s.issue.as_ref())
         .map(|issue| issue.class.clone())
-        .unwrap_or_else(|| "stage_failed".into());
+        .unwrap_or_else(|| {
+            if is_auth_expired(detail) {
+                AUTH_EXPIRED_ISSUE_CLASS.to_string()
+            } else {
+                "stage_failed".into()
+            }
+        });
     app.emit(
         "human:request",
         serde_json::json!({
@@ -842,10 +965,12 @@ async fn run_init_stage(
     store: &std::sync::Arc<SqlitePipelineStore>,
     repo_store: &std::sync::Arc<poria_infrastructure::store::RegisteredRepoStore>,
 ) -> Result<(), String> {
-    let creds = get_credentials(None).ok_or_else(|| "请先登录".to_string())?;
-    if creds.cookie.trim().is_empty() {
-        return Err("请先登录".into());
-    }
+    let creds = match ensure_sso_credentials().await {
+        Ok(creds) => creds,
+        Err(message) => {
+            return fail_init_stage(pipeline, stage_idx, app, store, message).await;
+        }
+    };
 
     let frontend = pipeline
         .config
@@ -1053,29 +1178,7 @@ async fn fail_init_stage(
     store: &std::sync::Arc<SqlitePipelineStore>,
     message: String,
 ) -> Result<(), String> {
-    pipeline.status = PipelineStatus::Failed;
-    pipeline.stages[stage_idx].status = StageStatus::Failed;
-    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-    pipeline.stages[stage_idx].issue = Some(StageIssue {
-        class: "init_failed".into(),
-        message: message.clone(),
-        retryable: true,
-    });
-    pipeline.updated_at = Utc::now();
-    store
-        .save_stage_tx(
-            Some(&pipeline.stages[stage_idx]),
-            pipeline,
-            &[CorePipelineEvent::stage_failed(
-                &pipeline.id,
-                StageEnum::Init,
-                &message,
-                pipeline.stages[stage_idx].retry_count,
-            )],
-        )
-        .map_err(|e| e.to_string())?;
-    emit_pipeline_updated(app, pipeline)?;
-    Err(message)
+    fail_or_block_stage(pipeline, stage_idx, app, store, message, "init_failed")
 }
 
 fn merge_init_workspace_output(
@@ -1260,32 +1363,14 @@ async fn run_review_prd_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => {
-            let message = err.to_string();
-            pipeline.status = PipelineStatus::Failed;
-            pipeline.stages[stage_idx].status = StageStatus::Failed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.stages[stage_idx].issue = Some(StageIssue {
-                class: "review_prd_failed".into(),
-                message: message.clone(),
-                retryable: true,
-            });
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_failed(
-                        &pipeline.id,
-                        StageEnum::ReviewPrd,
-                        &message,
-                        pipeline.stages[stage_idx].retry_count,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Err(message)
-        }
+        Err(err) => fail_or_block_stage(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            err.to_string(),
+            "review_prd_failed",
+        ),
     }
 }
 
@@ -1376,32 +1461,14 @@ async fn run_design_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => {
-            let message = err.to_string();
-            pipeline.status = PipelineStatus::Failed;
-            pipeline.stages[stage_idx].status = StageStatus::Failed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.stages[stage_idx].issue = Some(StageIssue {
-                class: "design_failed".into(),
-                message: message.clone(),
-                retryable: true,
-            });
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_failed(
-                        &pipeline.id,
-                        StageEnum::Design,
-                        &message,
-                        pipeline.stages[stage_idx].retry_count,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Err(message)
-        }
+        Err(err) => fail_or_block_stage(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            err.to_string(),
+            "design_failed",
+        ),
     }
 }
 
@@ -1610,32 +1677,14 @@ async fn run_dev_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => {
-            let message = err.to_string();
-            pipeline.status = PipelineStatus::Failed;
-            pipeline.stages[stage_idx].status = StageStatus::Failed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.stages[stage_idx].issue = Some(StageIssue {
-                class: "dev_failed".into(),
-                message: message.clone(),
-                retryable: true,
-            });
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_failed(
-                        &pipeline.id,
-                        StageEnum::Dev,
-                        &message,
-                        pipeline.stages[stage_idx].retry_count,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Err(message)
-        }
+        Err(err) => fail_or_block_stage(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            err.to_string(),
+            "dev_failed",
+        ),
     }
 }
 
@@ -1734,32 +1783,14 @@ async fn run_cr_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => {
-            let message = err.to_string();
-            pipeline.status = PipelineStatus::Failed;
-            pipeline.stages[stage_idx].status = StageStatus::Failed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.stages[stage_idx].issue = Some(StageIssue {
-                class: "cr_failed".into(),
-                message: message.clone(),
-                retryable: true,
-            });
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_failed(
-                        &pipeline.id,
-                        StageEnum::Cr,
-                        &message,
-                        pipeline.stages[stage_idx].retry_count,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Err(message)
-        }
+        Err(err) => fail_or_block_stage(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            err.to_string(),
+            "cr_failed",
+        ),
     }
 }
 
@@ -1794,7 +1825,12 @@ async fn run_deploy_stage(
         .first()
         .cloned()
         .ok_or("缺少前端仓库，无法部署")?;
-    let creds = get_credentials(None).ok_or_else(|| "请先登录".to_string())?;
+    let creds = match ensure_sso_credentials().await {
+        Ok(creds) => creds,
+        Err(message) => {
+            return fail_or_block_stage(pipeline, stage_idx, app, store, message, "deploy_failed");
+        }
+    };
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -1872,32 +1908,14 @@ async fn run_deploy_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => {
-            let message = err.to_string();
-            pipeline.status = PipelineStatus::Failed;
-            pipeline.stages[stage_idx].status = StageStatus::Failed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.stages[stage_idx].issue = Some(StageIssue {
-                class: "deploy_failed".into(),
-                message: message.clone(),
-                retryable: true,
-            });
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_failed(
-                        &pipeline.id,
-                        StageEnum::Deploy,
-                        &message,
-                        pipeline.stages[stage_idx].retry_count,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Err(message)
-        }
+        Err(err) => fail_or_block_stage(
+            pipeline,
+            stage_idx,
+            app,
+            store,
+            err.to_string(),
+            "deploy_failed",
+        ),
     }
 }
 
