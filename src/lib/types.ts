@@ -1,5 +1,6 @@
 export interface PipelineSummary {
   id: string;
+  demand_id: number;
   demand_name: string;
   demand_code: string;
   status: PipelineStatus;

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查未登录误打 list_demands、receiver 盖 ERP、一需求两卡"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "看板入口替代需求页后的 IPC 验证"}
+{"file": ".trellis/spec/frontend/pipeline-workspace.md", "reason": "复用 submit 不得破坏 workspace 路径"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "ViewType / 侧栏一致性"}
+{"file": "AGENTS.md", "reason": "需求过滤与 backendTrdUrl 未回退"}

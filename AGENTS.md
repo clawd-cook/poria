@@ -237,9 +237,9 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 
 ## Integration contracts (do not guess)
 
-- **SSO**: Cookie in `~/.poria/auth.json`. Commands that hit Xingyun / JoySpace / Coding must fail with 请先登录 when cookie is missing. Logged-out demand list UI must not call `list_demands`.
-- **Demand list**: default is related-to-me (omit JACP `receiver`). 「由我受理」 is `acceptedByMe` → `receiver` = ERP. Do not stamp the logged-in ERP onto rows that have no receiver.
-- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Frontend `base_branch` is the registered `default_branch` (default `master`). Backend repo stays **out of** `pipeline.repos`. Init creates `~/.poria/workspaces/<pipeline_id>/` (doc/skill symlinks + both worktrees) before ReviewPrd. Docs stay in `~/.poria/projects/<demand_code>/`.
+- **SSO**: Cookie in `~/.poria/auth.json`. Commands that hit Xingyun / JoySpace / Coding must fail with 请先登录 when cookie is missing. Logged-out 看板 must not call `list_demands`.
+- **Demand list**: 看板未开始列 pulls Xingyun. Default is related-to-me (omit JACP `receiver`). 「由我受理」 is `acceptedByMe` → `receiver` = ERP and only affects that Xingyun query. Do not stamp the logged-in ERP onto rows that have no receiver. There is no separate 需求 tab.
+- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Reuse the latest pipeline for the demand key (`demand_code`, else `demand_id`): `Created` may update config; other statuses return the existing id. Frontend `base_branch` is the registered `default_branch` (default `master`). Backend repo stays **out of** `pipeline.repos`. Init creates `~/.poria/workspaces/<pipeline_id>/` (doc/skill symlinks + both worktrees) before ReviewPrd. Docs stay in `~/.poria/projects/<demand_code>/`.
 - **JoySpace export**: SSO cookie + POST `/v1/pages/content` (`poria-channels` joyspace). Init writes `PRD.md` / `BACKEND_TRD.md` under `~/.poria/projects/<demand_code>/`; ReviewPrd / Design write `PRD_REVIEW.md` / `TRD.md` there too via workspace-root symlinks — not into the git worktree.
 - **Deploy**: commit (`feat(<demand_code>): <name>`) → `git push -u` → `bind_branch` (EasyCI SELECT) → `find_mr_live` / `create_merge_request_live`. Do not bind before push.
 - **Clone dest**: `~/.poria/repos/<scope>/<name>`.

@@ -35,18 +35,18 @@ invoke<RegisteredRepo[]>("list_repos");
 invoke<RegisteredRepo>("retry_clone", { id });
 ```
 
-Demand list IPC:
+Demand list IPC (看板未开始列, camelCase from TS):
 
 ```typescript
 invoke<DemandPage>("list_demands", { acceptedByMe, current, keyword, pageSize });
 ```
 
-| `acceptedByMe` | JACP `/openapi/v3/demands/query` body | Row receiver when the record has no `receiver` object |
+| `acceptedByMe` | JACP `/openapi/v3/demands/query` body | Records with no `receiver` object |
 | --- | --- | --- |
-| omitted / `false` (default) | omit `receiver` and `processor` (related-to-me via cookie / `optErp`) | `null` → UI `—`. Do not stamp the logged-in ERP |
+| omitted / `false` (default) | omit `receiver` and `processor` (related-to-me via cookie / `optErp`) | Do not stamp the logged-in ERP |
 | `true` (checkbox 「由我受理」) | `receiver` = current ERP; still omit `processor` | may fall back to the query ERP |
 
-Flow: `DemandListPage` → `listDemands({ acceptedByMe })` → Tauri `list_demands` → `DemandListQuery.accepted_by_me`. Logged-out UI must not call this command.
+Flow: `HomeBoard` (logged in + 看板 visible) → `listDemands({ acceptedByMe })` → Tauri `list_demands` → `DemandListQuery.accepted_by_me`. Logged-out 看板 must not call this command. 「由我受理」 only changes the Xingyun query for the 未开始 column; local pipeline columns are unchanged. Cards do not render Xingyun `status_label`.
 
 Clone dest: `~/.poria/repos/<scope>/<name>` from `repo_scope_and_name_from_git_url`.
 
@@ -63,9 +63,10 @@ macOS AX (osascript) after granting Accessibility to the calling app:
 
 | Control | AX role | AX name |
 | --- | --- | --- |
-| Home | `AXMenuItem` | `home 首页` |
-| Demands | `AXMenuItem` | `unordered-list 需求列表` |
+| Board | `AXMenuItem` | `home 看板` |
 | Accepted-by-me | `AXCheckBox` | `由我受理` |
+| Keyword search | `AXTextField` | `搜索任务名称或编号` |
+| Link start | `AXTextField` | `粘贴行云需求链接` |
 | Repos | `AXMenuItem` | `folder 仓库列表` |
 | Settings | `AXMenuItem` | `setting 设置` |
 | Register | `AXButton` | `登 记` (antd inserts a space) |
@@ -105,13 +106,13 @@ Known 2026-09-17 fixtures:
 
 ### 5. Good / Base / Bad Cases
 
-- **Good**: `cargo tauri dev` → AX click `folder 仓库列表` → paste URL → `登 记` → wait until `成功` and `HEAD` exists. Demand tab default list is larger than 「由我受理」; checking the box refetches page 1 with `receiver`.
+- **Good**: `cargo tauri dev` → AX click `folder 仓库列表` → paste URL → `登 记` → wait until `成功` and `HEAD` exists. 看板 default 未开始 (related-to-me) is larger than 「由我受理」; checking the box refetches page 1 with `receiver` and does not move local task cards.
 - **Base**: layout-only check in Cursor browser on 1420 (tabs, empty states). Do not claim clone/login/submit passed.
 - **Bad**: treat Cursor browser invoke failure as an app bug; treat `/Applications/Poria.app` as the current branch; or always send JACP `receiver` / stamp the logged-in ERP on every row.
 
 ### 6. Tests Required
 
-- Unit: `cargo test -p poria-infrastructure -- registered_repo`; git URL `scope_and_name` / path-escape tests; `cargo test -p poria-channels -- demand_list` (omit `receiver`/`processor` by default; `accepted_by_me` adds `receiver` only).
+- Unit: `cargo test -p poria-infrastructure -- pipeline`; git URL `scope_and_name` / path-escape tests; `cargo test -p poria-channels -- demand_list` (omit `receiver`/`processor` by default; `accepted_by_me` adds `receiver` only); `cargo test -p poria-desktop --lib -- --test-threads=1` (submit reuse + list_pipelines dedupe).
 - Manual E2E (this spec): two distinct ready repos, AX statuses `成功`, paths under `~/.poria/repos`.
 - Assert: `pipeline.repos` stays frontend-only when later starting a pipeline (backend is `backend_context`).
 
@@ -143,13 +144,13 @@ Always sending `receiver` hides related-to-me rows. Stamping that ERP onto recor
 
 #### Correct (demand list)
 
-Default body omits `receiver` and `processor`. Checkbox 「由我受理」 / `acceptedByMe: true` is the only path that adds `"receiver": "<erp>"`. Unchecked rows with no receiver object render `—`.
+Default body omits `receiver` and `processor`. Checkbox 「由我受理」 / `acceptedByMe: true` is the only path that adds `"receiver": "<erp>"`. Do not stamp the logged-in ERP onto Xingyun records that have no `receiver` object.
 
 ## Scenario: Start pipeline with backend TRD URL
 
 ### 1. Scope / Trigger
 
-Use this spec when changing the demand 「开始」 wizard, `submit_pipeline`, `PipelineConfig.backend_trd_url`, or `gen_trd` / `gen_code` prompt injection. Cursor's browser tab on Vite cannot invoke submit.
+Use this spec when changing the 看板 unstarted-card wizard, `submit_pipeline`, `PipelineConfig.backend_trd_url`, or `gen_trd` / `gen_code` prompt injection. Cursor's browser tab on Vite cannot invoke submit. Clicking a card with no pipeline opens the wizard; a card with a pipeline id opens detail. `resolve_demand_link` selects the existing pipeline when that demand key already has a task.
 
 ### 2. Signatures
 
@@ -192,11 +193,11 @@ Short `claude -p` names `gen-trd` / `gen-code` and includes demand code, workspa
 | Layer | Owns |
 | --- | --- |
 | Wizard | Both URLs required + distinct; PRD prefill via `preview_demand_prd`; backend TRD is paste-only |
-| `submit_pipeline` | Persist `config.backend_trd_url`; `pipeline.repos` length 1 (frontend). Frontend `base_branch` = registered `default_branch`. Backend lives in `backend_context` only |
+| `submit_pipeline` | Persist `config.backend_trd_url`; `pipeline.repos` length 1 (frontend). Frontend `base_branch` = registered `default_branch`. Backend lives in `backend_context` only. Reuse the latest row for the demand key: `Created` updates config; any other status returns the existing id without resetting stages |
 | Feature artifacts | Frontend design is `TRD.md`. Optional export is `BACKEND_TRD.md`. Never overwrite `TRD.md` with backend TRD |
 | `gen_trd` / `gen_code` | Workspace-root `claude -p` short prompt + bundled `SKILL.md`; read optional `BACKEND_TRD.md`; do not modify the backend repo |
 
-JoySpace live Markdown export is Init: SSO Cookie + `POST /v1/pages/content`, files land in `~/.poria/projects/<demand_code>/` (`PRD.md`, `BACKEND_TRD.md`, later `PRD_REVIEW.md` / `TRD.md`). Demand list 「文档」 reads that folder. Init then syncs hosted clones and creates `~/.poria/workspaces/<pipeline_id>/` (doc + skill symlinks, frontend feature + backend detached worktrees) before ReviewPrd. After Init, `backend_context.local_path` is the backend worktree. ReviewPrd/Design/Dev/Cr `claude -p` cwd is the workspace root. A non-empty `backend_trd_url` is still injected so later agents can open the link. See [Pipeline Init Workspace](./pipeline-workspace.md).
+JoySpace live Markdown export is Init: SSO Cookie + `POST /v1/pages/content`, files land in `~/.poria/projects/<demand_code>/` (`PRD.md`, `BACKEND_TRD.md`, later `PRD_REVIEW.md` / `TRD.md`). 看板卡片 「文档」 reads that folder. Init then syncs hosted clones and creates `~/.poria/workspaces/<pipeline_id>/` (doc + skill symlinks, frontend feature + backend detached worktrees) before ReviewPrd. After Init, `backend_context.local_path` is the backend worktree. ReviewPrd/Design/Dev/Cr `claude -p` cwd is the workspace root. A non-empty `backend_trd_url` is still injected so later agents can open the link. See [Pipeline Init Workspace](./pipeline-workspace.md).
 
 ### 4. Validation & Error Matrix
 
@@ -252,7 +253,7 @@ invoke("submit_pipeline", {
 
 ### 1. Scope / Trigger
 
-Use when changing Init, JoySpace `POST /v1/pages/content`, or demand-list 「文档」. Verify in `poria-desktop`, not Vite `:1420`.
+Use when changing Init, JoySpace `POST /v1/pages/content`, or 看板 「文档」. Verify in `poria-desktop`, not Vite `:1420`.
 
 ### 2. Signatures
 
@@ -267,7 +268,7 @@ Auth: `~/.poria/auth.json` Cookie + `x-team-id: 00046419`. Files: `~/.poria/proj
 ### 3. Tests Required
 
 - Unit: `cargo test -p poria-channels -- joyspace`; `cargo test -p poria-infrastructure -- demand_project`; `cargo test -p poria-core -- feature_context`.
-- Manual: pipeline Init 执行 on R2026082156824, then demand-list 「文档」 shows exported markdown.
+- Manual: pipeline Init 执行 on R2026082156824, then 看板 「文档」 shows exported markdown.
 
 ## Common Mistake: Vite tab vs desktop window
 

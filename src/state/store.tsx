@@ -144,7 +144,10 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, channels: action.channels };
 
     case "viewChanged":
-      return { ...state, ui: { ...state.ui, view: action.view } };
+      return {
+        ...state,
+        ui: { ...state.ui, view: action.view === "demands" ? "home" : action.view },
+      };
 
     case "reposHydrated":
       return { ...state, repos: action.repos };

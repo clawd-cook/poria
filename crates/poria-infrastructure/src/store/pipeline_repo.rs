@@ -11,6 +11,16 @@ pub struct SqlitePipelineStore {
     conn: Mutex<Connection>,
 }
 
+/// Board / reuse key: nonempty `demand_code`, otherwise `id:{demand_id}`.
+pub fn demand_task_key(demand_code: &str, demand_id: i64) -> String {
+    let code = demand_code.trim();
+    if code.is_empty() {
+        format!("id:{demand_id}")
+    } else {
+        code.to_string()
+    }
+}
+
 impl SqlitePipelineStore {
     pub fn new(conn: Connection) -> Self {
         Self {
@@ -77,21 +87,7 @@ impl SqlitePipelineStore {
         let p_row = conn.query_row(
             "SELECT id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at FROM pipelines WHERE id = ?1",
             params![pipeline_id],
-            |row| {
-                Ok(PipelineRow {
-                    id: row.get(0)?,
-                    demand_id: row.get(1)?,
-                    demand_code: row.get(2)?,
-                    demand_name: row.get(3)?,
-                    status: row.get(4)?,
-                    raw_link: row.get(5)?,
-                    operator: row.get(6)?,
-                    has_regressed: row.get(7)?,
-                    config: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
-                })
-            },
+            map_pipeline_row,
         );
 
         let p_row = match p_row {
@@ -116,21 +112,7 @@ impl SqlitePipelineStore {
         ).map_err(|e| e.to_string())?;
 
         let rows: Vec<PipelineRow> = stmt
-            .query_map(params![status_str], |row| {
-                Ok(PipelineRow {
-                    id: row.get(0)?,
-                    demand_id: row.get(1)?,
-                    demand_code: row.get(2)?,
-                    demand_name: row.get(3)?,
-                    status: row.get(4)?,
-                    raw_link: row.get(5)?,
-                    operator: row.get(6)?,
-                    has_regressed: row.get(7)?,
-                    config: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
-                })
-            })
+            .query_map(params![status_str], map_pipeline_row)
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .collect();
@@ -200,6 +182,62 @@ impl SqlitePipelineStore {
         tx.commit().map_err(|e| e.to_string())
     }
 
+    pub fn find_latest_for_demand(
+        &self,
+        demand_code: &str,
+        demand_id: i64,
+    ) -> Result<Option<Pipeline>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let code = demand_code.trim();
+        let p_row = if code.is_empty() {
+            conn.query_row(
+                "SELECT id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at FROM pipelines WHERE demand_id = ?1 AND TRIM(demand_code) = '' ORDER BY updated_at DESC, id DESC LIMIT 1",
+                params![demand_id],
+                map_pipeline_row,
+            )
+        } else {
+            conn.query_row(
+                "SELECT id, demand_id, demand_code, demand_name, status, raw_link, operator, has_regressed, config, created_at, updated_at FROM pipelines WHERE TRIM(demand_code) = ?1 ORDER BY updated_at DESC, id DESC LIMIT 1",
+                params![code],
+                map_pipeline_row,
+            )
+        };
+
+        let p_row = match p_row {
+            Ok(r) => r,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(e) => return Err(e.to_string()),
+        };
+
+        let stages = self.load_stages(&conn, &p_row.id)?;
+        Ok(Some(row_to_pipeline(p_row, stages)))
+    }
+
+    pub fn update_config(
+        &self,
+        pipeline_id: &str,
+        config: &PipelineConfig,
+        demand_name: Option<&str>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let config_json = serde_json::to_string(config).unwrap_or_default();
+        let updated = conn
+            .execute(
+                "UPDATE pipelines SET config = ?1, demand_name = COALESCE(?2, demand_name), updated_at = ?3 WHERE id = ?4",
+                params![
+                    config_json,
+                    demand_name,
+                    Utc::now().to_rfc3339(),
+                    pipeline_id,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        if updated == 0 {
+            return Err(format!("Pipeline not found: {pipeline_id}"));
+        }
+        Ok(())
+    }
+
     pub fn list_all(&self) -> Result<Vec<Pipeline>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(
@@ -207,21 +245,7 @@ impl SqlitePipelineStore {
         ).map_err(|e| e.to_string())?;
 
         let rows: Vec<PipelineRow> = stmt
-            .query_map([], |row| {
-                Ok(PipelineRow {
-                    id: row.get(0)?,
-                    demand_id: row.get(1)?,
-                    demand_code: row.get(2)?,
-                    demand_name: row.get(3)?,
-                    status: row.get(4)?,
-                    raw_link: row.get(5)?,
-                    operator: row.get(6)?,
-                    has_regressed: row.get(7)?,
-                    config: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
-                })
-            })
+            .query_map([], map_pipeline_row)
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .collect();
@@ -299,6 +323,22 @@ struct PipelineRow {
     config: Option<String>,
     created_at: String,
     updated_at: String,
+}
+
+fn map_pipeline_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PipelineRow> {
+    Ok(PipelineRow {
+        id: row.get(0)?,
+        demand_id: row.get(1)?,
+        demand_code: row.get(2)?,
+        demand_name: row.get(3)?,
+        status: row.get(4)?,
+        raw_link: row.get(5)?,
+        operator: row.get(6)?,
+        has_regressed: row.get(7)?,
+        config: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+    })
 }
 
 fn row_to_pipeline(row: PipelineRow, stages: Vec<Stage>) -> Pipeline {
@@ -416,5 +456,123 @@ mod tests {
 
         let not_found = store.find_by_status(PipelineStatus::Running).unwrap();
         assert!(not_found.is_empty());
+    }
+
+    fn pipeline_at(
+        id: &str,
+        demand_code: &str,
+        demand_id: i64,
+        status: PipelineStatus,
+        updated_at: chrono::DateTime<Utc>,
+    ) -> Pipeline {
+        let mut pipeline = test_pipeline();
+        pipeline.id = id.into();
+        pipeline.demand_code = demand_code.into();
+        pipeline.demand_id = demand_id;
+        pipeline.status = status;
+        pipeline.created_at = updated_at;
+        pipeline.updated_at = updated_at;
+        pipeline
+    }
+
+    #[test]
+    fn demand_task_key_prefers_nonempty_code() {
+        assert_eq!(demand_task_key(" REQ-001 ", 42), "REQ-001");
+        assert_eq!(demand_task_key("", 42), "id:42");
+        assert_eq!(demand_task_key("   ", 7), "id:7");
+    }
+
+    #[test]
+    fn find_latest_for_demand_returns_newer_updated_at() {
+        let conn = test_conn();
+        let store = SqlitePipelineStore::new(conn);
+        let older = Utc::now() - chrono::Duration::hours(2);
+        let newer = Utc::now() - chrono::Duration::minutes(5);
+        store
+            .create(&pipeline_at(
+                "pl-old",
+                "REQ-001",
+                42,
+                PipelineStatus::Completed,
+                older,
+            ))
+            .unwrap();
+        store
+            .create(&pipeline_at(
+                "pl-new",
+                "REQ-001",
+                42,
+                PipelineStatus::Created,
+                newer,
+            ))
+            .unwrap();
+
+        let found = store
+            .find_latest_for_demand("REQ-001", 42)
+            .unwrap()
+            .expect("row");
+        assert_eq!(found.id, "pl-new");
+        assert_eq!(found.status, PipelineStatus::Created);
+        assert_eq!(store.list_all().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn find_latest_for_demand_empty_code_uses_demand_id() {
+        let conn = test_conn();
+        let store = SqlitePipelineStore::new(conn);
+        let now = Utc::now();
+        store
+            .create(&pipeline_at(
+                "pl-coded",
+                "REQ-001",
+                42,
+                PipelineStatus::Created,
+                now,
+            ))
+            .unwrap();
+        store
+            .create(&pipeline_at(
+                "pl-id-only",
+                "",
+                42,
+                PipelineStatus::Running,
+                now,
+            ))
+            .unwrap();
+
+        let by_code = store
+            .find_latest_for_demand("REQ-001", 42)
+            .unwrap()
+            .expect("coded");
+        assert_eq!(by_code.id, "pl-coded");
+
+        let by_id = store
+            .find_latest_for_demand("", 42)
+            .unwrap()
+            .expect("id-only");
+        assert_eq!(by_id.id, "pl-id-only");
+        assert!(store.find_latest_for_demand("", 99).unwrap().is_none());
+    }
+
+    #[test]
+    fn update_config_does_not_insert_row() {
+        let conn = test_conn();
+        let store = SqlitePipelineStore::new(conn);
+        store.create(&test_pipeline()).unwrap();
+
+        let mut config = PipelineConfig::default();
+        config.prd_url = Some("https://joyspace.jd.com/pages/prd".into());
+        config.backend_trd_url = Some("https://joyspace.jd.com/pages/trd".into());
+        store
+            .update_config("pl-test-001", &config, Some("Renamed"))
+            .unwrap();
+
+        let loaded = store.load("pl-test-001").unwrap().unwrap();
+        assert_eq!(loaded.demand_name.as_deref(), Some("Renamed"));
+        assert_eq!(
+            loaded.config.prd_url.as_deref(),
+            Some("https://joyspace.jd.com/pages/prd")
+        );
+        assert_eq!(store.list_all().unwrap().len(), 1);
     }
 }

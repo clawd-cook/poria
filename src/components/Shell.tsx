@@ -5,7 +5,6 @@ import {
   HomeOutlined,
   NodeIndexOutlined,
   SettingOutlined,
-  UnorderedListOutlined,
 } from "@ant-design/icons";
 import { Layout, Menu, Typography, theme } from "antd";
 import type { MenuProps } from "antd";
@@ -15,7 +14,6 @@ import type { ViewType } from "../lib/types";
 import { useStore } from "../state/store";
 import { AuthStatus } from "./AuthStatus";
 import { ChannelsPage } from "./ChannelsPage";
-import { DemandListPage } from "./DemandListPage";
 import { HomeBoard } from "./HomeBoard";
 import { RepoListPage } from "./RepoListPage";
 import { SettingsPage } from "./SettingsPage";
@@ -25,30 +23,21 @@ import { WorkspacePage } from "./WorkspacePage";
 const { Content, Sider } = Layout;
 const { Text } = Typography;
 
-const VIEW_KEYS: ViewType[] = [
-  "channels",
-  "demands",
-  "home",
-  "repos",
-  "settings",
-  "skills",
-  "workspace",
-];
+const VIEW_KEYS: ViewType[] = ["channels", "home", "repos", "settings", "skills", "workspace"];
 
 const NAV_ITEMS: MenuProps["items"] = [
-  { key: "home", icon: <HomeOutlined />, label: "看板" },
-  { key: "demands", icon: <UnorderedListOutlined />, label: "需求" },
+  { icon: <HomeOutlined />, key: "home", label: "看板" },
   {
     children: [
-      { key: "channels", icon: <NodeIndexOutlined />, label: "渠道" },
-      { key: "skills", icon: <ApiOutlined />, label: "技能" },
-      { key: "repos", icon: <FolderOutlined />, label: "仓库" },
-      { key: "workspace", icon: <DesktopOutlined />, label: "工作区" },
+      { icon: <NodeIndexOutlined />, key: "channels", label: "渠道" },
+      { icon: <ApiOutlined />, key: "skills", label: "技能" },
+      { icon: <FolderOutlined />, key: "repos", label: "仓库" },
+      { icon: <DesktopOutlined />, key: "workspace", label: "工作区" },
     ],
     key: "resources",
     label: "资源",
   },
-  { key: "settings", icon: <SettingOutlined />, label: "设置" },
+  { icon: <SettingOutlined />, key: "settings", label: "设置" },
 ];
 
 function isViewType(key: string): key is ViewType {
@@ -75,7 +64,7 @@ function PersistentTab({ active, children }: { active: boolean; children: ReactN
 export function Shell() {
   const { state, dispatch } = useStore();
   const { token } = theme.useToken();
-  const currentView = state.ui.view;
+  const currentView = state.ui.view === "demands" ? "home" : state.ui.view;
 
   return (
     <Layout
@@ -83,13 +72,13 @@ export function Shell() {
       style={{ background: token.colorBgLayout, height: "100vh", overflow: "hidden" }}
     >
       <Sider
-        theme="light"
-        width={220}
         style={{
           borderRight: `1px solid ${token.colorBorderSecondary}`,
           height: "100%",
           overflow: "hidden",
         }}
+        theme="light"
+        width={220}
       >
         <div
           style={{
@@ -154,9 +143,6 @@ export function Shell() {
       >
         <PersistentTab active={currentView === "home"}>
           <HomeBoard />
-        </PersistentTab>
-        <PersistentTab active={currentView === "demands"}>
-          <DemandListPage />
         </PersistentTab>
         <PersistentTab active={currentView === "channels"}>
           <ChannelsPage />
