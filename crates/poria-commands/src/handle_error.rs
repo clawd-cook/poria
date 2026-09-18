@@ -1,6 +1,7 @@
 use poria_core::types::{
     IssueClass, Pipeline, PipelineStatus, Stage, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS,
-    ISSUE_POLICIES, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, TRD_UNCONFIRMED_ISSUE_CLASS,
+    ISSUE_POLICIES, OUT_OF_SCOPE_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+    SECURITY_VIOLATION_ISSUE_CLASS, TRD_UNCONFIRMED_ISSUE_CLASS,
 };
 
 use crate::exception_classifier;
@@ -52,6 +53,20 @@ pub fn stage_error_outcome(message: &str, fallback_class: &str) -> StageErrorOut
             pipeline_status: PipelineStatus::Blocked,
             stage_status: StageStatus::Blocked,
             issue_class: TRD_UNCONFIRMED_ISSUE_CLASS.to_string(),
+            retryable: true,
+        }
+    } else if exception_classifier::is_out_of_scope(message) {
+        StageErrorOutcome {
+            pipeline_status: PipelineStatus::Blocked,
+            stage_status: StageStatus::Blocked,
+            issue_class: OUT_OF_SCOPE_ISSUE_CLASS.to_string(),
+            retryable: true,
+        }
+    } else if exception_classifier::is_security_violation(message) {
+        StageErrorOutcome {
+            pipeline_status: PipelineStatus::Blocked,
+            stage_status: StageStatus::Blocked,
+            issue_class: SECURITY_VIOLATION_ISSUE_CLASS.to_string(),
             retryable: true,
         }
     } else {
@@ -135,7 +150,8 @@ mod tests {
     use super::*;
     use poria_core::types::{
         IssueClass, PipelineConfig, PipelineStatus, StageEnum, StageStatus,
-        AUTH_EXPIRED_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, TRD_UNCONFIRMED_ISSUE_CLASS,
+        AUTH_EXPIRED_ISSUE_CLASS, OUT_OF_SCOPE_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+        TRD_UNCONFIRMED_ISSUE_CLASS,
     };
 
     fn make_stage() -> Stage {
@@ -290,6 +306,18 @@ mod tests {
         assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
         assert_eq!(outcome.stage_status, StageStatus::Blocked);
         assert_eq!(outcome.issue_class, TRD_UNCONFIRMED_ISSUE_CLASS);
+        assert!(outcome.retryable);
+    }
+
+    #[test]
+    fn test_stage_error_outcome_output_guard_blocks() {
+        let outcome = stage_error_outcome(
+            "OutputGuardError: out_of_scope files: [config/secret.toml]; blocked_dependency: []; File \"config/secret.toml\" is outside allowed scope。不得进入 CR。",
+            "dev_failed",
+        );
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
+        assert_eq!(outcome.stage_status, StageStatus::Blocked);
+        assert_eq!(outcome.issue_class, OUT_OF_SCOPE_ISSUE_CLASS);
         assert!(outcome.retryable);
     }
 }

@@ -5,6 +5,7 @@ use serde_json::json;
 
 use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
 use poria_core::feature_context::{FeatureContext, ARTIFACT_PRD, ARTIFACT_TRD};
+use poria_core::pipeline::parse_trd_scope;
 use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
@@ -134,10 +135,16 @@ impl Skill for GenTrdSkill {
             return Err("TRD.md was not written".into());
         }
 
+        let trd_scope = feature_ctx
+            .read_artifact(ARTIFACT_TRD)?
+            .map(|content| parse_trd_scope(&content))
+            .unwrap_or_default();
+
         Ok(SkillOutput {
             output: json!({
                 "trdPath": feature_ctx.artifact_path(ARTIFACT_TRD),
                 "trdExists": true,
+                "trdScope": trd_scope,
                 "agentSessionId": result.session_id,
                 "costUsd": result.cost_usd,
             }),

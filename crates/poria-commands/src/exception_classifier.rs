@@ -47,14 +47,14 @@ pub fn classify(error_message: &str) -> IssueClass {
     if msg.contains("ECONNREFUSED") || msg.contains("ENOTFOUND") || lower.contains("infra") {
         return IssueClass::InfraFailure;
     }
+    if is_out_of_scope(msg) {
+        return IssueClass::OutOfScopeChange;
+    }
     if lower.contains("security")
         || lower.contains("malicious")
         || lower.contains("blocked_dependency")
     {
         return IssueClass::SecurityViolation;
-    }
-    if lower.contains("out_of_scope") || msg.contains("OutputGuardError") {
-        return IssueClass::OutOfScopeChange;
     }
 
     IssueClass::Unknown
@@ -92,6 +92,27 @@ pub fn is_trd_unconfirmed(error_message: &str) -> bool {
         || lower.contains("trd unconfirmed")
         || error_message.contains("trd_unconfirmed")
         || lower.contains("trdunconfirmed")
+}
+
+/// True when Dev OutputGuard blocked out-of-scope files (or mixed Block violations).
+pub fn is_out_of_scope(error_message: &str) -> bool {
+    let lower = error_message.to_ascii_lowercase();
+    error_message.contains("OutputGuardError")
+        || lower.contains("out_of_scope")
+        || error_message.contains("out_of_scope_change")
+        || lower.contains("outofscopechange")
+        || error_message.contains("不得进入 CR")
+}
+
+/// True when a blocked / malicious dependency was introduced.
+pub fn is_security_violation(error_message: &str) -> bool {
+    if is_out_of_scope(error_message) {
+        return false;
+    }
+    let lower = error_message.to_ascii_lowercase();
+    lower.contains("security")
+        || lower.contains("malicious")
+        || lower.contains("blocked_dependency")
 }
 
 #[cfg(test)]
@@ -215,6 +236,13 @@ mod tests {
     fn test_classify_out_of_scope() {
         assert_eq!(classify("out_of_scope edit"), IssueClass::OutOfScopeChange);
         assert_eq!(classify("OutputGuardError"), IssueClass::OutOfScopeChange);
+        assert_eq!(
+            classify("OutputGuardError: out_of_scope files: [config/secret.toml]; blocked_dependency: []; File \"config/secret.toml\" is outside allowed scope。不得进入 CR。"),
+            IssueClass::OutOfScopeChange
+        );
+        assert!(is_out_of_scope(
+            "OutputGuardError: out_of_scope files: [a.ts]; blocked_dependency: []; x。不得进入 CR。"
+        ));
     }
 
     #[test]
