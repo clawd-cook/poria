@@ -12,6 +12,17 @@ pub const BUNDLED_SKILL_DIRS: &[&str] = &[
     SKILL_CODE_REVIEW,
 ];
 
+/// Directory under bundled `skills/` for a Claude skill id (`review-prd` or `skill:review-prd`).
+pub fn bundled_skill_dir_name(skill_id: &str) -> Option<&'static str> {
+    match skill_id.trim() {
+        "skill:review-prd" | "review-prd" => Some(SKILL_REVIEW_PRD),
+        "skill:gen-trd" | "gen-trd" => Some(SKILL_GEN_TRD),
+        "skill:gen-code" | "gen-code" => Some(SKILL_GEN_CODE),
+        "skill:code-review" | "code-review" => Some(SKILL_CODE_REVIEW),
+        _ => None,
+    }
+}
+
 /// Short `claude -p` prompt that names a bundled skill. Keep this short; the
 /// procedure lives in `SKILL.md`.
 pub fn build_claude_skill_prompt(
@@ -147,6 +158,33 @@ mod tests {
         assert!(prompt.contains("gen-trd"));
         assert!(!prompt.contains("后端 TRD"));
         assert!(!prompt.contains("前端基准分支"));
+    }
+
+    #[test]
+    fn bundled_skill_dir_name_maps_claude_stages_only() {
+        assert_eq!(
+            bundled_skill_dir_name("skill:review-prd"),
+            Some(SKILL_REVIEW_PRD)
+        );
+        assert_eq!(bundled_skill_dir_name("review-prd"), Some(SKILL_REVIEW_PRD));
+        assert_eq!(bundled_skill_dir_name("skill:gen-trd"), Some(SKILL_GEN_TRD));
+        assert_eq!(bundled_skill_dir_name("gen-code"), Some(SKILL_GEN_CODE));
+        assert_eq!(
+            bundled_skill_dir_name("skill:gen-code"),
+            Some(SKILL_GEN_CODE)
+        );
+        assert_eq!(
+            bundled_skill_dir_name("skill:code-review"),
+            Some(SKILL_CODE_REVIEW)
+        );
+        assert_eq!(bundled_skill_dir_name("skill:init"), None);
+        assert_eq!(bundled_skill_dir_name("skill:deploy"), None);
+        assert_eq!(bundled_skill_dir_name("init"), None);
+        assert_eq!(bundled_skill_dir_name("deploy"), None);
+        assert_eq!(bundled_skill_dir_name("unknown"), None);
+        assert_eq!(BUNDLED_SKILL_DIRS.len(), 4);
+        assert!(!BUNDLED_SKILL_DIRS.contains(&"init"));
+        assert!(!BUNDLED_SKILL_DIRS.contains(&"deploy"));
     }
 
     #[test]

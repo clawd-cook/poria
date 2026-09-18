@@ -92,9 +92,17 @@ export interface ClaudeProbeResult {
 }
 
 export interface SkillInfo {
+  description: string;
   id: string;
   name: string;
+  version: string;
+}
+
+export interface SkillDetail {
   description: string;
+  id: string;
+  markdown: string | null;
+  name: string;
   version: string;
 }
 
