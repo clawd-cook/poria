@@ -32,6 +32,7 @@ jobs:
         with:
           target: aarch64-apple-darwin
           save-cache: "true"
+          install-cli: "false"
 
       - name: Build desktop crate
         run: cargo build --release --target aarch64-apple-darwin -p poria-desktop
