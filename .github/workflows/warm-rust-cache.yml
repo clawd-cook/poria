@@ -18,6 +18,9 @@ concurrency:
   group: warm-rust-cache
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   warm:
     name: Compile release deps (aarch64)
