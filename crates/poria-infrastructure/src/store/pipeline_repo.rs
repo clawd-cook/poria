@@ -258,6 +258,13 @@ impl SqlitePipelineStore {
         Ok(pipelines)
     }
 
+    pub fn observability_summary(
+        &self,
+    ) -> Result<super::observability::ObservabilitySummary, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        super::observability::summarize(&conn)
+    }
+
     fn load_stages(&self, conn: &Connection, pipeline_id: &str) -> Result<Vec<Stage>, String> {
         let mut stmt = conn.prepare(
             "SELECT id, pipeline_id, name, status, skill_id, retry_count, max_retries, input, output, gate_results, issue, rollback, agent_session_id, started_at, completed_at FROM stages WHERE pipeline_id = ?1 ORDER BY id ASC"

@@ -86,6 +86,9 @@ pub struct PipelineDetail {
     pub has_regressed: bool,
     pub stages: Vec<StageDetail>,
     pub workspace_path: Option<String>,
+    pub cost_usd: Option<f64>,
+    pub duration_ms: Option<i64>,
+    pub hitl_count: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -186,9 +189,40 @@ fn pipeline_to_detail(p: &Pipeline) -> PipelineDetail {
         has_regressed: p.has_regressed,
         stages: p.stages.iter().map(stage_to_detail).collect(),
         workspace_path: init_output_path(p, "workspacePath"),
+        cost_usd: pipeline_cost_usd(p),
+        duration_ms: pipeline_duration_ms(p),
+        hitl_count: p
+            .stages
+            .iter()
+            .filter(|s| s.status == StageStatus::Blocked || s.issue.is_some())
+            .count() as i64,
         created_at: p.created_at.to_rfc3339(),
         updated_at: p.updated_at.to_rfc3339(),
     }
+}
+
+fn pipeline_cost_usd(p: &Pipeline) -> Option<f64> {
+    let total: f64 = p
+        .stages
+        .iter()
+        .filter_map(|stage| {
+            stage
+                .output
+                .as_ref()
+                .and_then(|output| output.get("costUsd"))
+                .and_then(|value| value.as_f64())
+        })
+        .sum();
+    (total > 0.0).then_some(total)
+}
+
+fn pipeline_duration_ms(p: &Pipeline) -> Option<i64> {
+    let starts: Vec<_> = p.stages.iter().filter_map(|s| s.started_at).collect();
+    let ends: Vec<_> = p.stages.iter().filter_map(|s| s.completed_at).collect();
+    let start = starts.into_iter().min()?;
+    let end = ends.into_iter().max().unwrap_or(p.updated_at);
+    let ms = (end - start).num_milliseconds();
+    (ms >= 0).then_some(ms)
 }
 
 #[tauri::command]
@@ -252,6 +286,13 @@ pub async fn get_pipeline(
         .load(&id)?
         .ok_or_else(|| format!("Pipeline not found: {}", id))?;
     Ok(pipeline_to_detail(&pipeline))
+}
+
+#[tauri::command]
+pub async fn get_pipeline_stats(
+    state: State<'_, AppState>,
+) -> Result<poria_infrastructure::store::ObservabilitySummary, String> {
+    state.store.observability_summary()
 }
 
 #[tauri::command]

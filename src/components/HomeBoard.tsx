@@ -31,6 +31,7 @@ import {
 import { useStore } from "../state/store";
 import { DemandProjectDrawer } from "./DemandProjectDrawer";
 import { PipelineDetail } from "./PipelineDetail";
+import { PipelineStatsPanel } from "./PipelineStatsPanel";
 import { StartPipelineWizard } from "./StartPipelineWizard";
 import { StatusBadge } from "./StatusBadge";
 
@@ -363,6 +364,7 @@ export function HomeBoard() {
 
   return (
     <Flex gap={token.marginMD} style={{ height: "100%", padding: token.paddingLG }} vertical>
+      <PipelineStatsPanel compact />
       <Flex align="center" gap={token.marginMD} wrap="wrap">
         <Input.Search
           allowClear

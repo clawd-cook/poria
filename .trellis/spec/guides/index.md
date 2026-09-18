@@ -47,6 +47,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] HITL: Blocked → JME notify + desktop card; first reply wins; escalate_at then degrade to manual
 - [ ] Xingyun writeback on WaitingMerge/Completed/Failed/Cancelled; quality-gate defect; unmerged close MR / merged revert MR (no auto-merge)
 - [ ] Desktop PipelineWorker: file lock + recover RUNNING + SQLite queue shared with silent auto-run (no second in-memory executor)
+- [ ] Local observability: SQLite summary of stage success, p50/p95 duration, cost USD, HITL rate on 看板/设置; single pipeline still shows events + cost
 - [ ] Deploy success is WaitingMerge; poll MR; 一键确认 comments merge-ready and never clicks Merge
 - [ ] `claude_path` / `probe_claude` / Agent `spawn("claude")` / `~/.poria/config.json` vs CWD `poria.config.json`
 

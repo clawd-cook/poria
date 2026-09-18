@@ -12,6 +12,7 @@ import type {
   DemandProjectFileContent,
   PipelineDetail,
   PipelineSummary,
+  ObservabilitySummary,
   RegisteredRepo,
   SkillDetail,
   SkillInfo,
@@ -24,6 +25,10 @@ export async function listPipelines(): Promise<PipelineSummary[]> {
 
 export async function getPipeline(id: string): Promise<PipelineDetail> {
   return invoke<PipelineDetail>("get_pipeline", { id });
+}
+
+export async function getPipelineStats(): Promise<ObservabilitySummary> {
+  return invoke<ObservabilitySummary>("get_pipeline_stats");
 }
 
 export async function submitPipeline(input: SubmitPipelineInput): Promise<string> {
