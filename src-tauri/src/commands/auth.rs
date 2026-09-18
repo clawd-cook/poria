@@ -1,5 +1,4 @@
 use poria_infrastructure::auth;
-use rand::Rng;
 use serde::Serialize;
 use std::time::Duration;
 use tauri::Emitter;
@@ -29,8 +28,7 @@ const SUCCESS_HTML: &str = r#"<!DOCTYPE html>
 </html>"#;
 
 fn generate_state() -> String {
-    let bytes: [u8; 16] = rand::thread_rng().gen();
-    hex::encode(bytes)
+    hex::encode(rand::random::<[u8; 16]>())
 }
 
 fn build_cors_headers() -> String {

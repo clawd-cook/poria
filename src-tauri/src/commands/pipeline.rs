@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use chrono::Utc;
 use serde::Serialize;
-use tauri::Emitter;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
@@ -377,6 +377,8 @@ pub async fn submit_pipeline(
     app.emit("pipeline:list-changed", &pipeline_id)
         .map_err(|e| e.to_string())?;
 
+    enqueue_auto_run(app.clone(), &state, pipeline_id.clone());
+
     Ok(pipeline_id)
 }
 
@@ -440,6 +442,10 @@ pub async fn cancel_pipeline(
         .store
         .save_stage_tx(None, &pipeline, &[cancel_event])?;
 
+    if let Ok(mut scheduler) = state.auto_run.lock() {
+        scheduler.drop_queued(&id);
+    }
+
     app.emit("pipeline:cancelled", &id)
         .map_err(|e| e.to_string())?;
 
@@ -447,40 +453,30 @@ pub async fn cancel_pipeline(
 }
 
 /// Respond to a human-loop request.
-/// Emits a Tauri event for the execution loop to pick up.
 /// `action` is one of: "resume", "skip", "cancel"
 #[tauri::command]
 pub async fn human_loop_respond(
     pipeline_id: String,
     action: String,
     app: tauri::AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // Validate action
     match action.as_str() {
-        "resume" | "skip" | "cancel" => {}
-        _ => {
-            return Err(format!(
-                "Invalid action '{}': must be resume, skip, or cancel",
-                action
-            ))
+        "resume" => {
+            enqueue_auto_run(app, &state, pipeline_id);
+            Ok(())
         }
+        "skip" => {
+            skip_actionable_stage(&pipeline_id, &app, &state)?;
+            enqueue_auto_run(app, &state, pipeline_id);
+            Ok(())
+        }
+        "cancel" => cancel_pipeline(pipeline_id, app, state).await,
+        _ => Err(format!(
+            "Invalid action '{}': must be resume, skip, or cancel",
+            action
+        )),
     }
-
-    #[derive(Serialize)]
-    struct HumanResponse {
-        pipeline_id: String,
-        action: String,
-    }
-
-    let payload = HumanResponse {
-        pipeline_id,
-        action,
-    };
-
-    app.emit("human-loop:response", &payload)
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
 }
 
 /// Request execution of the next pending stage in a pipeline.
@@ -490,69 +486,24 @@ pub async fn execute_stage(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let store = state.store.clone();
-    let mut pipeline = store
-        .load(&pipeline_id)?
-        .ok_or_else(|| format!("Pipeline not found: {}", pipeline_id))?;
-
-    let stage_idx = pipeline
-        .stages
-        .iter()
-        .position(|s| s.status != StageStatus::Completed && s.status != StageStatus::Skipped)
-        .ok_or("No pending stages")?;
-
-    if pipeline.stages[stage_idx].status == StageStatus::Running {
-        return Err("阶段正在执行".into());
+    if let Some(current) = state
+        .auto_run
+        .lock()
+        .map_err(|e| e.to_string())?
+        .current()
+        .map(str::to_string)
+    {
+        if current == pipeline_id {
+            return Err("流水线正在自动执行".into());
+        }
+        return Err("请等待当前流水线自动执行完成".into());
     }
-
-    let stage_name = pipeline.stages[stage_idx].name;
-    match stage_name {
-        StageEnum::Init => run_init_stage(&mut pipeline, stage_idx, &app, &store).await,
-        StageEnum::ReviewPrd => {
-            run_review_prd_stage(
-                &mut pipeline,
-                stage_idx,
-                &app,
-                &store,
-                state.agent_pool.clone(),
-            )
-            .await
-        }
-        StageEnum::Design => {
-            run_design_stage(
-                &mut pipeline,
-                stage_idx,
-                &app,
-                &store,
-                state.agent_pool.clone(),
-            )
-            .await
-        }
-        StageEnum::Workspace => {
-            run_workspace_stage(&mut pipeline, stage_idx, &app, &store, &state.repo_store).await
-        }
-        StageEnum::Dev => {
-            run_dev_stage(
-                &mut pipeline,
-                stage_idx,
-                &app,
-                &store,
-                state.agent_pool.clone(),
-            )
-            .await
-        }
-        StageEnum::Cr => {
-            run_cr_stage(
-                &mut pipeline,
-                stage_idx,
-                &app,
-                &store,
-                state.agent_pool.clone(),
-            )
-            .await
-        }
-        StageEnum::Deploy => run_deploy_stage(&mut pipeline, stage_idx, &app, &store).await,
+    let advanced =
+        execute_next_stage(&pipeline_id, &app, &AutoRunRuntime::from_state(&state)).await?;
+    if !advanced {
+        return Err("没有待执行的阶段".into());
     }
+    Ok(())
 }
 
 fn emit_pipeline_updated(app: &tauri::AppHandle, pipeline: &Pipeline) -> Result<(), String> {
@@ -583,6 +534,232 @@ fn emit_pipeline_updated(app: &tauri::AppHandle, pipeline: &Pipeline) -> Result<
     app.emit("pipeline:list-changed", &pipeline.id)
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[derive(Clone)]
+struct AutoRunRuntime {
+    agent_pool: Arc<poria_resources::ClaudeAgentPool>,
+    auto_run: Arc<std::sync::Mutex<crate::AutoRunScheduler>>,
+    repo_store: Arc<poria_infrastructure::store::RegisteredRepoStore>,
+    store: Arc<SqlitePipelineStore>,
+}
+
+impl AutoRunRuntime {
+    fn from_state(state: &AppState) -> Self {
+        Self {
+            agent_pool: state.agent_pool.clone(),
+            auto_run: state.auto_run.clone(),
+            repo_store: state.repo_store.clone(),
+            store: state.store.clone(),
+        }
+    }
+}
+
+fn enqueue_auto_run(app: AppHandle, state: &AppState, pipeline_id: String) {
+    let start_id = match state.auto_run.lock() {
+        Ok(mut scheduler) => scheduler.submit(pipeline_id),
+        Err(error) => {
+            tracing::error!(error = %error, "auto-run scheduler poisoned");
+            None
+        }
+    };
+    if let Some(id) = start_id {
+        spawn_auto_run(app, AutoRunRuntime::from_state(state), id);
+    }
+}
+
+fn spawn_auto_run(app: AppHandle, runtime: AutoRunRuntime, pipeline_id: String) {
+    tauri::async_runtime::spawn(async move {
+        run_auto_loop(app.clone(), runtime.clone(), pipeline_id.clone()).await;
+        let next = runtime
+            .auto_run
+            .lock()
+            .ok()
+            .and_then(|mut scheduler| scheduler.finish(&pipeline_id));
+        if let Some(next_id) = next {
+            spawn_auto_run(app, runtime, next_id);
+        }
+    });
+}
+
+async fn run_auto_loop(app: AppHandle, runtime: AutoRunRuntime, pipeline_id: String) {
+    loop {
+        match execute_next_stage(&pipeline_id, &app, &runtime).await {
+            Ok(true) => continue,
+            Ok(false) => break,
+            Err(message) => {
+                let _ = emit_human_request(&app, &runtime.store, &pipeline_id, &message);
+                break;
+            }
+        }
+    }
+}
+
+async fn execute_next_stage(
+    pipeline_id: &str,
+    app: &AppHandle,
+    runtime: &AutoRunRuntime,
+) -> Result<bool, String> {
+    let store = runtime.store.clone();
+    let mut pipeline = store
+        .load(pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+
+    match pipeline.status {
+        PipelineStatus::Cancelled | PipelineStatus::Completed | PipelineStatus::WaitingMerge => {
+            return Ok(false);
+        }
+        _ => {}
+    }
+
+    let Some(stage_idx) = pipeline
+        .stages
+        .iter()
+        .position(|s| s.status != StageStatus::Completed && s.status != StageStatus::Skipped)
+    else {
+        return Ok(false);
+    };
+
+    if pipeline.stages[stage_idx].status == StageStatus::Running {
+        return Err("阶段正在执行".into());
+    }
+
+    let stage_name = pipeline.stages[stage_idx].name;
+    match stage_name {
+        StageEnum::Init => run_init_stage(&mut pipeline, stage_idx, app, &store).await?,
+        StageEnum::ReviewPrd => {
+            run_review_prd_stage(
+                &mut pipeline,
+                stage_idx,
+                app,
+                &store,
+                runtime.agent_pool.clone(),
+            )
+            .await?;
+        }
+        StageEnum::Design => {
+            run_design_stage(
+                &mut pipeline,
+                stage_idx,
+                app,
+                &store,
+                runtime.agent_pool.clone(),
+            )
+            .await?;
+        }
+        StageEnum::Workspace => {
+            run_workspace_stage(&mut pipeline, stage_idx, app, &store, &runtime.repo_store).await?;
+        }
+        StageEnum::Dev => {
+            run_dev_stage(
+                &mut pipeline,
+                stage_idx,
+                app,
+                &store,
+                runtime.agent_pool.clone(),
+            )
+            .await?;
+        }
+        StageEnum::Cr => {
+            run_cr_stage(
+                &mut pipeline,
+                stage_idx,
+                app,
+                &store,
+                runtime.agent_pool.clone(),
+            )
+            .await?;
+        }
+        StageEnum::Deploy => run_deploy_stage(&mut pipeline, stage_idx, app, &store).await?,
+    }
+    Ok(true)
+}
+
+fn emit_human_request(
+    app: &AppHandle,
+    store: &SqlitePipelineStore,
+    pipeline_id: &str,
+    detail: &str,
+) -> Result<(), String> {
+    let pipeline = store
+        .load(pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+    let stage = pipeline
+        .stages
+        .iter()
+        .find(|s| s.status == StageStatus::Failed || s.status == StageStatus::Blocked)
+        .or_else(|| {
+            pipeline
+                .stages
+                .iter()
+                .find(|s| s.status != StageStatus::Completed && s.status != StageStatus::Skipped)
+        });
+    let stage_name = stage
+        .map(|s| {
+            serde_json::to_string(&s.name)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string()
+        })
+        .unwrap_or_default();
+    let issue_class = stage
+        .and_then(|s| s.issue.as_ref())
+        .map(|issue| issue.class.clone())
+        .unwrap_or_else(|| "stage_failed".into());
+    app.emit(
+        "human:request",
+        serde_json::json!({
+            "pipelineId": pipeline_id,
+            "stage": stage_name,
+            "issueClass": issue_class,
+            "detail": detail,
+        }),
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn is_skippable_status(status: StageStatus) -> bool {
+    matches!(
+        status,
+        StageStatus::Pending | StageStatus::Failed | StageStatus::Blocked
+    )
+}
+
+fn skip_actionable_stage(
+    pipeline_id: &str,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<(), String> {
+    let mut pipeline = state
+        .store
+        .load(pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+    let Some(stage) = pipeline
+        .stages
+        .iter_mut()
+        .find(|s| is_skippable_status(s.status))
+    else {
+        return Err("没有可跳过的阶段".into());
+    };
+    let stage_name = serde_json::to_string(&stage.name)
+        .unwrap_or_default()
+        .trim_matches('"')
+        .to_string();
+    stage.status = StageStatus::Skipped;
+    pipeline.updated_at = Utc::now();
+    state
+        .store
+        .save_stage_tx(None, &pipeline, &[])
+        .map_err(|e| e.to_string())?;
+    app.emit(
+        "stage:skipped",
+        serde_json::json!({
+            "pipeline_id": pipeline_id,
+            "stage": stage_name,
+        }),
+    )
+    .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, &pipeline)
 }
 
 async fn run_init_stage(
@@ -1454,7 +1631,7 @@ async fn run_workspace_stage(
     }
 }
 
-/// Skip a pending stage in a pipeline.
+/// Skip a pending, failed, or blocked stage in a pipeline.
 #[tauri::command]
 pub async fn skip_stage(
     pipeline_id: String,
@@ -1472,7 +1649,7 @@ pub async fn skip_stage(
             .unwrap_or_default()
             .trim_matches('"')
             .to_string();
-        name == stage_name && s.status == StageStatus::Pending
+        name == stage_name && is_skippable_status(s.status)
     }) {
         stage.status = StageStatus::Skipped;
         pipeline.updated_at = Utc::now();
@@ -1489,8 +1666,9 @@ pub async fn skip_stage(
             }),
         )
         .map_err(|e| e.to_string())?;
+        emit_pipeline_updated(&app, &pipeline)?;
     } else {
-        return Err(format!("Stage '{}' not found or not pending", stage_name));
+        return Err(format!("Stage '{}' not found or not skippable", stage_name));
     }
 
     Ok(())

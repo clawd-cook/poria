@@ -4,9 +4,10 @@ import {
   ReloadOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Descriptions, Flex, Space, Typography } from "antd";
+import { Alert, App, Button, Descriptions, Flex, Space, Typography } from "antd";
 import { useState } from "react";
 
+import { invokeErrorMessage } from "../lib/errors";
 import { humanLoopRespond } from "../lib/tauri";
 import { useStore } from "../state/store";
 
@@ -19,6 +20,7 @@ interface HumanLoopCardProps {
 
 export function HumanLoopCard({ pipelineId, stage, issueClass, detail }: HumanLoopCardProps) {
   const { dispatch } = useStore();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState<string | null>(null);
 
   async function handleAction(action: string) {
@@ -26,8 +28,8 @@ export function HumanLoopCard({ pipelineId, stage, issueClass, detail }: HumanLo
     try {
       await humanLoopRespond(pipelineId, action);
       dispatch({ type: "humanRequestDismissed", pipelineId });
-    } catch {
-      /* noop */
+    } catch (error) {
+      message.error(invokeErrorMessage(error, "处理协助请求失败"));
     } finally {
       setLoading(null);
     }

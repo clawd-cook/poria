@@ -1,14 +1,18 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
+mod auto_run;
 mod commands;
 
+pub use auto_run::AutoRunScheduler;
+
 pub struct AppState {
-    pub store: Arc<poria_infrastructure::store::SqlitePipelineStore>,
-    pub repo_store: Arc<poria_infrastructure::store::RegisteredRepoStore>,
-    pub event_store: Arc<poria_infrastructure::store::EventStore>,
     pub agent_pool: Arc<poria_resources::ClaudeAgentPool>,
+    pub auto_run: Arc<Mutex<AutoRunScheduler>>,
+    pub event_store: Arc<poria_infrastructure::store::EventStore>,
+    pub repo_store: Arc<poria_infrastructure::store::RegisteredRepoStore>,
     pub session_tracker: Arc<poria_resources::SessionTracker>,
+    pub store: Arc<poria_infrastructure::store::SqlitePipelineStore>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,11 +57,12 @@ pub fn run() {
             let session_tracker = Arc::new(poria_resources::SessionTracker::new());
 
             app.manage(AppState {
-                store,
-                repo_store,
-                event_store,
                 agent_pool,
+                auto_run: Arc::new(Mutex::new(AutoRunScheduler::default())),
+                event_store,
+                repo_store,
                 session_tracker,
+                store,
             });
 
             Ok(())
@@ -76,6 +81,7 @@ pub fn run() {
             commands::auth::logout,
             commands::demands::list_demands,
             commands::demands::preview_demand_prd,
+            commands::demands::resolve_demand_link,
             commands::projects::list_demand_project,
             commands::projects::read_demand_project_file,
             commands::config::get_config,

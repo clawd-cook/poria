@@ -6,7 +6,7 @@ mod git_url;
 mod types;
 
 pub use bind_branch::{bind_branch, BindBranchInput, BindBranchResult};
-pub use demand_status::format_demand_status;
+pub use demand_status::{format_demand_status, is_visible_demand_status};
 pub use demand_url::{
     feature_branch_name, feature_slug, parse_xingyun_demand_url, xingyun_demand_view_url,
 };
