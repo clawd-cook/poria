@@ -8,14 +8,24 @@ const { Link, Text } = Typography;
 export function AuthStatus() {
   const { state } = useStore();
   const { token } = theme.useToken();
-  const { logged_in, username } = state.auth;
+  const { cookie_valid, logged_in, username } = state.auth;
   const pad = { padding: `${token.paddingSM}px ${token.paddingMD}px` };
 
   if (!logged_in) {
     return (
       <div style={{ alignItems: "center", display: "flex", gap: token.marginSM, ...pad }}>
         <Badge status="error" />
-        <Link onClick={() => startLogin()}>登录</Link>
+        <Link onClick={() => void startLogin()}>登录</Link>
+      </div>
+    );
+  }
+
+  if (!cookie_valid) {
+    return (
+      <div style={{ alignItems: "center", display: "flex", gap: token.marginSM, ...pad }}>
+        <Badge status="warning" />
+        <Text type="warning">{username}</Text>
+        <Link onClick={() => void startLogin()}>重新登录</Link>
       </div>
     );
   }
@@ -24,7 +34,7 @@ export function AuthStatus() {
     <div style={{ alignItems: "center", display: "flex", gap: token.marginSM, ...pad }}>
       <Badge status="success" />
       <Text type="secondary">{username}</Text>
-      <Link type="secondary" onClick={() => logout()}>
+      <Link type="secondary" onClick={() => void logout()}>
         登出
       </Link>
     </div>

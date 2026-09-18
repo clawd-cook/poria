@@ -1,5 +1,6 @@
 use poria_core::types::{
-    IssueClass, Pipeline, PipelineStatus, Stage, StageIssue, StageStatus, ISSUE_POLICIES,
+    IssueClass, Pipeline, PipelineStatus, Stage, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS,
+    ISSUE_POLICIES,
 };
 
 use crate::exception_classifier;
@@ -18,6 +19,35 @@ pub enum ErrorAction {
     Retry,
     Blocked,
     Failed,
+}
+
+/// Status + issue metadata for a desktop (or other) stage failure path
+/// that does not go through `handle_stage_error`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StageErrorOutcome {
+    pub pipeline_status: PipelineStatus,
+    pub stage_status: StageStatus,
+    pub issue_class: String,
+    pub retryable: bool,
+}
+
+/// Auth errors become Blocked so worktrees / pushed branches are kept.
+pub fn stage_error_outcome(message: &str, fallback_class: &str) -> StageErrorOutcome {
+    if exception_classifier::is_auth_expired(message) {
+        StageErrorOutcome {
+            pipeline_status: PipelineStatus::Blocked,
+            stage_status: StageStatus::Blocked,
+            issue_class: AUTH_EXPIRED_ISSUE_CLASS.to_string(),
+            retryable: true,
+        }
+    } else {
+        StageErrorOutcome {
+            pipeline_status: PipelineStatus::Failed,
+            stage_status: StageStatus::Failed,
+            issue_class: fallback_class.to_string(),
+            retryable: true,
+        }
+    }
 }
 
 /// Inspects an error, applies the issue-policy table, mutates stage status
@@ -89,7 +119,10 @@ pub async fn handle_stage_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use poria_core::types::{PipelineConfig, PipelineStatus, StageEnum, StageStatus};
+    use poria_core::types::{
+        IssueClass, PipelineConfig, PipelineStatus, StageEnum, StageStatus,
+        AUTH_EXPIRED_ISSUE_CLASS,
+    };
 
     fn make_stage() -> Stage {
         Stage {
@@ -173,5 +206,33 @@ mod tests {
             handle_stage_error(&mut status, &mut stage, "rate limit reached", None, None).await;
         assert_eq!(result.action, ErrorAction::Failed);
         assert_eq!(status, PipelineStatus::Failed);
+    }
+
+    #[tokio::test]
+    async fn test_auth_expired_blocks_without_retry() {
+        let mut status = PipelineStatus::Running;
+        let mut stage = make_stage();
+        let result = handle_stage_error(&mut status, &mut stage, "请先登录", None, None).await;
+        assert_eq!(result.issue_class, IssueClass::AuthExpired);
+        assert_eq!(result.action, ErrorAction::Blocked);
+        assert_eq!(stage.status, StageStatus::Blocked);
+        assert_eq!(status, PipelineStatus::Blocked);
+        assert_eq!(stage.retry_count, 0);
+    }
+
+    #[test]
+    fn test_stage_error_outcome_auth_blocks() {
+        let outcome = stage_error_outcome("请先登录", "deploy_failed");
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
+        assert_eq!(outcome.stage_status, StageStatus::Blocked);
+        assert_eq!(outcome.issue_class, AUTH_EXPIRED_ISSUE_CLASS);
+        assert!(outcome.retryable);
+    }
+
+    #[test]
+    fn test_stage_error_outcome_other_fails() {
+        let outcome = stage_error_outcome("bind failed: HTTP 522721", "deploy_failed");
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Failed);
+        assert_eq!(outcome.issue_class, "deploy_failed");
     }
 }

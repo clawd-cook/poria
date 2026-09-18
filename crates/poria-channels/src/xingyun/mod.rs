@@ -240,7 +240,7 @@ pub(crate) async fn jacp_fetch(
         .map_err(|e| format!("{}: {}", error_label, e))?;
 
     if response.status().as_u16() == 401 {
-        return Err("Auth expired, please re-login (poria auth login)".into());
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
     }
     if !response.status().is_success() {
         return Err(format!("{}: HTTP {}", error_label, response.status()).into());
@@ -301,6 +301,26 @@ pub async fn list_demands(
         query.page_size,
         fallback_receiver,
     ))
+}
+
+/// One-row JACP query used to detect an expired SSO cookie before Init/Deploy.
+pub async fn probe_sso(
+    credentials: &JacpCredentials,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if credentials.cookie.trim().is_empty() {
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
+    }
+    let _ = list_demands(
+        credentials,
+        DemandListQuery {
+            accepted_by_me: false,
+            current: 1,
+            keyword: None,
+            page_size: 1,
+        },
+    )
+    .await?;
+    Ok(())
 }
 
 /// Fetch a demand by numeric id.

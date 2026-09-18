@@ -44,8 +44,17 @@ pub fn extract_page_id_from_url(url: &str) -> Result<String, String> {
     for (i, seg) in segments.iter().enumerate() {
         if matches!(
             *seg,
-            "pages" | "page" | "doc" | "table" | "ppt" | "board" | "mind" | "meeting" | "p_view"
-                | "sheets" | "sheet"
+            "pages"
+                | "page"
+                | "doc"
+                | "table"
+                | "ppt"
+                | "board"
+                | "mind"
+                | "meeting"
+                | "p_view"
+                | "sheets"
+                | "sheet"
         ) && i + 1 < segments.len()
         {
             let candidate = segments[i + 1].trim();
@@ -87,7 +96,7 @@ async fn request_json(
 
     let response = req.send().await?;
     if response.status().as_u16() == 401 {
-        return Err("JoySpace 登录已过期，请重新登录".into());
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
     }
     if !response.status().is_success() {
         return Err(format!("{path} HTTP {}", response.status()).into());

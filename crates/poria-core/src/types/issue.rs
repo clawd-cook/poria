@@ -2,6 +2,12 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Stored on `Stage.issue.class` when SSO cookie is missing or rejected.
+pub const AUTH_EXPIRED_ISSUE_CLASS: &str = "auth_expired";
+
+/// User-facing copy for 401 / missing cookie (Xingyun / JoySpace / Coding).
+pub const AUTH_EXPIRED_USER_MESSAGE: &str = "SSO Cookie 已过期，请重新登录";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueClass {
@@ -168,11 +174,11 @@ pub static ISSUE_POLICIES: Lazy<HashMap<IssueClass, IssuePolicy>> = Lazy::new(||
     m.insert(
         IssueClass::AuthExpired,
         IssuePolicy {
-            auto_retry: 1,
+            auto_retry: 0,
             notify_roles: vec!["developer".into()],
             escalate_at: Some("1h".into()),
             retry_delay: None,
-            note: Some("自动尝试刷新浏览器 cookie".into()),
+            note: Some("静默重读 auth.json 后仍失败则 Blocked，等待重新登录".into()),
         },
     );
     m.insert(

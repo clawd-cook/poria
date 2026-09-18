@@ -2,55 +2,74 @@ use poria_core::types::IssueClass;
 
 /// Classifies an error message into a known issue category.
 pub fn classify(error_message: &str) -> IssueClass {
-    let msg = error_message;
-
-    if msg.contains("compilation") || msg.contains("build failed") || msg.contains("tsc") {
-        return IssueClass::CompilationError;
-    }
-    if msg.contains("test fail") || msg.contains("vitest") || msg.contains("jest") {
-        return IssueClass::TestFailure;
-    }
-    if msg.contains("timeout") || msg.contains("AGENT_TIMEOUT") {
-        return IssueClass::AgentTimeout;
-    }
-    if msg.contains("rate limit") || msg.contains("429") || msg.contains("overloaded") {
-        return IssueClass::LlmRateLimit;
-    }
-    if msg.contains("ambiguous") || msg.contains("P0 unanswered") {
-        return IssueClass::RequirementAmbiguous;
-    }
-    if msg.contains("PRD")
-        && (msg.contains("empty") || msg.contains("invalid") || msg.contains("export failed"))
-    {
-        return IssueClass::PrdInvalid;
-    }
-    if msg.contains("merge conflict") || msg.contains("CONFLICT") {
-        return IssueClass::MergeConflict;
-    }
-    if msg.contains("cr score") || msg.contains("LOW_CR_SCORE") {
-        return IssueClass::LowCrScore;
-    }
-    if msg.contains("diff too large") || msg.contains("DIFF_TOO_LARGE") {
-        return IssueClass::DiffTooLarge;
-    }
-    if msg.contains("permission denied") || msg.contains("403") || msg.contains("forbidden") {
-        return IssueClass::PermissionDenied;
-    }
-    if msg.contains("ECONNREFUSED") || msg.contains("ENOTFOUND") || msg.contains("infra") {
-        return IssueClass::InfraFailure;
-    }
-    if msg.contains("security") || msg.contains("malicious") || msg.contains("blocked_dependency") {
-        return IssueClass::SecurityViolation;
-    }
-    if msg.contains("out_of_scope") || msg.contains("OutputGuardError") {
-        return IssueClass::OutOfScopeChange;
-    }
-    if msg.contains("auth expired") || msg.contains("cookie expired") || msg.contains("AuthExpired")
-    {
+    if is_auth_expired(error_message) {
         return IssueClass::AuthExpired;
     }
 
+    let msg = error_message;
+    let lower = msg.to_ascii_lowercase();
+
+    if msg.contains("compilation") || msg.contains("build failed") || lower.contains("tsc") {
+        return IssueClass::CompilationError;
+    }
+    if msg.contains("test fail") || lower.contains("vitest") || lower.contains("jest") {
+        return IssueClass::TestFailure;
+    }
+    if lower.contains("timeout") || msg.contains("AGENT_TIMEOUT") {
+        return IssueClass::AgentTimeout;
+    }
+    if lower.contains("rate limit") || msg.contains("429") || lower.contains("overloaded") {
+        return IssueClass::LlmRateLimit;
+    }
+    if lower.contains("ambiguous") || msg.contains("P0 unanswered") {
+        return IssueClass::RequirementAmbiguous;
+    }
+    if msg.contains("PRD")
+        && (lower.contains("empty") || lower.contains("invalid") || lower.contains("export failed"))
+    {
+        return IssueClass::PrdInvalid;
+    }
+    if lower.contains("merge conflict") || msg.contains("CONFLICT") {
+        return IssueClass::MergeConflict;
+    }
+    if lower.contains("cr score") || msg.contains("LOW_CR_SCORE") {
+        return IssueClass::LowCrScore;
+    }
+    if lower.contains("diff too large") || msg.contains("DIFF_TOO_LARGE") {
+        return IssueClass::DiffTooLarge;
+    }
+    if lower.contains("permission denied") || msg.contains("403") || lower.contains("forbidden") {
+        return IssueClass::PermissionDenied;
+    }
+    if msg.contains("ECONNREFUSED") || msg.contains("ENOTFOUND") || lower.contains("infra") {
+        return IssueClass::InfraFailure;
+    }
+    if lower.contains("security")
+        || lower.contains("malicious")
+        || lower.contains("blocked_dependency")
+    {
+        return IssueClass::SecurityViolation;
+    }
+    if lower.contains("out_of_scope") || msg.contains("OutputGuardError") {
+        return IssueClass::OutOfScopeChange;
+    }
+
     IssueClass::Unknown
+}
+
+/// True when the error is a missing / expired SSO cookie (401, 请先登录, etc.).
+pub fn is_auth_expired(error_message: &str) -> bool {
+    let lower = error_message.to_ascii_lowercase();
+    error_message.contains("请先登录")
+        || error_message.contains("登录已过期")
+        || error_message.contains("请重新登录")
+        || lower.contains("auth expired")
+        || lower.contains("authexpired")
+        || lower.contains("authrequired")
+        || lower.contains("authentication expired")
+        || lower.contains("cookie expired")
+        || lower.contains("http 401")
+        || lower.contains("sso cookie")
 }
 
 #[cfg(test)]
@@ -163,6 +182,24 @@ mod tests {
         assert_eq!(classify("auth expired"), IssueClass::AuthExpired);
         assert_eq!(classify("cookie expired"), IssueClass::AuthExpired);
         assert_eq!(classify("AuthExpired"), IssueClass::AuthExpired);
+        assert_eq!(classify("请先登录"), IssueClass::AuthExpired);
+        assert_eq!(
+            classify("JoySpace 登录已过期，请重新登录"),
+            IssueClass::AuthExpired
+        );
+        assert_eq!(
+            classify("SSO Cookie 已过期，请重新登录"),
+            IssueClass::AuthExpired
+        );
+        assert_eq!(
+            classify("Authentication expired during pipeline execution"),
+            IssueClass::AuthExpired
+        );
+        assert_eq!(
+            classify("AuthRequired: please run poria auth login"),
+            IssueClass::AuthExpired
+        );
+        assert_eq!(classify("Demand list: HTTP 401"), IssueClass::AuthExpired);
     }
 
     #[test]

@@ -165,7 +165,7 @@ pub(crate) async fn easyci_gql<T: serde::de::DeserializeOwned>(
         .map_err(|e| format!("{}: {}", error_label, e))?;
 
     if response.status().as_u16() == 401 {
-        return Err("Auth expired, please re-login (poria auth login)".into());
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
     }
     if !response.status().is_success() {
         return Err(format!("{}: HTTP {}", error_label, response.status()).into());
@@ -408,7 +408,7 @@ pub async fn create_merge_request_live(
         .map_err(|e| format!("Create merge request failed: {}", e))?;
 
     if response.status().as_u16() == 401 {
-        return Err("Auth expired, please re-login (poria auth login)".into());
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
     }
     if !response.status().is_success() {
         let status = response.status();
@@ -459,7 +459,7 @@ pub async fn get_mr_status_live(
         .map_err(|e| format!("Get MR status failed: {}", e))?;
 
     if response.status().as_u16() == 401 {
-        return Err("Auth expired, please re-login (poria auth login)".into());
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
     }
     if response.status().as_u16() == 404 {
         return Err(format!("MR not found: project={} iid={}", project_path, iid).into());
@@ -505,7 +505,7 @@ pub async fn find_mr_live(
         .map_err(|e| format!("Find MR failed: {}", e))?;
 
     if response.status().as_u16() == 401 {
-        return Err("Auth expired, please re-login (poria auth login)".into());
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
     }
     if !response.status().is_success() {
         return Err(format!("Find MR failed: HTTP {}", response.status()).into());
