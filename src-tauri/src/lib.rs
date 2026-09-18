@@ -92,6 +92,7 @@ pub fn run() {
             commands::demands::resolve_demand_link,
             commands::projects::list_demand_project,
             commands::projects::read_demand_project_file,
+            commands::projects::write_demand_project_file,
             commands::config::get_config,
             commands::config::update_config,
             commands::config::probe_claude,

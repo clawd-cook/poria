@@ -76,6 +76,8 @@ export function PipelineDetail() {
       {humanRequest && humanRequest.pipelineId === detail.id ? (
         <div style={{ margin: `${token.margin}px 0` }}>
           <HumanLoopCard
+            demandCode={detail.demand_code}
+            demandId={detail.demand_id}
             detail={humanRequest.detail}
             issueClass={humanRequest.issueClass}
             pipelineId={humanRequest.pipelineId}

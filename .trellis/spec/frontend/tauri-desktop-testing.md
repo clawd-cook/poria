@@ -303,6 +303,36 @@ Do **not** `Failed` an auth miss after `git push` / EasyCI bind; resume retries 
 - Unit: `cargo test -p poria-commands -- classify`; `cargo test -p poria-commands -- auth_expired`; `cargo test -p poria-commands -- stage_error_outcome`; `cargo test -p poria-infrastructure -- ensure_valid`; `cargo test -p poria-core -- pending_to_blocked`.
 - Manual: start a pipeline, expire/remove cookie, confirm Deploy/Init hangs as 阻塞 not 已失败; log in; stage continues.
 
+## Scenario: Design blocked on unanswered P0
+
+### 1. Scope / Trigger
+
+Use when changing `PRD_REVIEW.md` parsing, Design entry, `write_demand_project_file`, or HumanLoopCard P0 editor. Verify in `poria-desktop`.
+
+### 2. Signatures
+
+```typescript
+invoke("write_demand_project_file", { demandCode, demandId, fileName: "PRD_REVIEW.md", content });
+invoke("human_loop_respond", { pipelineId, action: "resume" });
+```
+
+Parser lives in `poria-core` (`parse_prd_review`). Blank / `TODO` / `待填写` / `待确认` on P0 `An` lines fail `prd_review_p0`. Design evaluates that gate only. ReviewPrd still completes.
+
+### 3. Contracts
+
+| Event | Pipeline | Stage | UI |
+| --- | --- | --- | --- |
+| Design entry, P0 unanswered | `blocked` | Design `blocked`, `requirement_ambiguous` | HumanLoopCard 「填写 P0 答案」; 文档 drawer can edit `PRD_REVIEW.md` |
+| P1/P2 unanswered, P0 done | continues | Design runs | warn only |
+| Save answers then resume | `running` | Design retried | card dismissed when P0 done |
+
+JME `send` is best-effort placeholder; desktop fill-in is the required loop.
+
+### 4. Tests Required
+
+- Unit: `cargo test -p poria-core -- prd_review`; `cargo test -p poria-commands -- stage_error_outcome_p0`; `cargo test -p poria-desktop --lib -- load_prd_review_status`.
+- Manual: after ReviewPrd, Design hangs 阻塞; fill P0 in HITL modal or 文档 drawer; 答完后继续.
+
 ## Common Mistake: Vite tab vs desktop window
 
 **Symptom**: 1420 shows the UI but 登记/登录/需求列表 fail or the store listener throws `transformCallback`.

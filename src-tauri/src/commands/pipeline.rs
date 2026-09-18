@@ -9,13 +9,16 @@ use tauri_plugin_opener::OpenerExt;
 
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
-use poria_commands::{is_auth_expired, stage_error_outcome};
-use poria_core::contracts::{Skill, SkillContext};
-use poria_core::pipeline::{create_pipeline_id, PipelineEvent as CorePipelineEvent};
+use poria_commands::{is_auth_expired, is_requirement_ambiguous, stage_error_outcome};
+use poria_core::contracts::{Channel, ChannelContext, Skill, SkillContext};
+use poria_core::pipeline::{
+    create_pipeline_id, evaluate_gates, parse_prd_review, GatePhase,
+    PipelineEvent as CorePipelineEvent, StageResult, DEFAULT_GATES,
+};
 use poria_core::types::{
     BackendContext, IssueClass, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, SkillInput,
     Stage, StageEnum, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS, AUTH_EXPIRED_USER_MESSAGE,
-    STAGE_ORDER,
+    REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, STAGE_ORDER,
 };
 use poria_infrastructure::auth::{
     assert_path_under_projects_root, assert_path_under_repos_root,
@@ -680,8 +683,14 @@ fn fail_or_block_stage(
     });
     pipeline.updated_at = Utc::now();
     let event = if outcome.pipeline_status == PipelineStatus::Blocked {
-        emit_cookie_invalid(app);
-        CorePipelineEvent::stage_blocked(&pipeline.id, stage_name, IssueClass::AuthExpired)
+        if is_auth_expired(&message) {
+            emit_cookie_invalid(app);
+        }
+        CorePipelineEvent::stage_blocked(
+            &pipeline.id,
+            stage_name,
+            blocked_issue_class(&outcome.issue_class),
+        )
     } else {
         CorePipelineEvent::stage_failed(
             &pipeline.id,
@@ -898,6 +907,8 @@ fn emit_human_request(
         .unwrap_or_else(|| {
             if is_auth_expired(detail) {
                 AUTH_EXPIRED_ISSUE_CLASS.to_string()
+            } else if is_requirement_ambiguous(detail) {
+                REQUIREMENT_AMBIGUOUS_ISSUE_CLASS.to_string()
             } else {
                 "stage_failed".into()
             }
@@ -1272,6 +1283,109 @@ fn resolve_demand_project_dir(pipeline: &Pipeline) -> Result<PathBuf, String> {
     get_demand_project_dir(None, &folder)
 }
 
+fn blocked_issue_class(class: &str) -> IssueClass {
+    if class.eq_ignore_ascii_case(AUTH_EXPIRED_ISSUE_CLASS)
+        || class.eq_ignore_ascii_case("AuthExpired")
+    {
+        IssueClass::AuthExpired
+    } else if class.eq_ignore_ascii_case(REQUIREMENT_AMBIGUOUS_ISSUE_CLASS)
+        || class.eq_ignore_ascii_case("RequirementAmbiguous")
+    {
+        IssueClass::RequirementAmbiguous
+    } else {
+        IssueClass::Unknown
+    }
+}
+
+fn load_prd_review_status(project_dir: &Path) -> poria_core::pipeline::PrdReviewStatus {
+    let path = project_dir.join("PRD_REVIEW.md");
+    if !path.is_file() {
+        return poria_core::pipeline::PrdReviewStatus {
+            p0_done: false,
+            p1_done: true,
+            p2_done: true,
+            p0_unanswered: vec!["PRD_REVIEW.md".into()],
+            p1_unanswered: vec![],
+            p2_unanswered: vec![],
+        };
+    }
+    match std::fs::read_to_string(&path) {
+        Ok(content) => parse_prd_review(&content),
+        Err(_) => poria_core::pipeline::PrdReviewStatus {
+            p0_done: false,
+            p1_done: true,
+            p2_done: true,
+            p0_unanswered: vec!["PRD_REVIEW.md".into()],
+            p1_unanswered: vec![],
+            p2_unanswered: vec![],
+        },
+    }
+}
+
+async fn notify_product_p0(pipeline: &Pipeline, detail: &str) {
+    let channel = poria_channels::jme::create_jme_channel();
+    let demand_name = pipeline.demand_name.as_deref().unwrap_or("-");
+    let input = serde_json::json!({
+        "action": "send",
+        "send": {
+            "target": "product",
+            "message": format!(
+                "【Poria】需求 {} ({}) P0 未答，Design 已阻塞。{}",
+                pipeline.demand_code, demand_name, detail
+            ),
+        }
+    });
+    let ctx = ChannelContext {
+        credentials: serde_json::json!({}),
+        pipeline_id: Some(pipeline.id.clone()),
+    };
+    if let Err(err) = channel.execute(input, ctx).await {
+        tracing::warn!(error = %err, "JME P0 notify failed");
+    }
+}
+
+async fn enforce_prd_review_p0(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+) -> Result<(), String> {
+    let project_dir = resolve_demand_project_dir(pipeline)?;
+    let review_status = load_prd_review_status(&project_dir);
+    let stage_result = StageResult {
+        prd_review_p0_done: Some(review_status.p0_done),
+        ..Default::default()
+    };
+    let p0_rules: Vec<_> = DEFAULT_GATES
+        .iter()
+        .filter(|rule| rule.id == "prd_review_p0")
+        .cloned()
+        .collect();
+    let evaluation = evaluate_gates(&stage_result, &p0_rules, GatePhase::StageEntry);
+    pipeline.stages[stage_idx].gate_results = Some(review_status.gate_results_json());
+
+    if evaluation.all_pass && review_status.p0_done {
+        if let Some(warn) = review_status.warn_message() {
+            tracing::warn!(pipeline_id = %pipeline.id, "{warn}");
+        }
+        return Ok(());
+    }
+
+    let mut message = review_status.p0_block_message();
+    if let Some(warn) = review_status.warn_message() {
+        message = format!("{message}\n{warn}");
+    }
+    notify_product_p0(pipeline, &message).await;
+    fail_or_block_stage(
+        pipeline,
+        stage_idx,
+        app,
+        store,
+        message,
+        REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+    )
+}
+
 async fn run_review_prd_stage(
     pipeline: &mut Pipeline,
     stage_idx: usize,
@@ -1392,6 +1506,10 @@ async fn run_design_stage(
     }
     let workspace_str = workspace.to_string_lossy().into_owned();
     let worktree_str = worktree.to_string_lossy().into_owned();
+
+    if let Err(message) = enforce_prd_review_p0(pipeline, stage_idx, app, store).await {
+        return Err(message);
+    }
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -1981,8 +2099,9 @@ pub async fn open_workspace(
 #[cfg(test)]
 mod tests {
     use super::{
-        dedupe_latest_by_task_key, merge_init_workspace_output, require_prd_and_backend_trd_urls,
-        submit_reuse_decision, SubmitReuse,
+        blocked_issue_class, dedupe_latest_by_task_key, load_prd_review_status,
+        merge_init_workspace_output, require_prd_and_backend_trd_urls, submit_reuse_decision,
+        SubmitReuse,
     };
     use chrono::Utc;
     use poria_core::types::{Pipeline, PipelineConfig, PipelineStatus, RepoConfig};
@@ -2134,5 +2253,53 @@ mod tests {
         let id42 = deduped.iter().find(|p| p.demand_id == 42).unwrap();
         assert_eq!(id42.id, "pl-new");
         assert!(deduped.iter().any(|p| p.id == "pl-other"));
+    }
+
+    #[test]
+    fn blocked_issue_class_maps_p0_and_auth() {
+        use poria_core::types::{
+            IssueClass, AUTH_EXPIRED_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+        };
+        assert_eq!(
+            blocked_issue_class(AUTH_EXPIRED_ISSUE_CLASS),
+            IssueClass::AuthExpired
+        );
+        assert_eq!(
+            blocked_issue_class(REQUIREMENT_AMBIGUOUS_ISSUE_CLASS),
+            IssueClass::RequirementAmbiguous
+        );
+    }
+
+    #[test]
+    fn load_prd_review_status_blocks_missing_and_blank_p0() {
+        let dir = std::env::temp_dir().join(format!(
+            "poria-p0-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let missing = load_prd_review_status(&dir);
+        assert!(!missing.p0_done);
+        assert_eq!(missing.p0_unanswered, vec!["PRD_REVIEW.md"]);
+
+        std::fs::write(
+            dir.join("PRD_REVIEW.md"),
+            "### P0\n\n**Q1**（P0 · GAP · x）：口径？<br>\n**A1**：\n",
+        )
+        .unwrap();
+        let unanswered = load_prd_review_status(&dir);
+        assert!(!unanswered.p0_done);
+        assert_eq!(unanswered.p0_unanswered, vec!["Q1"]);
+
+        std::fs::write(
+            dir.join("PRD_REVIEW.md"),
+            "### P0\n\n**Q1**（P0 · GAP · x）：口径？<br>\n**A1**：已确认走列表\n",
+        )
+        .unwrap();
+        let answered = load_prd_review_status(&dir);
+        assert!(answered.p0_done);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

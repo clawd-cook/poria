@@ -1,6 +1,6 @@
 use poria_core::types::{
     IssueClass, Pipeline, PipelineStatus, Stage, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS,
-    ISSUE_POLICIES,
+    ISSUE_POLICIES, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
 };
 
 use crate::exception_classifier;
@@ -31,13 +31,20 @@ pub struct StageErrorOutcome {
     pub retryable: bool,
 }
 
-/// Auth errors become Blocked so worktrees / pushed branches are kept.
+/// Auth / unanswered-P0 errors become Blocked so worktrees and docs are kept.
 pub fn stage_error_outcome(message: &str, fallback_class: &str) -> StageErrorOutcome {
     if exception_classifier::is_auth_expired(message) {
         StageErrorOutcome {
             pipeline_status: PipelineStatus::Blocked,
             stage_status: StageStatus::Blocked,
             issue_class: AUTH_EXPIRED_ISSUE_CLASS.to_string(),
+            retryable: true,
+        }
+    } else if exception_classifier::is_requirement_ambiguous(message) {
+        StageErrorOutcome {
+            pipeline_status: PipelineStatus::Blocked,
+            stage_status: StageStatus::Blocked,
+            issue_class: REQUIREMENT_AMBIGUOUS_ISSUE_CLASS.to_string(),
             retryable: true,
         }
     } else {
@@ -121,7 +128,7 @@ mod tests {
     use super::*;
     use poria_core::types::{
         IssueClass, PipelineConfig, PipelineStatus, StageEnum, StageStatus,
-        AUTH_EXPIRED_ISSUE_CLASS,
+        AUTH_EXPIRED_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
     };
 
     fn make_stage() -> Stage {
@@ -234,5 +241,36 @@ mod tests {
         let outcome = stage_error_outcome("bind failed: HTTP 522721", "deploy_failed");
         assert_eq!(outcome.pipeline_status, PipelineStatus::Failed);
         assert_eq!(outcome.issue_class, "deploy_failed");
+    }
+
+    #[test]
+    fn test_stage_error_outcome_p0_blocks() {
+        let outcome = stage_error_outcome(
+            "P0 unanswered: Q1 请在 PRD_REVIEW.md 填写后再进入设计",
+            "design_failed",
+        );
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
+        assert_eq!(outcome.stage_status, StageStatus::Blocked);
+        assert_eq!(outcome.issue_class, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS);
+        assert!(outcome.retryable);
+    }
+
+    #[tokio::test]
+    async fn test_requirement_ambiguous_blocks_without_retry() {
+        let mut status = PipelineStatus::Running;
+        let mut stage = make_stage();
+        let result = handle_stage_error(
+            &mut status,
+            &mut stage,
+            "P0 unanswered: Q1 请在 PRD_REVIEW.md 填写后再进入设计",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(result.issue_class, IssueClass::RequirementAmbiguous);
+        assert_eq!(result.action, ErrorAction::Blocked);
+        assert_eq!(stage.status, StageStatus::Blocked);
+        assert_eq!(status, PipelineStatus::Blocked);
+        assert_eq!(stage.retry_count, 0);
     }
 }

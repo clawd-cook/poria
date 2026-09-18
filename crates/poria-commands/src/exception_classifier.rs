@@ -21,7 +21,7 @@ pub fn classify(error_message: &str) -> IssueClass {
     if lower.contains("rate limit") || msg.contains("429") || lower.contains("overloaded") {
         return IssueClass::LlmRateLimit;
     }
-    if lower.contains("ambiguous") || msg.contains("P0 unanswered") {
+    if is_requirement_ambiguous(msg) {
         return IssueClass::RequirementAmbiguous;
     }
     if msg.contains("PRD")
@@ -72,6 +72,16 @@ pub fn is_auth_expired(error_message: &str) -> bool {
         || lower.contains("sso cookie")
 }
 
+/// True when Design is blocked because PRD_REVIEW.md P0 answers are missing.
+pub fn is_requirement_ambiguous(error_message: &str) -> bool {
+    let lower = error_message.to_ascii_lowercase();
+    lower.contains("ambiguous")
+        || error_message.contains("P0 unanswered")
+        || lower.contains("p0 unanswered")
+        || error_message.contains("requirement_ambiguous")
+        || lower.contains("requirementambiguous")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,6 +128,13 @@ mod tests {
             IssueClass::RequirementAmbiguous
         );
         assert_eq!(classify("P0 unanswered"), IssueClass::RequirementAmbiguous);
+        assert_eq!(
+            classify("P0 unanswered: Q1 请在 PRD_REVIEW.md 填写后再进入设计"),
+            IssueClass::RequirementAmbiguous
+        );
+        assert!(is_requirement_ambiguous(
+            "P0 unanswered: Q1 请在 PRD_REVIEW.md 填写后再进入设计"
+        ));
     }
 
     #[test]

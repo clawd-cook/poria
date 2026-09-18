@@ -6,7 +6,7 @@ pub mod traits;
 pub mod worker;
 
 // Re-export primary public items for ergonomic use.
-pub use exception_classifier::{classify, is_auth_expired};
+pub use exception_classifier::{classify, is_auth_expired, is_requirement_ambiguous};
 pub use executor::PipelineExecutor;
 pub use handle_error::{
     handle_stage_error, stage_error_outcome, ErrorAction, HandleErrorResult, StageErrorOutcome,
