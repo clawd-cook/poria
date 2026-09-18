@@ -1,6 +1,7 @@
 use chrono::Utc;
 use poria_core::pipeline::{
     evaluate_gates, transition_pipeline, transition_stage, PipelineEvent, StageResult,
+    DEFAULT_GATES,
 };
 use poria_core::types::{
     GateOnFail, GatePhase, Pipeline, PipelineStatus, RollbackCommand, RollbackCommandType,
@@ -12,6 +13,14 @@ use crate::traits::{
     is_multi_repo_stage, stage_skill_id, CredentialGuard, HumanLoop, MultiRepoOrchestrator,
     PipelineStore, SkillLoader,
 };
+
+fn pipeline_gate_rules(pipeline: &Pipeline) -> &[poria_core::types::GateRule] {
+    if pipeline.config.gates.is_empty() {
+        &DEFAULT_GATES
+    } else {
+        &pipeline.config.gates
+    }
+}
 
 /// Finds the first stage that is neither completed nor skipped.
 fn find_current_stage(pipeline: &Pipeline) -> Option<usize> {
@@ -426,7 +435,11 @@ where
             .as_ref()
             .and_then(|o| o.get("findings"))
             .cloned();
-        let evaluation = evaluate_gates(&cr_result, &pipeline.config.gates, GatePhase::StageExit);
+        let evaluation = evaluate_gates(
+            &cr_result,
+            pipeline_gate_rules(pipeline),
+            GatePhase::StageExit,
+        );
         events.push(PipelineEvent::gate_evaluated(
             &pipeline.id,
             stage_name,
@@ -438,9 +451,7 @@ where
         }
 
         // Look for a regress rule that failed
-        let regress_rule_data = pipeline
-            .config
-            .gates
+        let regress_rule_data = pipeline_gate_rules(pipeline)
             .iter()
             .find(|r| {
                 r.enabled
@@ -538,7 +549,11 @@ where
                 .and_then(|v| v.as_bool()),
             ..Default::default()
         };
-        let evaluation = evaluate_gates(&deploy_result, &pipeline.config.gates, GatePhase::Deploy);
+        let evaluation = evaluate_gates(
+            &deploy_result,
+            pipeline_gate_rules(pipeline),
+            GatePhase::Deploy,
+        );
         events.push(PipelineEvent::gate_evaluated(
             &pipeline.id,
             stage_name,
@@ -651,8 +666,7 @@ mod tests {
         );
         assert!(rollback.commands.iter().any(|cmd| {
             cmd.command_type == RollbackCommandType::RemoveDirectory
-                && cmd.params.get("path").map(String::as_str)
-                    == Some("/tmp/.poria/workspaces/p1")
+                && cmd.params.get("path").map(String::as_str) == Some("/tmp/.poria/workspaces/p1")
         }));
         assert!(rollback.commands.iter().any(|cmd| {
             cmd.command_type == RollbackCommandType::DeleteBranch
@@ -660,4 +674,3 @@ mod tests {
         }));
     }
 }
-

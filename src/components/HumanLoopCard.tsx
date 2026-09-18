@@ -26,6 +26,7 @@ import { isAuthExpiredIssue, isAuthExpiredMessage } from "../lib/auth";
 import { invokeErrorMessage } from "../lib/errors";
 import { isOutputGuardBlock } from "../lib/outputGuard";
 import { isP0UnansweredMessage, isRequirementAmbiguousIssue } from "../lib/prdReview";
+import { isQualityGateBlock, qualityGateTitle } from "../lib/qualityGates";
 import { confirmTrd, humanLoopRespond, readDemandProjectFile, startLogin } from "../lib/tauri";
 import { isTrdUnconfirmedIssue, isTrdUnconfirmedMessage } from "../lib/trd";
 import type { PrdReviewStatus } from "../lib/types";
@@ -64,6 +65,12 @@ export function HumanLoopCard({
   const p0Blocked = isRequirementAmbiguousIssue(issueClass) || isP0UnansweredMessage(detail);
   const trdBlocked = isTrdUnconfirmedIssue(issueClass) || isTrdUnconfirmedMessage(detail);
   const outputGuardBlocked = isOutputGuardBlock(issueClass, detail);
+  const qualityGateBlocked =
+    !authExpired &&
+    !p0Blocked &&
+    !trdBlocked &&
+    !outputGuardBlocked &&
+    isQualityGateBlock(issueClass, detail);
 
   async function handleAction(action: string) {
     setLoading(action);
@@ -146,7 +153,9 @@ export function HumanLoopCard({
                 ? "请确认前端 TRD 后再进入开发"
                 : outputGuardBlocked
                   ? "代码超出 TRD 允许范围，无法进入 CR"
-                  : "Pipeline 需要协助"
+                  : qualityGateBlocked
+                    ? qualityGateTitle(issueClass, detail)
+                    : "Pipeline 需要协助"
         }
         description={
           <Space direction="vertical" style={{ width: "100%" }}>
@@ -205,7 +214,7 @@ export function HumanLoopCard({
                 loading={loading === "resume"}
                 onClick={() => void handleAction("resume")}
                 type={
-                  authExpired || p0Blocked || trdBlocked || outputGuardBlocked
+                  authExpired || p0Blocked || trdBlocked || outputGuardBlocked || qualityGateBlocked
                     ? "default"
                     : "primary"
                 }
@@ -218,7 +227,9 @@ export function HumanLoopCard({
                       ? "确认后继续"
                       : outputGuardBlocked
                         ? "收回越界改动后继续"
-                        : "修复并重试"}
+                        : qualityGateBlocked
+                          ? "补齐报告后继续"
+                          : "修复并重试"}
               </Button>
               <Button
                 icon={<ForwardOutlined />}

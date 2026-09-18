@@ -52,6 +52,8 @@ fn fixture_output() -> SkillOutput {
             "crReportPath": "/tmp/poria-fixture/project/CR_REPORT.md",
             "crScore": "A",
             "findings": [],
+            "securityPass": true,
+            "securitySource": "npm_audit",
             "securityScanPassed": true
         }),
         gates_pass: None,
@@ -175,15 +177,27 @@ impl Skill for CodeReviewSkill {
             .or_else(|| result.result.as_deref().and_then(extract_cr_score))
             .unwrap_or_else(|| "B+".into());
 
+        let security =
+            crate::quality_gates::collect_security_scan(Path::new(&frontend_worktree)).await;
+        let security_message = crate::quality_gates::security_block_message(&security);
+        if !security_message.is_empty() {
+            tracing::warn!(pipeline_id = %input.pipeline.id, "{security_message}");
+        }
+
         Ok(SkillOutput {
             output: json!({
                 "crReportPath": feature_ctx.artifact_path(ARTIFACT_CR),
                 "crExists": true,
                 "crScore": cr_score,
+                "securityPass": security.pass,
+                "securitySource": security.source,
+                "securityHigh": security.high,
+                "securityCritical": security.critical,
+                "securityDetail": security.detail,
                 "agentSessionId": result.session_id,
                 "costUsd": result.cost_usd,
             }),
-            gates_pass: Some(true),
+            gates_pass: Some(security.pass == Some(true)),
         })
     }
 }

@@ -368,6 +368,21 @@ Design writes `## 允许修改范围` globs into `TRD.md`; desktop persists `pip
 - Unit: `cargo test -p poria-core -- trd_scope`; `cargo test -p poria-resources -- output_guard`; `cargo test -p poria-skills -- output_guard`; `cargo test -p poria-commands -- output_guard`.
 - Manual: GenCode touching a file outside TRD scope leaves Dev 阻塞; 收回越界改动后继续; CR does not start until Guard passes.
 
+## Scenario: CR/Deploy quality gates use measured data
+
+### 1. Scope / Trigger
+
+Use when changing `ci_build` / `test_coverage` / `security_scan`, Coding MR pipelines, coverage report parsers, npm/cargo audit, or HumanLoopCard quality-gate copy. Verify in `poria-desktop`.
+
+### 2. Signatures
+
+CR writes `securityPass` from npm/pnpm/cargo audit JSON (high/critical or missing JSON is not a pass). Deploy writes `ciBuildPass` from GitLab `/merge_requests/:iid/pipelines` (fallback commit statuses) and `testCoverage` from `coverage-summary.json` / `lcov.info`. Desktop evaluates StageExit / Deploy gates; empty `config.gates` falls back to `DEFAULT_GATES`. Missing data Blocks.
+
+### 3. Tests Required
+
+- Unit: `cargo test -p poria-core -- quality_reports`; `cargo test -p poria-core -- coverage_missing`; `cargo test -p poria-skills -- quality_gates`; `cargo test -p poria-commands -- coverage_missing`.
+- Manual: Deploy without a coverage file stays 阻塞; HITL 补齐报告后继续. Do not complete Deploy because the model printed a coverage number.
+
 ## Common Mistake: Vite tab vs desktop window
 
 **Symptom**: 1420 shows the UI but 登记/登录/需求列表 fail or the store listener throws `transformCallback`.

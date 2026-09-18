@@ -7,8 +7,8 @@ pub mod worker;
 
 // Re-export primary public items for ergonomic use.
 pub use exception_classifier::{
-    classify, is_auth_expired, is_out_of_scope, is_requirement_ambiguous, is_security_violation,
-    is_trd_unconfirmed,
+    classify, is_auth_expired, is_out_of_scope, is_quality_gate_block, is_requirement_ambiguous,
+    is_security_violation, is_trd_unconfirmed,
 };
 pub use executor::PipelineExecutor;
 pub use handle_error::{

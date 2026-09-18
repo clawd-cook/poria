@@ -113,6 +113,20 @@ pub fn is_security_violation(error_message: &str) -> bool {
     lower.contains("security")
         || lower.contains("malicious")
         || lower.contains("blocked_dependency")
+        || lower.contains("security_scan")
+}
+
+/// True when CI / coverage / security gate data is missing or failed (fail-closed).
+pub fn is_quality_gate_block(error_message: &str) -> bool {
+    let lower = error_message.to_ascii_lowercase();
+    lower.contains("ci_build")
+        || lower.contains("coverage missing")
+        || lower.contains("test_coverage")
+        || lower.contains("security_scan")
+        || error_message.contains("CI 构建")
+        || error_message.contains("测试覆盖率")
+        || error_message.contains("安全扫描")
+        || lower.contains("cibuildpass")
 }
 
 #[cfg(test)]
@@ -273,5 +287,19 @@ mod tests {
     #[test]
     fn test_classify_unknown() {
         assert_eq!(classify("some random error"), IssueClass::Unknown);
+    }
+
+    #[test]
+    fn test_quality_gate_block_matches_rule_ids() {
+        assert!(is_quality_gate_block(
+            "ci_build: CI 构建: 未通过 (actual=null, threshold=null)"
+        ));
+        assert!(is_quality_gate_block(
+            "coverage missing: 未找到 coverage-summary.json / lcov.info，不能把覆盖率当通过"
+        ));
+        assert!(is_quality_gate_block("test_coverage: 测试覆盖率: 未通过"));
+        assert!(is_security_violation(
+            "security_scan missing: no scanner output"
+        ));
     }
 }

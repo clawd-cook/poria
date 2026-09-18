@@ -5,6 +5,7 @@ mod error;
 mod fixture;
 mod human_loop;
 pub mod prompt_templates;
+mod quality_gates;
 mod stage_skill_map;
 mod workspace_layout;
 
@@ -25,6 +26,9 @@ pub use claude_prompt::{
 };
 pub use error::SkillError;
 pub use fixture::is_fixture_mode;
+pub use quality_gates::{
+    collect_coverage_report, collect_security_scan, coverage_block_message, security_block_message,
+};
 pub use workspace_layout::{
     bundled_skills_complete, list_bundled_skill_docs, parse_skill_markdown,
     prepare_pipeline_workspace, read_bundled_skill_markdown, repo_bundled_skills_dir,
