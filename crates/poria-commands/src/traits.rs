@@ -113,13 +113,23 @@ pub trait FileSystem: Send + Sync {
 
 /// Simple process-level file lock.
 pub trait FileLock: Send + Sync {
-    fn acquire(&self);
+    /// Returns `true` when this process now holds the lock.
+    fn acquire(&self) -> bool;
     fn release(&self);
 }
 
 /// Work queue for pipeline IDs.
 pub trait Queue: Send + Sync {
     fn dequeue(&self) -> Option<String>;
+}
+
+/// Runs a pipeline until it blocks, fails, or waits for merge.
+#[async_trait]
+pub trait PipelineRun: Send + Sync {
+    async fn run_pipeline(
+        &self,
+        pipeline_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Recovers pipelines that were interrupted (e.g. after a crash).

@@ -11,7 +11,7 @@ use poria_core::types::{
 use crate::handle_error::{handle_stage_error, ErrorAction};
 use crate::traits::{
     is_multi_repo_stage, stage_skill_id, CredentialGuard, HumanLoop, MultiRepoOrchestrator,
-    PipelineStore, SkillLoader,
+    PipelineRun, PipelineStore, SkillLoader,
 };
 
 fn pipeline_gate_rules(pipeline: &Pipeline) -> &[poria_core::types::GateRule] {
@@ -155,7 +155,31 @@ where
             multi_repo_orchestrator,
         }
     }
+}
 
+#[async_trait::async_trait]
+impl<S, L, C, M> PipelineRun for PipelineExecutor<S, L, C, M>
+where
+    S: PipelineStore + 'static,
+    L: SkillLoader + 'static,
+    C: CredentialGuard + 'static,
+    M: MultiRepoOrchestrator + 'static,
+{
+    async fn run_pipeline(
+        &self,
+        pipeline_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.run(pipeline_id).await
+    }
+}
+
+impl<S, L, C, M> PipelineExecutor<S, L, C, M>
+where
+    S: PipelineStore,
+    L: SkillLoader,
+    C: CredentialGuard,
+    M: MultiRepoOrchestrator,
+{
     /// Runs a pipeline to completion (or until it blocks/fails).
     pub async fn run(
         &self,

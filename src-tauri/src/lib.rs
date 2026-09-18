@@ -1,20 +1,22 @@
 use std::collections::HashSet;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
-mod auto_run;
 mod commands;
-
-pub use auto_run::AutoRunScheduler;
+mod pipeline_worker;
 
 pub struct AppState {
     pub agent_pool: Arc<poria_resources::ClaudeAgentPool>,
-    pub auto_run: Arc<Mutex<AutoRunScheduler>>,
+    pub current_run: Arc<Mutex<Option<String>>>,
     pub event_store: Arc<poria_infrastructure::store::EventStore>,
     pub human_reply_inflight: Arc<Mutex<HashSet<String>>>,
+    pub pipeline_queue: Arc<poria_infrastructure::store::PipelineQueue>,
     pub repo_store: Arc<poria_infrastructure::store::RegisteredRepoStore>,
     pub session_tracker: Arc<poria_resources::SessionTracker>,
     pub store: Arc<poria_infrastructure::store::SqlitePipelineStore>,
+    pub worker_lock: Arc<poria_infrastructure::store::WorkerLock>,
+    pub worker_stopped: Arc<AtomicBool>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -52,6 +54,15 @@ pub fn run() {
             let repo_store = Arc::new(poria_infrastructure::store::RegisteredRepoStore::new(
                 repo_conn,
             ));
+            let queue_conn = poria_infrastructure::store::init_database(&db_path)
+                .expect("Failed to open queue database connection");
+            let pipeline_queue =
+                Arc::new(poria_infrastructure::store::PipelineQueue::new(queue_conn));
+            let lock_dir = db_path
+                .parent()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            let worker_lock = Arc::new(poria_infrastructure::store::WorkerLock::new(&lock_dir));
             if let Err(e) = repo_store.fail_interrupted_clones() {
                 tracing::warn!(error = %e, "failed to mark interrupted clones as failed");
             }
@@ -67,13 +78,18 @@ pub fn run() {
 
             app.manage(AppState {
                 agent_pool,
-                auto_run: Arc::new(Mutex::new(AutoRunScheduler::default())),
+                current_run: Arc::new(Mutex::new(None)),
                 event_store,
                 human_reply_inflight: Arc::new(Mutex::new(HashSet::new())),
+                pipeline_queue,
                 repo_store,
                 session_tracker,
                 store: store.clone(),
+                worker_lock,
+                worker_stopped: Arc::new(AtomicBool::new(true)),
             });
+
+            pipeline_worker::spawn_pipeline_worker(app.handle().clone());
 
             let poll_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -125,6 +141,14 @@ pub fn run() {
             commands::repos::sync_repo,
             commands::repos::update_repo_default_branch,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    pipeline_worker::request_worker_stop(&state.worker_stopped);
+                    let _ = state.worker_lock.release();
+                }
+            }
+        });
 }

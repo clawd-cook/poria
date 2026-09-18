@@ -1,11 +1,11 @@
 use poria_core::pipeline::{transition_pipeline, PipelineEvent};
 use poria_core::types::{Pipeline, PipelineStatus, StageEnum};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
-use crate::executor::PipelineExecutor;
 use crate::traits::{
-    CodingChannel, CredentialGuard, FileLock, HumanLoop, MultiRepoOrchestrator, PipelineStore,
-    Queue, Recovery, SkillLoader,
+    CodingChannel, FileLock, HumanLoop, PipelineRun, PipelineStore, Queue, Recovery,
 };
 
 const QUEUE_POLL_INTERVAL: Duration = Duration::from_secs(5);
@@ -13,97 +13,112 @@ const MR_POLL_INTERVAL: Duration = Duration::from_secs(60);
 const MR_STALE_THRESHOLD: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Dependencies the worker needs beyond the executor itself.
-pub struct WorkerDeps<S, L, C, M>
+pub struct WorkerDeps<S>
 where
     S: PipelineStore,
-    L: SkillLoader,
-    C: CredentialGuard,
-    M: MultiRepoOrchestrator,
 {
     pub store: S,
     pub queue: Box<dyn Queue>,
-    pub executor: PipelineExecutor<S, L, C, M>,
+    pub runner: Box<dyn PipelineRun>,
     pub recovery: Box<dyn Recovery>,
-    pub coding_channel: Box<dyn CodingChannel>,
-    pub human_loop: Box<dyn HumanLoop>,
+    pub coding_channel: Option<Box<dyn CodingChannel>>,
+    pub human_loop: Option<Box<dyn HumanLoop>>,
 }
 
 /// The background pipeline worker that consumes a queue and polls MR status.
-pub struct PipelineWorker<S, L, C, M = ()>
+pub struct PipelineWorker<S>
 where
     S: PipelineStore,
-    L: SkillLoader,
-    C: CredentialGuard,
-    M: MultiRepoOrchestrator,
 {
-    deps: WorkerDeps<S, L, C, M>,
+    deps: WorkerDeps<S>,
     lock: Box<dyn FileLock>,
-    stopped: bool,
+    stopped: Arc<AtomicBool>,
+    poll_merge_requests: bool,
 }
 
-impl<S, L, C, M> PipelineWorker<S, L, C, M>
+impl<S> PipelineWorker<S>
 where
     S: PipelineStore,
-    L: SkillLoader,
-    C: CredentialGuard,
-    M: MultiRepoOrchestrator,
 {
-    pub fn new(deps: WorkerDeps<S, L, C, M>, lock: Box<dyn FileLock>) -> Self {
+    pub fn new(deps: WorkerDeps<S>, lock: Box<dyn FileLock>, stopped: Arc<AtomicBool>) -> Self {
         Self {
             deps,
             lock,
-            stopped: true,
+            stopped,
+            poll_merge_requests: true,
         }
     }
 
+    /// Desktop already polls WaitingMerge + HITL; skip the worker MR loop.
+    pub fn without_mr_poll(mut self) -> Self {
+        self.poll_merge_requests = false;
+        self
+    }
+
+    pub fn stopper(&self) -> Arc<AtomicBool> {
+        self.stopped.clone()
+    }
+
     /// Start the worker loop. Acquires the file lock, recovers interrupted
-    /// pipelines, then runs queue consumption and MR polling concurrently.
-    pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.lock.acquire();
+    /// pipelines, then runs queue consumption and optional MR polling.
+    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if !self.lock.acquire() {
+            return Err("Another Poria worker is already running".into());
+        }
+        let result = self.run_loops().await;
+        self.lock.release();
+        result
+    }
+
+    async fn run_loops(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.deps.recovery.recover_all().await?;
-        self.stopped = false;
-        tokio::join!(self.consume_queue(), self.poll_merge_requests());
+        self.stopped.store(false, Ordering::SeqCst);
+        if self.poll_merge_requests {
+            tokio::join!(self.consume_queue(), self.poll_merge_requests_loop());
+        } else {
+            self.consume_queue().await;
+        }
         Ok(())
     }
 
     /// Signal the worker to stop after the current iteration.
-    pub fn stop(&mut self) {
-        self.stopped = true;
-        self.lock.release();
+    pub fn stop(&self) {
+        self.stopped.store(true, Ordering::SeqCst);
     }
 
     async fn consume_queue(&self) {
-        if self.stopped {
-            return;
-        }
         loop {
+            if self.stopped.load(Ordering::SeqCst) {
+                break;
+            }
             if let Some(pipeline_id) = self.deps.queue.dequeue() {
-                let _ = self.deps.executor.run(&pipeline_id).await;
+                let _ = self.deps.runner.run_pipeline(&pipeline_id).await;
             } else {
                 tokio::time::sleep(QUEUE_POLL_INTERVAL).await;
             }
         }
     }
 
-    async fn poll_merge_requests(&self) {
-        if self.stopped {
+    async fn poll_merge_requests_loop(&self) {
+        let Some(coding) = self.deps.coding_channel.as_ref() else {
             return;
-        }
+        };
         loop {
             tokio::time::sleep(MR_POLL_INTERVAL).await;
-            if self.stopped {
+            if self.stopped.load(Ordering::SeqCst) {
                 break;
             }
 
             if let Ok(pipelines) = self.deps.store.find_by_status("waiting_merge").await {
                 for mut pipeline in pipelines {
-                    self.check_merge_status(&mut pipeline).await;
+                    self.check_merge_status(coding.as_ref(), &mut pipeline)
+                        .await;
                 }
             }
         }
     }
 
-    async fn check_merge_status(&self, pipeline: &mut Pipeline) {
+    async fn check_merge_status(&self, coding: &dyn CodingChannel, pipeline: &mut Pipeline) {
         let mr_urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
 
         if mr_urls.is_empty() {
@@ -122,7 +137,7 @@ where
 
         let mut all_merged = true;
         for url in &mr_urls {
-            match self.deps.coding_channel.get_mr_status(url).await {
+            match coding.get_mr_status(url).await {
                 Ok(status) if status == "closed" => {
                     if transition_pipeline(&mut pipeline.status, PipelineStatus::Failed).is_ok() {
                         self.deps.store.save_stage_tx(
@@ -154,20 +169,164 @@ where
             return;
         }
 
-        // Check for stale MRs
         let deploy_stage = pipeline.stages.iter().find(|s| s.name == StageEnum::Deploy);
         if let Some(completed_at) = deploy_stage.and_then(|s| s.completed_at) {
             let elapsed = chrono::Utc::now() - completed_at;
             if elapsed.to_std().unwrap_or_default() > MR_STALE_THRESHOLD {
-                let _ = self
-                    .deps
-                    .human_loop
-                    .escalate(
-                        pipeline,
-                        &format!("MR(s) pending merge for over 24h: {}", mr_urls.join(", ")),
-                    )
-                    .await;
+                if let Some(human_loop) = self.deps.human_loop.as_deref() {
+                    let _ = human_loop
+                        .escalate(
+                            pipeline,
+                            &format!("MR(s) pending merge for over 24h: {}", mr_urls.join(", ")),
+                        )
+                        .await;
+                }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use poria_core::pipeline::PipelineEvent;
+    use poria_core::types::{Pipeline, Stage};
+    use std::sync::Mutex;
+
+    struct MemLock {
+        deny: bool,
+    }
+
+    impl FileLock for MemLock {
+        fn acquire(&self) -> bool {
+            !self.deny
+        }
+        fn release(&self) {}
+    }
+
+    struct MemQueue {
+        items: Mutex<Vec<String>>,
+    }
+
+    impl Queue for MemQueue {
+        fn dequeue(&self) -> Option<String> {
+            let mut items = self.items.lock().unwrap();
+            if items.is_empty() {
+                None
+            } else {
+                Some(items.remove(0))
+            }
+        }
+    }
+
+    struct RecordingRunner {
+        ran: Mutex<Vec<String>>,
+    }
+
+    #[async_trait]
+    impl PipelineRun for RecordingRunner {
+        async fn run_pipeline(
+            &self,
+            pipeline_id: &str,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.ran.lock().unwrap().push(pipeline_id.to_string());
+            Ok(())
+        }
+    }
+
+    struct FlagRecovery {
+        called: Mutex<bool>,
+    }
+
+    #[async_trait]
+    impl Recovery for FlagRecovery {
+        async fn recover_all(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            *self.called.lock().unwrap() = true;
+            Ok(())
+        }
+    }
+
+    struct EmptyStore;
+
+    #[async_trait]
+    impl PipelineStore for EmptyStore {
+        async fn load(
+            &self,
+            _pipeline_id: &str,
+        ) -> Result<Pipeline, Box<dyn std::error::Error + Send + Sync>> {
+            Err("not found".into())
+        }
+        fn save_stage_tx(
+            &self,
+            _stage: Option<&Stage>,
+            _pipeline: &Pipeline,
+            _events: &[PipelineEvent],
+        ) {
+        }
+        async fn find_by_status(
+            &self,
+            _status: &str,
+        ) -> Result<Vec<Pipeline>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn start_fails_when_lock_held() {
+        let worker = PipelineWorker::new(
+            WorkerDeps {
+                store: EmptyStore,
+                queue: Box::new(MemQueue {
+                    items: Mutex::new(vec![]),
+                }),
+                runner: Box::new(RecordingRunner {
+                    ran: Mutex::new(Vec::new()),
+                }),
+                recovery: Box::new(FlagRecovery {
+                    called: Mutex::new(false),
+                }),
+                coding_channel: None,
+                human_loop: None,
+            },
+            Box::new(MemLock { deny: true }),
+            Arc::new(AtomicBool::new(true)),
+        )
+        .without_mr_poll();
+        let err = worker.start().await.unwrap_err().to_string();
+        assert!(err.contains("already running"));
+    }
+
+    #[tokio::test]
+    async fn recover_then_drain_runs_queued_ids() {
+        let runner = RecordingRunner {
+            ran: Mutex::new(Vec::new()),
+        };
+        let recovery = FlagRecovery {
+            called: Mutex::new(false),
+        };
+        let worker = PipelineWorker::new(
+            WorkerDeps {
+                store: EmptyStore,
+                queue: Box::new(MemQueue {
+                    items: Mutex::new(vec!["p1".into(), "p2".into()]),
+                }),
+                runner: Box::new(runner),
+                recovery: Box::new(recovery),
+                coding_channel: None,
+                human_loop: None,
+            },
+            Box::new(MemLock { deny: false }),
+            Arc::new(AtomicBool::new(true)),
+        )
+        .without_mr_poll();
+
+        worker.deps.recovery.recover_all().await.unwrap();
+        let mut ran = Vec::new();
+        while let Some(id) = worker.deps.queue.dequeue() {
+            worker.deps.runner.run_pipeline(&id).await.unwrap();
+            ran.push(id);
+        }
+        assert_eq!(ran, vec!["p1".to_string(), "p2".to_string()]);
     }
 }
