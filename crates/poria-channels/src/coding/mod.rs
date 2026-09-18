@@ -480,6 +480,37 @@ pub async fn get_mr_status_live(
     MrStatus::parse(state)
 }
 
+/// Leave a note on the MR. Does not click Merge.
+pub async fn post_mr_note_live(
+    credentials: &JacpCredentials,
+    project_path: &str,
+    iid: i32,
+    body: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let url = format!(
+        "{}/api/v4/projects/{}/merge_requests/{}/notes",
+        coding_base_url(),
+        urlencoding_encode(project_path),
+        iid
+    );
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Cookie", &credentials.cookie)
+        .json(&serde_json::json!({ "body": body }))
+        .send()
+        .await
+        .map_err(|e| format!("Post MR note failed: {e}"))?;
+    if response.status().as_u16() == 401 {
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
+    }
+    if !response.status().is_success() {
+        return Err(format!("Post MR note failed: HTTP {}", response.status()).into());
+    }
+    Ok(())
+}
+
 /// Find an existing MR matching the query.
 pub async fn find_mr_live(
     credentials: &JacpCredentials,

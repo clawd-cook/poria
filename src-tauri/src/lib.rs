@@ -69,7 +69,20 @@ pub fn run() {
                 event_store,
                 repo_store,
                 session_tracker,
-                store,
+                store: store.clone(),
+            });
+
+            let poll_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    let Some(state) = poll_handle.try_state::<AppState>() else {
+                        continue;
+                    };
+                    let _ =
+                        commands::pipeline::poll_waiting_merges_once(&poll_handle, &state.store)
+                            .await;
+                }
             });
 
             Ok(())
@@ -81,6 +94,7 @@ pub fn run() {
             commands::pipeline::cancel_pipeline,
             commands::pipeline::human_loop_respond,
             commands::pipeline::confirm_trd,
+            commands::pipeline::confirm_merge_ready,
             commands::pipeline::get_pipeline_events,
             commands::pipeline::execute_stage,
             commands::pipeline::skip_stage,

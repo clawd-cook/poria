@@ -588,6 +588,68 @@ pub async fn confirm_trd(
     Ok(())
 }
 
+/// Reviewer ack: comment on the MR that it is merge-ready. Does **not** click Merge.
+#[tauri::command]
+pub async fn confirm_merge_ready(
+    pipeline_id: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut pipeline = state
+        .store
+        .load(&pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+    if pipeline.status != PipelineStatus::WaitingMerge {
+        return Err("只有待合并的流水线可以确认".into());
+    }
+    let creds = ensure_sso_credentials().await?;
+    let (project_path, iid, mr_url) = deploy_mr_ref(&pipeline)?;
+    let coding_creds = poria_channels::coding::JacpCredentials {
+        cookie: creds.cookie.clone(),
+        username: creds.username.clone(),
+    };
+    poria_channels::coding::post_mr_note_live(
+        &coding_creds,
+        &project_path,
+        iid,
+        "【Poria】审查人已确认可合并。Poria 不会自动点合并，请在 Coding 上合入。",
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    if let Some(stage) = pipeline
+        .stages
+        .iter_mut()
+        .find(|stage| stage.name == StageEnum::Deploy)
+    {
+        let mut output = stage
+            .output
+            .as_ref()
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default();
+        output.insert("mergeReady".into(), serde_json::json!(true));
+        output.insert(
+            "mergeReadyAt".into(),
+            serde_json::Value::String(Utc::now().to_rfc3339()),
+        );
+        stage.output = Some(serde_json::Value::Object(output));
+    }
+    pipeline.updated_at = Utc::now();
+    state
+        .store
+        .save_stage_tx(
+            pipeline
+                .stages
+                .iter()
+                .find(|stage| stage.name == StageEnum::Deploy),
+            &pipeline,
+            &[],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(&app, &pipeline)?;
+    tracing::info!(pipeline_id = %pipeline_id, mr_url, "merge-ready confirmation posted");
+    Ok(())
+}
+
 /// Request execution of the next pending stage in a pipeline.
 #[tauri::command]
 pub async fn execute_stage(
@@ -840,6 +902,146 @@ fn emit_pipeline_updated(app: &tauri::AppHandle, pipeline: &Pipeline) -> Result<
     .map_err(|e| e.to_string())?;
     app.emit("pipeline:list-changed", &pipeline.id)
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn deploy_mr_ref(pipeline: &Pipeline) -> Result<(String, i32, String), String> {
+    let urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
+    let mr_url = urls
+        .first()
+        .cloned()
+        .ok_or_else(|| "Deploy 输出缺少 MR URL".to_string())?;
+    let output = pipeline
+        .stages
+        .iter()
+        .find(|stage| stage.name == StageEnum::Deploy)
+        .and_then(|stage| stage.output.as_ref());
+    let iid = output
+        .and_then(|value| value.get("mrIid"))
+        .and_then(|value| value.as_i64())
+        .map(|value| value as i32)
+        .or_else(|| poria_core::pipeline::parse_mr_iid_from_url(&mr_url))
+        .ok_or_else(|| "Deploy 输出缺少 mrIid".to_string())?;
+    let project_path = output
+        .and_then(|value| value.get("gitlabProjectPath"))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            pipeline
+                .config
+                .repos
+                .first()
+                .map(|repo| repo.gitlab_project_path.clone())
+                .filter(|value| !value.trim().is_empty())
+        })
+        .ok_or_else(|| "缺少 gitlabProjectPath".to_string())?;
+    Ok((project_path, iid, mr_url))
+}
+
+pub(crate) async fn poll_waiting_merges_once(
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+) -> Result<(), String> {
+    let pipelines = store.find_by_status(PipelineStatus::WaitingMerge)?;
+    for mut pipeline in pipelines {
+        let Ok((project_path, iid, mr_url)) = deploy_mr_ref(&pipeline) else {
+            continue;
+        };
+        let Ok(creds) = ensure_sso_credentials().await else {
+            continue;
+        };
+        let coding_creds = poria_channels::coding::JacpCredentials {
+            cookie: creds.cookie.clone(),
+            username: creds.username.clone(),
+        };
+        let status =
+            match poria_channels::coding::get_mr_status_live(&coding_creds, &project_path, iid)
+                .await
+            {
+                Ok(status) => status,
+                Err(_) => continue,
+            };
+        match status {
+            poria_channels::coding::MrStatus::Merged => {
+                pipeline.status = PipelineStatus::Completed;
+                pipeline.updated_at = Utc::now();
+                store
+                    .save_stage_tx(
+                        None,
+                        &pipeline,
+                        &[CorePipelineEvent::pipeline_completed(&pipeline.id)],
+                    )
+                    .map_err(|e| e.to_string())?;
+                emit_pipeline_updated(app, &pipeline)?;
+            }
+            poria_channels::coding::MrStatus::Closed => {
+                pipeline.status = PipelineStatus::Failed;
+                pipeline.updated_at = Utc::now();
+                store
+                    .save_stage_tx(
+                        None,
+                        &pipeline,
+                        &[CorePipelineEvent::pipeline_failed(
+                            &pipeline.id,
+                            format!("MR closed: {mr_url}"),
+                        )],
+                    )
+                    .map_err(|e| e.to_string())?;
+                emit_pipeline_updated(app, &pipeline)?;
+            }
+            _ => {
+                let stale = pipeline
+                    .stages
+                    .iter()
+                    .find(|stage| stage.name == StageEnum::Deploy)
+                    .and_then(|stage| stage.completed_at)
+                    .map(|at| Utc::now() - at > chrono::Duration::hours(24))
+                    .unwrap_or(false);
+                let already = pipeline
+                    .stages
+                    .iter()
+                    .find(|stage| stage.name == StageEnum::Deploy)
+                    .and_then(|stage| stage.output.as_ref())
+                    .and_then(|output| output.get("mergeStaleNotified"))
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false);
+                if stale && !already {
+                    if let Some(stage) = pipeline
+                        .stages
+                        .iter_mut()
+                        .find(|stage| stage.name == StageEnum::Deploy)
+                    {
+                        let mut output = stage
+                            .output
+                            .as_ref()
+                            .and_then(|v| v.as_object().cloned())
+                            .unwrap_or_default();
+                        output.insert("mergeStaleNotified".into(), serde_json::json!(true));
+                        stage.output = Some(serde_json::Value::Object(output));
+                    }
+                    let _ = store.save_stage_tx(
+                        pipeline
+                            .stages
+                            .iter()
+                            .find(|stage| stage.name == StageEnum::Deploy),
+                        &pipeline,
+                        &[],
+                    );
+                    let _ = app.emit(
+                        "human:request",
+                        serde_json::json!({
+                            "pipelineId": pipeline.id,
+                            "stage": "deploy",
+                            "issueClass": "waiting_merge",
+                            "detail": format!("MR 超过 24h 仍未合入: {mr_url}"),
+                        }),
+                    );
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -2389,22 +2591,53 @@ async fn run_deploy_stage(
                 )
                 .await;
             }
-            pipeline.status = PipelineStatus::Completed;
+            pipeline.status = PipelineStatus::WaitingMerge;
             pipeline.stages[stage_idx].status = StageStatus::Completed;
             pipeline.stages[stage_idx].completed_at = Some(Utc::now());
             pipeline.updated_at = Utc::now();
+            let mut output_value = output.output.clone();
+            if let Some(obj) = output_value.as_object_mut() {
+                if !obj.contains_key("mrUrls") {
+                    if let Some(url) = obj.get("mrUrl").and_then(|v| v.as_str()) {
+                        obj.insert("mrUrls".into(), serde_json::json!([url]));
+                    }
+                }
+                if !obj.contains_key("gitlabProjectPath") {
+                    obj.insert(
+                        "gitlabProjectPath".into(),
+                        serde_json::Value::String(gitlab_project_path.clone()),
+                    );
+                }
+            }
+            pipeline.stages[stage_idx].output = Some(output_value.clone());
+            let mr_urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
             store
                 .save_stage_tx(
                     Some(&pipeline.stages[stage_idx]),
                     pipeline,
-                    &[CorePipelineEvent::stage_completed(
-                        &pipeline.id,
-                        StageEnum::Deploy,
-                        output.output,
-                    )],
+                    &[
+                        CorePipelineEvent::stage_completed(
+                            &pipeline.id,
+                            StageEnum::Deploy,
+                            output_value,
+                        ),
+                        CorePipelineEvent::pipeline_waiting_merge(&pipeline.id, mr_urls.clone()),
+                    ],
                 )
                 .map_err(|e| e.to_string())?;
             emit_pipeline_updated(app, pipeline)?;
+            let _ = app.emit(
+                "human:request",
+                serde_json::json!({
+                    "pipelineId": pipeline.id,
+                    "stage": "deploy",
+                    "issueClass": "waiting_merge",
+                    "detail": format!(
+                        "MR 已创建，等待审查人确认后在 Coding 合入（Poria 不会自动点合并）。{}",
+                        mr_urls.join(" ")
+                    ),
+                }),
+            );
             Ok(())
         }
         Err(err) => {

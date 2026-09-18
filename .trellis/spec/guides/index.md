@@ -44,6 +44,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] Dev exit OutputGuard: Design `trd_scope` / TRD `## 允许修改范围`; Block out-of-scope files or blocked deps — no CR
 - [ ] CI / coverage / security gates: EasyCI/Coding pipeline + report files / npm audit; missing data is fail, never agent self-score
 - [ ] Exception routing: `ISSUE_POLICIES` retry / CR regress once / HITL shows issue class, not a generic fail
+- [ ] Deploy success is WaitingMerge; poll MR; 一键确认 comments merge-ready and never clicks Merge
 - [ ] `claude_path` / `probe_claude` / Agent `spawn("claude")` / `~/.poria/config.json` vs CWD `poria.config.json`
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)

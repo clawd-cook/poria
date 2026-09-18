@@ -1,6 +1,7 @@
 mod events;
 mod gates;
 mod id;
+mod mr_urls;
 mod multi_repo;
 mod prd_review;
 mod quality_reports;
@@ -11,6 +12,7 @@ mod trd_scope;
 pub use events::*;
 pub use gates::*;
 pub use id::*;
+pub use mr_urls::*;
 pub use multi_repo::*;
 pub use prd_review::*;
 pub use quality_reports::*;
