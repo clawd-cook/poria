@@ -27,3 +27,5 @@ dist-ssr
 .tauri
 target
 .env
+
+tsconfig.tsbuildinfo
