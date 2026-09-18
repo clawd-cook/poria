@@ -184,7 +184,7 @@ jobs:
           echo "DMG: Poria-${VERSION}-${ARCH}.dmg ($(du -h "$OUTPUT_DIR/Poria-${VERSION}-${ARCH}.dmg" | cut -f1))"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: poria-macos-${{ matrix.arch }}
           path: ${{ runner.temp }}/artifacts/Poria-*.dmg
