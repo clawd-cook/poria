@@ -9,6 +9,7 @@ Use this spec when changing `ConfigProvider` theme, `src/theme.ts`, `PageFrame`,
 ## 2. Signatures
 
 - `src/theme.ts` → `poriaTheme: ThemeConfig` passed to `ConfigProvider` in `src/App.tsx`
+- `src/styles.css` hides all scrollbars (`scrollbar-width: none` / `::-webkit-scrollbar { display: none }`); overflow still scrolls
 - Seeds: `colorPrimary` `#1677FF`, `colorBgLayout` `#F5F5F5`, `colorBgContainer` `#FFFFFF`, `borderRadius` `4`, `fontSize` `14`, `fontWeightStrong` `600`
 - Font stack: OS UI fonts including `Helvetica Neue` (no Google Fonts)
 - Motion: `motionDurationFast/Mid/Slow` = `0.1s` / `0.2s` / `0.3s`
@@ -24,6 +25,7 @@ Use this spec when changing `ConfigProvider` theme, `src/theme.ts`, `PageFrame`,
 | Layout | `bg-layout` around `bg-container`. Sider is container + 1px `colorBorderSecondary`. |
 | PageFrame | Title + optional description/extra; padding `token.paddingLG`. |
 | Cards / repo rows | Hairline border, no drop shadow. Clickable cards keep `hoverable`. |
+| Scrollbars | Hidden everywhere; never draw a gutter or thumb. 看板 lane: vertical wheel pans horizontally unless the hovered column can still scroll vertically; empty chrome can be dragged. |
 | Icons | `@ant-design/icons`. Color from tokens (`colorPrimary`, `colorSuccess`), never raw hex. |
 
 ## 4. Validation & Error Matrix
@@ -43,7 +45,7 @@ Use this spec when changing `ConfigProvider` theme, `src/theme.ts`, `PageFrame`,
 ## 6. Tests Required
 
 - `pnpm typecheck`
-- Manual: `cargo tauri dev`, Poria window — sider, 看板, 需求, 技能, 仓库, 设置
+- Manual: `cargo tauri dev`, Poria window — 看板滚轮横移列、列内仍上下滚、拖空白处平移；技能抽屉/仓库无条可滚
 
 ## 7. Wrong vs Correct
 
@@ -54,6 +56,7 @@ ConfigProvider with no theme
 Skill icon color="#1677ff"
 Repo row border #303030
 Page Title level={4} + padding 24 copied per page
+Visible scrollbar / hover-to-show bar
 ```
 
 #### Correct
@@ -63,4 +66,5 @@ ConfigProvider theme={poriaTheme}
 icon style={{ color: token.colorPrimary }}
 border: token.colorBorderSecondary
 <PageFrame title="技能">…</PageFrame>
+`src/styles.css` hides scrollbars globally
 ```

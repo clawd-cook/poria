@@ -14,7 +14,7 @@ import {
   Typography,
   theme,
 } from "antd";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { invokeErrorMessage } from "../lib/errors";
 import { demandTaskKey } from "../lib/taskKey";
@@ -118,6 +118,27 @@ function pipelineToDemand(pipeline: PipelineSummary): DemandListItem {
   };
 }
 
+function isBoardLaneInteractive(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(
+      target.closest(
+        "a, button, input, textarea, .ant-alert, .ant-card, .ant-checkbox-wrapper, .ant-pagination",
+      ),
+    )
+  );
+}
+
+function canScrollVertically(element: HTMLElement, deltaY: number): boolean {
+  if (deltaY < 0) {
+    return element.scrollTop > 0;
+  }
+  if (deltaY > 0) {
+    return element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+  }
+  return false;
+}
+
 function pipelineToCard(pipeline: PipelineSummary): BoardCard {
   return {
     currentStage: pipeline.current_stage,
@@ -149,6 +170,73 @@ export function HomeBoard() {
   const [viewing, setViewing] = useState<DemandListItem | null>(null);
   const [linkInput, setLinkInput] = useState("");
   const [linkLoading, setLinkLoading] = useState(false);
+  const laneRef = useRef<HTMLDivElement>(null);
+  const showLane = !state.selectedPipelineId;
+
+  useEffect(() => {
+    if (!showLane) {
+      return;
+    }
+    const lane = laneRef.current;
+    if (!lane) {
+      return;
+    }
+    const scroller: HTMLDivElement = lane;
+
+    let dragging = false;
+    let startX = 0;
+    let startScroll = 0;
+
+    function onWheel(event: WheelEvent) {
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) {
+        return;
+      }
+      const columnScroll =
+        event.target instanceof Element ? event.target.closest("[data-board-column-scroll]") : null;
+      if (columnScroll instanceof HTMLElement && canScrollVertically(columnScroll, event.deltaY)) {
+        return;
+      }
+      if (scroller.scrollWidth <= scroller.clientWidth) {
+        return;
+      }
+      event.preventDefault();
+      scroller.scrollLeft += event.deltaY;
+    }
+
+    function onPointerDown(event: PointerEvent) {
+      if (event.button !== 0 || isBoardLaneInteractive(event.target)) {
+        return;
+      }
+      dragging = true;
+      startX = event.clientX;
+      startScroll = scroller.scrollLeft;
+      scroller.setPointerCapture(event.pointerId);
+    }
+
+    function onPointerMove(event: PointerEvent) {
+      if (!dragging) {
+        return;
+      }
+      scroller.scrollLeft = startScroll - (event.clientX - startX);
+    }
+
+    function onPointerUp() {
+      dragging = false;
+    }
+
+    scroller.addEventListener("wheel", onWheel, { passive: false });
+    scroller.addEventListener("pointerdown", onPointerDown);
+    scroller.addEventListener("pointermove", onPointerMove);
+    scroller.addEventListener("pointerup", onPointerUp);
+    scroller.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      scroller.removeEventListener("wheel", onWheel);
+      scroller.removeEventListener("pointerdown", onPointerDown);
+      scroller.removeEventListener("pointermove", onPointerMove);
+      scroller.removeEventListener("pointerup", onPointerUp);
+      scroller.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [showLane]);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -315,7 +403,7 @@ export function HomeBoard() {
         />
       </Flex>
 
-      <Flex gap={token.marginMD} style={{ flex: 1, minHeight: 0, overflowX: "auto" }}>
+      <Flex gap={token.marginMD} ref={laneRef} style={{ flex: 1, minHeight: 0, overflowX: "auto" }}>
         <BoardColumn
           count={loggedIn ? unstartedCards.length : createdCards.length}
           label="未开始"
@@ -454,7 +542,12 @@ function BoardColumn({
       <Text strong>
         {label} ({count})
       </Text>
-      <Flex gap={token.marginSM} style={{ flex: 1, minHeight: 0, overflowY: "auto" }} vertical>
+      <Flex
+        data-board-column-scroll=""
+        gap={token.marginSM}
+        style={{ flex: 1, minHeight: 0, overflowY: "auto" }}
+        vertical
+      >
         {children}
       </Flex>
     </Flex>

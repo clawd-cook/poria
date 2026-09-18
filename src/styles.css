@@ -17,6 +17,17 @@ a,
   cursor: pointer;
 }
 
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -2,7 +2,9 @@
 
 Poria is an AI-native delivery platform: a Tauri v2 macOS desktop app that turns a Xingyun demand into a Coding merge request. Frontend is React 19 + TypeScript + Vite + Ant Design 6 / Ant Design X. Backend is Rust, a Cargo workspace of six domain crates plus the Tauri shell (`poria-desktop`).
 
-This file is for coding agents. Human product docs live in `README.md`.
+This file is for coding agents. Human product docs live in `README.md`. Contribution process lives in `CONTRIBUTING.md`.
+
+Pinned frontend toolchain (also in `package.json` / CI `env`): Node.js **24.20.0**, pnpm **11.23.0**. App identifier: `com.poria.desktop`. Window title: `Poria`. Process: `poria-desktop`.
 
 ## Architecture
 
@@ -12,7 +14,9 @@ poria/
 │   ├── components/           # Ant Design pages and pipeline UI
 │   ├── hooks/                # usePipeline, useTauriEvents
 │   ├── lib/                  # types + invoke wrappers (`tauri.ts`)
-│   └── state/                # reducer store + actions
+│   ├── state/                # reducer store + actions
+│   ├── theme.ts              # poriaTheme (Swiss/Minimal tokens)
+│   └── styles.css            # reset, hide scrollbars, reduced-motion (not Tailwind)
 ├── src-tauri/                # Tauri v2 shell (crate name: poria-desktop)
 │   └── src/commands/         # IPC handlers (the only Tauri command layer)
 ├── crates/
@@ -22,11 +26,14 @@ poria/
 │   ├── poria-resources/      # Claude agent pool, terminal, worktree, output guard
 │   ├── poria-skills/         # Stage skills (Init … Deploy), HITL, fixtures
 │   └── poria-channels/       # Coding, JoySpace, Xingyun, JME, defect
+├── skills/                   # Bundled Claude SKILL.md (review-prd, gen-trd, gen-code, code-review)
 ├── public/                   # Logos / static assets
-└── submodules/               # Git submodules — do not modify files inside
+└── submodules/               # Reference trees — do not modify files inside
 ```
 
 Frontend alias: `@/*` → `./src/*` (`tsconfig.json`; Vite does not need a special alias beyond this).
+
+Shell views (`src/components/Shell.tsx`): 看板 `home`, 渠道 `channels`, 技能 `skills`, 仓库 `repos`, 工作区 `workspace`, 设置 `settings`. There is no separate 需求 tab. Tabs stay mounted via `PersistentTab`.
 
 ### Crate dependency direction (do not invert)
 
@@ -40,6 +47,8 @@ poria-commands                # poria-core + poria-infrastructure only
 src-tauri (poria-desktop)     # wires all crates + IPC
 ```
 
+Cargo workspace members are listed in root `Cargo.toml`. Shared Rust deps live in `[workspace.dependencies]`. Add versions there, then `{ workspace = true }` in crate manifests.
+
 - Put domain types and state-machine rules in `poria-core`.
 - Put HTTP / git-host / JoySpace / Xingyun clients in `poria-channels`.
 - Put Claude CLI / git worktree / shell in `poria-resources`.
@@ -47,9 +56,9 @@ src-tauri (poria-desktop)     # wires all crates + IPC
 - Put orchestrate / retry / rollback in `poria-commands`.
 - Put `#[tauri::command]` only in `src-tauri/src/commands/`. `poria-commands` is **not** the IPC layer.
 
-Shared Rust deps live in root `Cargo.toml` `[workspace.dependencies]`. Add versions there, then `{ workspace = true }` in crate manifests.
-
 ### Pipeline stages → skills
+
+`STAGE_ORDER` is six stages. There is **no** `Workspace` stage. Init creates the workspace and both worktrees before ReviewPrd. `WorkspaceSkill` in `crates/poria-skills/src/workspace.rs` is leftover and is **not** in `STAGE_ORDER` — do not add it back.
 
 | `StageEnum` | Skill id            | Implementation                                                                                                                                                                                            |
 | ----------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -60,11 +69,15 @@ Shared Rust deps live in root `Cargo.toml` `[workspace.dependencies]`. Add versi
 | `Cr`        | `skill:code-review` | Same cwd; `CR.md` + gates                                                                                                                                                                                 |
 | `Deploy`    | `skill:deploy`      | Commit if dirty → **push** → EasyCI SELECT bind → find/create MR (frontend worktree cwd)                                                                                                                  |
 
-Map source of truth: `crates/poria-skills/src/stage_skill_map.rs` and `crates/poria-commands/src/traits.rs` (`stage_skill_id`). Keep both in sync.
+Map source of truth: `crates/poria-skills/src/stage_skill_map.rs` and `crates/poria-commands/src/traits.rs` (`stage_skill_id`). Keep both in sync with `STAGE_ORDER` in `crates/poria-core/src/types/pipeline_types.rs` and `src/lib/types.ts`.
 
-Artifacts (`poria-core` `feature_context`): `PRD.md`, `PRD_REVIEW.md`, `TRD.md`, `BACKEND_TRD.md`, `TASK.md`, `CR.md`. Frontend TRD and backend TRD are different files — do not collapse them.
+JSON / TS stage names are snake_case: `init`, `review_prd`, `design`, `dev`, `cr`, `deploy`.
 
-Desktop agent stages must stay non-interactive (`claude -p`). Do not add HITL prompts inside those skills.
+Artifacts (`poria-core` `feature_context`): `PRD.md`, `PRD_REVIEW.md`, `TRD.md`, `BACKEND_TRD.md`, `TASK.md`, `CR.md`. Production Init uses `FeatureContext::create_at` on `~/.poria/projects/<demand_code>/`. Frontend TRD and backend TRD are different files — do not collapse them. Do not commit these files into the git worktree.
+
+Desktop agent stages (ReviewPrd / Design / Dev / Cr) must stay non-interactive (`claude -p`). Do not add HITL prompts inside those skills. Desktop HITL is `HumanLoopCard` → `human_loop_respond` with `resume` / `skip` / `cancel`.
+
+Bundled Claude skills (sidebar 技能 + Init symlinks): repo `skills/{review-prd,gen-trd,gen-code,code-review}/SKILL.md`. Init and Deploy are Rust pipeline skills, **not** bundled `SKILL.md`. `list_skills` / `get_skill` scan bundled markdown only. Keep `--system-prompt` short; procedure lives in `SKILL.md`.
 
 Fixture bypass: `PORIA_PIPELINE_FIXTURE=1` (`crates/poria-skills/src/fixture.rs`). Do not enable this in production paths.
 
@@ -141,7 +154,7 @@ rustup show      # stable toolchain required
 cargo check --workspace
 ```
 
-Do not run `npm install`, `yarn`, or `bun install`.
+Do not run `npm install`, `yarn`, or `bun install`. Lockfiles: `pnpm-lock.yaml`, `Cargo.lock`.
 
 ## Development Workflow
 
@@ -155,9 +168,17 @@ Do **not** claim login, demand list, clone, or pipeline submit works from a Curs
 
 ### Full desktop app (Tauri)
 
+This repo does **not** depend on `@tauri-apps/cli`. `package.json` `"tauri": "tauri"` only works if a `tauri` binary is already on `PATH`. The reliable local command is:
+
 ```bash
-pnpm tauri dev   # Rust backend + Vite + native window (title: Poria, process: poria-desktop)
+export NVM_DIR="$HOME/.nvm"
+. "/opt/homebrew/opt/nvm/nvm.sh"
+nvm use 24.20.0
+export PATH="$HOME/.nvm/versions/node/v24.20.0/bin:$HOME/.cargo/bin:$PATH"
+cargo tauri dev   # Rust backend + Vite + native window (title: Poria, process: poria-desktop)
 ```
+
+`tauri.conf.json` `beforeDevCommand` is `pnpm dev`, so Node 24.20.0 + pnpm 11.23.0 must be on `PATH` before `cargo tauri dev`. Do not add `@tauri-apps/cli` without an explicit user request.
 
 Port **1420 is strict** (`vite.config.ts` `strictPort: true`). Vite watches `src/` and ignores `src-tauri/`. If 1420 is taken, free it before `tauri dev`.
 
@@ -171,30 +192,37 @@ Before claiming clone / SSO / Xingyun / `submit_pipeline` works, follow `.trelli
 pnpm typecheck   # tsc -b
 ```
 
+There is no ESLint. Format frontend with oxfmt (see Code Style).
+
 ### Production build
 
 ```bash
 pnpm build                     # tsc -b && vite build → dist/
-pnpm tauri build               # desktop bundle
-pnpm tauri build --target aarch64-apple-darwin
-pnpm tauri build --target x86_64-apple-darwin
+cargo tauri build              # desktop bundle (needs cargo-tauri)
+cargo tauri build --target aarch64-apple-darwin
+cargo tauri build --target x86_64-apple-darwin
 ```
 
 ## Testing
 
 ### Rust
 
-Tests live **in the crate sources** (`#[cfg(test)]` / `#[tokio::test]`), not a separate `tests/` tree. Cover all six domain crates when the change spans them.
+Tests live **in the crate sources** (`#[cfg(test)]` / `#[tokio::test]`), not a separate `tests/` tree. Cover all six domain crates when the change spans them. `src-tauri` lib tests: `cargo test -p poria-desktop --lib -- --test-threads=1`.
 
 ```bash
 cargo test --workspace
 cargo test -p poria-core
 cargo test -p poria-core -- state_machine
+cargo test -p poria-core -- stage_order
+cargo test -p poria-infrastructure -- registered_repo
+cargo test -p poria-resources -- worktree
+cargo test -p poria-skills
+cargo test -p poria-commands -- init_rollback
 cargo check --workspace
 cargo clippy --workspace
 ```
 
-Add or update tests for Rust you change. No coverage gate is configured.
+Add or update tests for Rust you change. No coverage gate is configured. No repo `rustfmt.toml` — use default `rustfmt`.
 
 ### Frontend
 
@@ -205,12 +233,13 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 ### TypeScript / React
 
 - Formatter: `pnpm exec oxfmt .` (`.oxfmtrc.json`: sort imports, sort object keys, sort Tailwind classes; ignores `.claude`, `.trellis`, `submodules`)
-- Strict TS: `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`
-- ESM (`"type": "module"`), JSX `react-jsx` (no default React import)
-- UI: Ant Design 6 + `@ant-design/x*`, locale `zh_CN`, light theme `poriaTheme` in `src/theme.ts` (Swiss/Minimal tokens, no extra brand palette)
+- Strict TS: `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`; target ES2022; JSX `react-jsx` (no default React import)
+- ESM (`"type": "module"`)
+- UI: Ant Design 6 + `@ant-design/x*` + `@ant-design/icons`, locale `zh_CN`, light theme `poriaTheme` in `src/theme.ts` (Swiss/Minimal tokens, single primary `#1677FF`, no extra brand palette). Pages wrap in `PageFrame`. Use `theme.useToken()` instead of raw hex.
+- CSS: `src/styles.css` is a reset + `prefers-reduced-motion`. Layout is Ant Design props and inline token styles. **Do not add Tailwind** (it is not a dependency). The oxfmt `sortTailwindcss` flag is leftover config, not a license to introduce utility CSS.
 - Global state: `src/state/store.tsx` reducer + `src/state/actions.ts`. Do not introduce a second store.
 - IPC: wrap `invoke` in `src/lib/tauri.ts`. Tauri v2 maps JS **camelCase** args to Rust snake_case (`pipelineId` → `pipeline_id`, `gitUrl` → `git_url`, `backendTrdUrl` → `backend_trd_url`).
-- CSS: Tailwind v4 via Vite (no `tailwind.config.*`). Prefer Ant Design props for layout; Tailwind only where already used.
+- Events (`listen` in `useTauriEvents` / `store.tsx`): `pipeline:list-changed`, `pipeline:created`, `pipeline:updated`, `stage:progress`, `sidecar:status`, `auth:status-changed`, `repo:updated`, plus stream chunks. Do not call `invoke`/`listen` from a browser tab on `:1420`.
 
 ### Rust
 
@@ -220,6 +249,7 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 - Channels implement the channel contract in `poria-core`
 - Do not add unused GraphQL variables (EasyCI returns `UnusedVariable`)
 - EasyCI `createChange` **only** accepts `branchOperateType: SELECT`. `CREATE` is not a valid enum. SELECT requires the branch already on the remote — **push first, then bind**
+- Do not `Command::new("claude")` and hope GUI `PATH` contains it. Resolve via `poria_resources::resolve_claude_path` / `~/.poria/config.json` `claude_path` / login-shell `which`. See `.trellis/spec/frontend/claude-cli.md`.
 
 ### File organization
 
@@ -229,23 +259,31 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 | Hooks           | `src/hooks/`                                                                              |
 | Store           | `src/state/`                                                                              |
 | Types + IPC     | `src/lib/`                                                                                |
+| Theme           | `src/theme.ts`, `src/styles.css`                                                          |
 | Tauri commands  | `src-tauri/src/commands/{auth,channels,config,demands,pipeline,projects,repos,skills}.rs` |
 | Capabilities    | `src-tauri/capabilities/default.json`                                                     |
 | Domain          | `crates/poria-core/`                                                                      |
 | SQLite / auth   | `crates/poria-infrastructure/`                                                            |
 | Channels        | `crates/poria-channels/src/{coding,defect,jme,joyspace,xingyun}/`                         |
+| Bundled skills  | `skills/<name>/SKILL.md`                                                                  |
+
+New IPC: add `#[tauri::command]` under `src-tauri/src/commands/`, register it in `src-tauri/src/lib.rs` `generate_handler!`, wrap it in `src/lib/tauri.ts`, and add a capability permission only if the command needs one.
 
 ## Integration contracts (do not guess)
 
 - **SSO**: Cookie in `~/.poria/auth.json`. Commands that hit Xingyun / JoySpace / Coding must fail with 请先登录 when cookie is missing. Logged-out 看板 must not call `list_demands`.
 - **Demand list**: 看板未开始列 pulls Xingyun. Default is related-to-me (omit JACP `receiver`). 「由我受理」 is `acceptedByMe` → `receiver` = ERP and only affects that Xingyun query. Do not stamp the logged-in ERP onto rows that have no receiver. There is no separate 需求 tab.
-- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Reuse the latest pipeline for the demand key (`demand_code`, else `demand_id`): `Created` may update config; other statuses return the existing id. Frontend `base_branch` is the registered `default_branch` (default `master`). Backend repo stays **out of** `pipeline.repos`. Init creates `~/.poria/workspaces/<pipeline_id>/` (doc/skill symlinks + both worktrees) before ReviewPrd. Docs stay in `~/.poria/projects/<demand_code>/`.
+- **Start pipeline**: `submit_pipeline` must send `backendTrdUrl`. Reuse the latest pipeline for the demand key (`demand_code`, else `demand_id`): `Created` may update config; other statuses return the existing id. Frontend `base_branch` is the registered `default_branch` (default `master`). Backend repo stays **out of** `pipeline.repos`. Init creates `~/.poria/workspaces/<pipeline_id>/` (doc/skill symlinks + both worktrees) before ReviewPrd. Docs stay in `~/.poria/projects/<demand_code>/`. `workspacePath` (workspace root) is not the frontend `worktreePath`.
 - **JoySpace export**: SSO cookie + POST `/v1/pages/content` (`poria-channels` joyspace). Init writes `PRD.md` / `BACKEND_TRD.md` under `~/.poria/projects/<demand_code>/`; ReviewPrd / Design write `PRD_REVIEW.md` / `TRD.md` there too via workspace-root symlinks — not into the git worktree.
-- **Deploy**: commit (`feat(<demand_code>): <name>`) → `git push -u` → `bind_branch` (EasyCI SELECT) → `find_mr_live` / `create_merge_request_live`. Do not bind before push.
+- **Worktrees**: frontend `feature_<demand_code>` from `origin/<default_branch>` at `workspaces/<pipeline_id>/<frontend_name>`. Backend is `git worktree add --detach` so it does not lock the hosted clone branch. Hosted clones stay at `~/.poria/repos/<scope>/<name>` on `default_branch`.
+- **Init failure**: `git worktree remove` both paths **then** delete the workspace dir. Bare `rm -rf` leaves a stale worktree in the hosted clone. Do not delete `~/.poria/projects`.
+- **Deploy**: commit (`feat(<demand_code>): <name>`) → `git push -u` → `bind_branch` (EasyCI SELECT) → `find_mr_live` / `create_merge_request_live`. Do not bind before push. Strip leaked project docs from the frontend worktree before `git add`; skip symlink entries (`symlink_metadata`) so you do not delete projects docs.
 - **Clone dest**: `~/.poria/repos/<scope>/<name>`.
-- **Workspaces**: `~/.poria/workspaces/<pipeline_id>/` is Claude cwd. Frontend/backend git worktrees live in that directory. Bundled skills: repo `skills/<name>/SKILL.md`.
+- **Workspaces**: `~/.poria/workspaces/<pipeline_id>/` is Claude cwd. Frontend/backend git worktrees live in that directory. Bundled skills: repo `skills/<name>/SKILL.md` (dev) or Tauri resource `skills/` (release, `tauri.conf.json` `bundle.resources`).
+- **Claude path**: Settings `claude_path` may be unset (login-shell `which`) or an absolute executable. Probe only in the Poria window (`probe_claude`). See `.trellis/spec/frontend/claude-cli.md`.
+- **Repo tab**: `default_branch` defaults to `master`, editable. Save branch then sync immediately (sync fail does not roll back the field). IPC: `sync_repo`, `update_repo_default_branch`.
 
-Load `.trellis/spec/` for the layer you edit. Cross-layer payload / demand-filter / TRD changes: `.trellis/spec/guides/cross-layer-thinking-guide.md`.
+Load `.trellis/spec/` for the layer you edit (frontend index is `.trellis/spec/frontend/index.md`). Cross-layer payload / demand-filter / TRD changes: `.trellis/spec/guides/cross-layer-thinking-guide.md`. Pipeline workspace / worktree / skill symlink changes: `.trellis/spec/frontend/pipeline-workspace.md`. Theme / `PageFrame`: `.trellis/spec/frontend/visual-theme.md`.
 
 ## Data paths
 
@@ -261,23 +299,33 @@ Load `.trellis/spec/` for the layer you edit. Cross-layer payload / demand-filte
 
 Do not commit credentials, `workspace/db/`, or `~/.poria` contents.
 
+## Security
+
+- Treat `~/.poria/auth.json`, SSO cookies, Apple / Tauri signing secrets, and agent worktrees as sensitive. Never paste them into Issues, PRs, logs, or chat.
+- Security reports go through [SECURITY.md](SECURITY.md) (private advisory), not public Issues.
+- Logged-out UI must not call Xingyun / JoySpace / Coding commands.
+- Opener capability is limited to `$HOME/.poria/workspaces` and children (`src-tauri/capabilities/default.json`).
+- Do not widen shell/opener permissions or write credentials without an explicit user request.
+
 ## Build and Deployment
 
 GitHub Actions:
 
-| Workflow                            | Tag                                  | Result                            |
-| ----------------------------------- | ------------------------------------ | --------------------------------- |
-| `.github/workflows/pre-publish.yml` | `vX.Y.Z-beta.N`                      | GitHub **pre-release** macOS DMGs |
-| `.github/workflows/publish.yml`     | `vX.Y.Z` (no `-beta`/`-rc`/`-alpha`) | **latest** GitHub Release         |
+| Workflow                              | Trigger                              | Result                                      |
+| ------------------------------------- | ------------------------------------ | ------------------------------------------- |
+| `.github/workflows/pre-publish.yml`   | tag `vX.Y.Z-beta.N`                  | GitHub **pre-release** macOS DMG            |
+| `.github/workflows/publish.yml`       | tag `vX.Y.Z` (no `-beta`/`-rc`/`-alpha`) | **latest** GitHub Release                |
+| `.github/workflows/warm-rust-cache.yml` | push to `main` touching Rust       | Pre-warms aarch64 release cache             |
+| `.github/workflows/labeler.yml`       | PR / labels.yml on `main`            | Path labels; CODEOWNERS requests `@clawd-cook` |
 
-Both build `aarch64-apple-darwin` and `x86_64-apple-darwin`. `APPLE_*` secrets are **optional**; missing certs must ad-hoc sign and still produce a DMG (do not fail-fast on empty secrets). Unsigned notes should mention `xattr -cr`.
+Publish jobs currently build **`aarch64-apple-darwin` only** (see workflow `matrix.include`). `APPLE_*` secrets are **optional**; missing certs must ad-hoc sign and still produce a DMG (do not fail-fast on empty secrets). Unsigned notes should mention `xattr -cr`. Local Intel builds are still `cargo tauri build --target x86_64-apple-darwin`.
 
 ```bash
 git tag v1.1.1-beta.1 && git push origin v1.1.1-beta.1
 git tag v1.1.1 && git push origin v1.1.1
 ```
 
-GitHub runs the workflow file **on the tagged commit**. Re-running an old tag will not pick up `main` YAML fixes — retag or cut a new version.
+GitHub runs the workflow file **on the tagged commit**. Re-running an old tag will not pick up `main` YAML fixes — retag or cut a new version. CI syncs the tag version into `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` during the job — do not hand-edit those three to “match” a tag unless you are cutting a release.
 
 CI Node/pnpm: `24.20.0` / `11.23.0` (workflow `env`).
 
@@ -302,18 +350,23 @@ Prefer in-repo, session-local work: `pnpm install` / `pnpm add -D` in the right 
 - Vite `transformCallback` noise in a **browser** tab on `:1420` is expected; it is not the Tauri webview.
 - Empty Accessibility `window 1` on macOS: the window title is `Poria`.
 - Pipeline SQLite: check which `poria.db` the running binary opened (dev override vs Application Support).
-- Skills that call Claude: require `claude` on PATH; keep `--tools` / disallowed-tools consistent with `poria-resources` CLI wrapper.
+- Skills that call Claude: require a resolvable `claude` binary; keep `--tools` / disallowed-tools consistent with `poria-resources` CLI wrapper. GUI apps often lack Homebrew on `PATH` — use `claude_path` / login-shell `which`, not a bare `claude` spawn.
 - EasyCI bind errors: `522721` / branch not found → remote branch missing (push first). GraphQL `UnusedVariable` → drop the unused field from the query.
+- `pnpm tauri` → `tauri: command not found`: use `cargo tauri` (this package does not depend on `@tauri-apps/cli`).
+- Init leftover worktrees after a failed run: `git worktree list` in the hosted clone; remove with `git worktree remove`, not only `rm -rf` on `~/.poria/workspaces`.
 
 ## Pull requests / commits
 
 No required title prefix. Prefer short why-focused messages. Deploy-generated commits use `feat(<demand_code>): <demand name>`.
 
+Default PR template: `.github/PULL_REQUEST_TEMPLATE.md`. Feature / bugfix: `?template=feature.md` / `?template=bugfix.md`. Path labeler: `.github/workflows/labeler.yml`. Reviewers: `.github/CODEOWNERS` (`@clawd-cook`).
+
 Before finishing a code change:
 
 1. `pnpm typecheck` if `src/` changed
 2. `cargo test -p <crate>` (or `--workspace`) if Rust changed
-3. Do not commit `submodules/` pointer dirt, `~/.poria`, or secrets unless the user explicitly asks
+3. `pnpm exec oxfmt .` if `src/` changed
+4. Do not commit `submodules/` pointer dirt, `~/.poria`, or secrets unless the user explicitly asks
 
 ## Additional Notes
 
@@ -321,6 +374,7 @@ Before finishing a code change:
 - `submodules/` — clone/reference only. Implement against those APIs in **this** repo’s crates, never by editing the submodule tree.
 - Before editing a layer, load that package’s spec index under `.trellis/spec/`.
 - Trellis skills live under `.cursor/skills/` (and `.claude/skills/`). Follow `.trellis/workflow.md` when a Trellis task is active.
+- `CLAUDE.md` is `@AGENTS.md` — keep this file as the single agent source of truth.
 
 <!-- TRELLIS:START -->
 
