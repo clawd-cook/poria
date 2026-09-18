@@ -1,7 +1,9 @@
+mod ci;
 mod easyci_change;
 mod git_url;
 mod types;
 
+pub use ci::query_mr_ci_status;
 pub use easyci_change::{
     create_change, pick_bind_apps, query_bind_deploy_apps, query_issue_changes, BindApp,
     BindDeployAppsResult, BoundChange, CreateChangeInput, EasyciDeployApp,

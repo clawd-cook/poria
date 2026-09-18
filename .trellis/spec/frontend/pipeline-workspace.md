@@ -35,7 +35,7 @@ Frontend (`src/lib/tauri.ts`): `syncRepo(id)`, `updateRepoDefaultBranch(id, defa
 | Init | JoySpace export to `~/.poria/projects/<demand_code>/` **then** sync both hosted clones **then** mkdir workspace, symlink docs + skills, write `CLAUDE.md`, frontend feature worktree + backend detached worktree. Any failure fails Init and deletes the workspace dir (not projects). |
 | `submit_pipeline` | `pipeline.repos` = frontend only. `base_branch` = registered `default_branch` (not `git_current_branch`). Backend stays in `backend_context`. After Init, `backend_context.local_path` is the **backend worktree**. |
 | ReviewPrd / Design / Dev / Cr | Agent `cwd` = workspace root. `claude -p` is a short prompt that names `review-prd` / `gen-trd` / `gen-code` / `code-review`. Write docs to workspace-root filenames (symlinks to projects). Code only in the frontend worktree. Design entry evaluates **only** `prd_review_p0` (not `trd_exists` / `code_changes_exist`). Unanswered P0 (blank / TODO / 待填写 / 待确认) → pipeline `blocked` + `requirement_ambiguous`; ReviewPrd itself still completes. P1/P2 unanswered warn only. Desktop `write_demand_project_file` may save `PRD_REVIEW.md`; HITL resume re-checks P0. JME send is best-effort placeholder. Dev entry evaluates `trd_exists` + `trd_confirmed` for **frontend** `TRD.md` only. Unconfirmed → `blocked` + `trd_unconfirmed`. `confirm_trd` (or 跳过确认) sets `config.trd_confirmed` then resumes Dev. Design persists `config.trd_scope` from TRD `## 允许修改范围` (fallback: path-like lines under `## 代码位置概览`). Dev **must** run `OutputGuard::check` on the frontend worktree; Block (out_of_scope / blocked_dependency) → `blocked` + `out_of_scope_change`, HITL lists files/deps, CR does not start. Empty scope warns (does not block). Diff too large warns only. |
-| Deploy | Commit frontend worktree code only; strip leaked `PRD.md` / `PRD_REVIEW.md` / `TRD.md` / `BACKEND_TRD.md` from the worktree before `git add`. cwd remains the frontend git worktree. |
+| Deploy | Commit frontend worktree code only; strip leaked `PRD.md` / `PRD_REVIEW.md` / `TRD.md` / `BACKEND_TRD.md` from the worktree before `git add`. cwd remains the frontend git worktree. After MR: fill `ciBuildPass` from Coding/GitLab pipelines (not the model); `testCoverage` from `coverage-summary.json` / `lcov.info`. Missing data fails the Deploy gates. CR `securityPass` comes from npm/pnpm/cargo audit JSON (high/critical Block). |
 | Repo tab | Default branch defaults to `master`, editable. Save branch then sync immediately (sync fail does not roll back the field). Manual sync uses the same primitive. Clone success also syncs. |
 | Sidebar 工作区 | Shows selected pipeline `workspacePath`; Finder via opener. Empty if no pipeline selected. |
 | Sidebar 技能 | `list_skills` / `get_skill` scan bundled `skills/*/SKILL.md` only. `id` is the directory name (`review-prd`); `name`/`description` come from YAML; `markdown` is the body without frontmatter. Init / Deploy are pipeline stages, not skills. Drawer portals to `document.body` and scrolls only on the Drawer body. |
@@ -58,6 +58,9 @@ Backend worktree must be **detached** so it does not lock the same branch as the
 | Dev with OutputGuard Block (out-of-scope file or blocked dep) | Dev `blocked` (`out_of_scope_change` / `OutputGuardError`); HITL lists files/deps; do not start CR |
 | Dev with empty TRD scope | OutputGuard **warn** only (`trd_scope_empty`); Dev may complete |
 | Dev with oversized diff | OutputGuard **warn** only (`diff_too_large`); Dev may complete |
+| CI pipeline missing / not success | Deploy `blocked` (`ci_build`); do not treat as pass |
+| No coverage-summary.json / lcov.info | Deploy `blocked` (`test_coverage` / coverage missing) |
+| npm audit high/critical or no audit JSON | CR `blocked` (`security_violation` / `security_scan missing`) |
 | Docs written into git root | Adopt into project dir / strip before Deploy; authority remains `~/.poria/projects` |
 | Missing bundled `SKILL.md` | Init fails: 随包 skill 不完整 / 找不到随包 skill 目录 |
 | Init fails after `git worktree add` | `git worktree remove` both paths **then** delete the workspace dir. Bare `rm -rf` leaves a stale worktree in the hosted clone |
@@ -74,6 +77,9 @@ Backend worktree must be **detached** so it does not lock the same branch as the
 
 - `cargo test -p poria-core -- prd_review`
 - `cargo test -p poria-core -- trd_scope`
+- `cargo test -p poria-core -- quality_reports`
+- `cargo test -p poria-skills -- quality_gates`
+- `cargo test -p poria-commands -- coverage_missing`
 - `cargo test -p poria-resources -- output_guard`
 - `cargo test -p poria-skills -- output_guard`
 - `cargo test -p poria-commands -- output_guard`

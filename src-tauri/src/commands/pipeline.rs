@@ -10,8 +10,8 @@ use tauri_plugin_opener::OpenerExt;
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
 use poria_commands::{
-    is_auth_expired, is_out_of_scope, is_requirement_ambiguous, is_security_violation,
-    is_trd_unconfirmed, stage_error_outcome,
+    is_auth_expired, is_out_of_scope, is_quality_gate_block, is_requirement_ambiguous,
+    is_security_violation, is_trd_unconfirmed, stage_error_outcome,
 };
 use poria_core::contracts::{Channel, ChannelContext, Skill, SkillContext};
 use poria_core::pipeline::{
@@ -381,7 +381,7 @@ pub async fn submit_pipeline(
         .ok_or_else(|| "请先登录".to_string())?;
 
     let config = PipelineConfig {
-        gates: vec![],
+        gates: poria_core::pipeline::DEFAULT_GATES.clone(),
         trd_scope: vec![],
         repos: vec![frontend_repo.clone()],
         prd_url: Some(prd_url),
@@ -943,6 +943,15 @@ fn emit_human_request(
                 OUT_OF_SCOPE_ISSUE_CLASS.to_string()
             } else if is_security_violation(detail) {
                 SECURITY_VIOLATION_ISSUE_CLASS.to_string()
+            } else if is_quality_gate_block(detail) {
+                if detail.to_ascii_lowercase().contains("test_coverage")
+                    || detail.to_ascii_lowercase().contains("coverage missing")
+                    || detail.contains("覆盖率")
+                {
+                    "test_coverage".into()
+                } else {
+                    "ci_build".into()
+                }
             } else {
                 "stage_failed".into()
             }
@@ -1338,6 +1347,10 @@ fn blocked_issue_class(class: &str) -> IssueClass {
         || class.eq_ignore_ascii_case("SecurityViolation")
     {
         IssueClass::SecurityViolation
+    } else if class.eq_ignore_ascii_case("ci_build") {
+        IssueClass::InfraFailure
+    } else if class.eq_ignore_ascii_case("test_coverage") {
+        IssueClass::TestFailure
     } else {
         IssueClass::Unknown
     }
@@ -1400,6 +1413,38 @@ fn output_guard_gate_results(passed: bool) -> serde_json::Value {
         "actual": if passed { "pass" } else { "block" },
         "threshold": "pass",
     }])
+}
+
+fn pipeline_gate_rules(pipeline: &Pipeline) -> Vec<poria_core::types::GateRule> {
+    if pipeline.config.gates.is_empty() {
+        DEFAULT_GATES.clone()
+    } else {
+        pipeline.config.gates.clone()
+    }
+}
+
+fn ui_from_gate_evaluation(eval: &poria_core::pipeline::GateEvaluation) -> serde_json::Value {
+    serde_json::Value::Array(
+        eval.details
+            .iter()
+            .map(|detail| {
+                serde_json::json!({
+                    "gate": detail.rule_id,
+                    "passed": detail.pass,
+                    "actual": detail.actual,
+                    "threshold": detail.threshold,
+                })
+            })
+            .collect(),
+    )
+}
+
+fn blocking_gate_message(eval: &poria_core::pipeline::GateEvaluation) -> String {
+    eval.blocking_failures
+        .iter()
+        .map(|detail| format!("{}: {}", detail.rule_id, detail.message))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 async fn notify_product_p0(pipeline: &Pipeline, detail: &str) {
@@ -2021,8 +2066,39 @@ async fn run_cr_stage(
         .await
     {
         Ok(output) => {
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
+            let cr_result = StageResult {
+                cr_score: output
+                    .output
+                    .get("crScore")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+                security_pass: output.output.get("securityPass").and_then(|v| v.as_bool()),
+                ..Default::default()
+            };
+            let evaluation = evaluate_gates(
+                &cr_result,
+                &pipeline_gate_rules(pipeline),
+                GatePhase::StageExit,
+            );
             pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].gate_results = Some(ui_from_gate_evaluation(&evaluation));
+            if !evaluation.all_pass {
+                let mut message = blocking_gate_message(&evaluation);
+                if let Some(detail) = output
+                    .output
+                    .get("securityDetail")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    message = format!("{message}; {detail}");
+                }
+                if message.is_empty() {
+                    message = "CR 门禁未通过".into();
+                }
+                return fail_or_block_stage(pipeline, stage_idx, app, store, message, "cr_failed");
+            }
+            pipeline.stages[stage_idx].status = StageStatus::Completed;
             pipeline.stages[stage_idx].completed_at = Some(Utc::now());
             pipeline.updated_at = Utc::now();
             store
@@ -2145,9 +2221,58 @@ async fn run_deploy_stage(
 
     match DeploySkill::new().execute(input, ctx).await {
         Ok(output) => {
+            let deploy_result = StageResult {
+                ci_build_pass: output.output.get("ciBuildPass").and_then(|v| v.as_bool()),
+                test_coverage: output.output.get("testCoverage").and_then(|v| v.as_f64()),
+                diff_lines: output
+                    .output
+                    .get("diffLines")
+                    .and_then(|v| v.as_i64())
+                    .map(|v| v as i32),
+                has_conflict: output.output.get("hasConflict").and_then(|v| v.as_bool()),
+                ..Default::default()
+            };
+            let evaluation = evaluate_gates(
+                &deploy_result,
+                &pipeline_gate_rules(pipeline),
+                GatePhase::Deploy,
+            );
+            pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].gate_results = Some(ui_from_gate_evaluation(&evaluation));
+            if !evaluation.blocking_failures.is_empty() {
+                let mut message = blocking_gate_message(&evaluation);
+                if let Some(status) = output
+                    .output
+                    .get("ciStatus")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    message = format!("{message}; ciStatus={status}");
+                }
+                if let Some(source) = output
+                    .output
+                    .get("coverageSource")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    message = format!("{message}; coverageSource={source}");
+                }
+                if message.is_empty() {
+                    message = "Deploy 门禁未通过".into();
+                }
+                return fail_or_block_stage(
+                    pipeline,
+                    stage_idx,
+                    app,
+                    store,
+                    message,
+                    "deploy_failed",
+                );
+            }
             pipeline.status = PipelineStatus::Completed;
             pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
             pipeline.stages[stage_idx].completed_at = Some(Utc::now());
             pipeline.updated_at = Utc::now();
             store
@@ -2419,6 +2544,11 @@ mod tests {
         assert_eq!(
             blocked_issue_class(SECURITY_VIOLATION_ISSUE_CLASS),
             IssueClass::SecurityViolation
+        );
+        assert_eq!(blocked_issue_class("ci_build"), IssueClass::InfraFailure);
+        assert_eq!(
+            blocked_issue_class("test_coverage"),
+            IssueClass::TestFailure
         );
     }
 

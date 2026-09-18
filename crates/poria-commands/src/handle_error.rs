@@ -69,6 +69,13 @@ pub fn stage_error_outcome(message: &str, fallback_class: &str) -> StageErrorOut
             issue_class: SECURITY_VIOLATION_ISSUE_CLASS.to_string(),
             retryable: true,
         }
+    } else if exception_classifier::is_quality_gate_block(message) {
+        StageErrorOutcome {
+            pipeline_status: PipelineStatus::Blocked,
+            stage_status: StageStatus::Blocked,
+            issue_class: quality_gate_issue_class(message).to_string(),
+            retryable: true,
+        }
     } else {
         StageErrorOutcome {
             pipeline_status: PipelineStatus::Failed,
@@ -76,6 +83,18 @@ pub fn stage_error_outcome(message: &str, fallback_class: &str) -> StageErrorOut
             issue_class: fallback_class.to_string(),
             retryable: true,
         }
+    }
+}
+
+fn quality_gate_issue_class(message: &str) -> &'static str {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("test_coverage")
+        || lower.contains("coverage missing")
+        || message.contains("覆盖率")
+    {
+        "test_coverage"
+    } else {
+        "ci_build"
     }
 }
 
@@ -151,7 +170,7 @@ mod tests {
     use poria_core::types::{
         IssueClass, PipelineConfig, PipelineStatus, StageEnum, StageStatus,
         AUTH_EXPIRED_ISSUE_CLASS, OUT_OF_SCOPE_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
-        TRD_UNCONFIRMED_ISSUE_CLASS,
+        SECURITY_VIOLATION_ISSUE_CLASS, TRD_UNCONFIRMED_ISSUE_CLASS,
     };
 
     fn make_stage() -> Stage {
@@ -319,5 +338,32 @@ mod tests {
         assert_eq!(outcome.stage_status, StageStatus::Blocked);
         assert_eq!(outcome.issue_class, OUT_OF_SCOPE_ISSUE_CLASS);
         assert!(outcome.retryable);
+    }
+
+    #[test]
+    fn test_stage_error_outcome_coverage_missing_blocks() {
+        let outcome = stage_error_outcome(
+            "coverage missing: 未找到 coverage-summary.json / lcov.info，不能把覆盖率当通过",
+            "deploy_failed",
+        );
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
+        assert_eq!(outcome.issue_class, "test_coverage");
+    }
+
+    #[test]
+    fn test_stage_error_outcome_ci_build_blocks() {
+        let outcome = stage_error_outcome(
+            "ci_build: CI 构建: 未通过 (actual=null, threshold=null)",
+            "deploy_failed",
+        );
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
+        assert_eq!(outcome.issue_class, "ci_build");
+    }
+
+    #[test]
+    fn test_stage_error_outcome_security_scan_blocks() {
+        let outcome = stage_error_outcome("security_scan missing: no scanner output", "cr_failed");
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Blocked);
+        assert_eq!(outcome.issue_class, SECURITY_VIOLATION_ISSUE_CLASS);
     }
 }

@@ -42,6 +42,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] Design entry `prd_review_p0`: unanswered P0 (blank / TODO / 待填写 / 待确认) Blocked; desktop `write_demand_project_file` + HITL resume; P1/P2 warn only
 - [ ] Dev entry `trd_confirmed`: frontend `TRD.md` must exist and be confirmed (or explicitly skipped); HITL 「确认 TRD」 / 「跳过确认」
 - [ ] Dev exit OutputGuard: Design `trd_scope` / TRD `## 允许修改范围`; Block out-of-scope files or blocked deps — no CR
+- [ ] CI / coverage / security gates: EasyCI/Coding pipeline + report files / npm audit; missing data is fail, never agent self-score
 - [ ] `claude_path` / `probe_claude` / Agent `spawn("claude")` / `~/.poria/config.json` vs CWD `poria.config.json`
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)

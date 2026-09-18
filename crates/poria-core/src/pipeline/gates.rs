@@ -155,15 +155,13 @@ fn evaluate_one(rule: &GateRule, result: &StageResult) -> GateResult {
             result.ci_build_pass == Some(true),
             &serde_json::json!(result.ci_build_pass),
         ),
-        "test_coverage" => {
-            let threshold = rule.threshold.as_f64().unwrap_or(0.0);
-            let actual = result.test_coverage.unwrap_or(0.0);
-            gate_result(
-                rule,
-                actual >= threshold,
-                &serde_json::json!(result.test_coverage),
-            )
-        }
+        "test_coverage" => match result.test_coverage {
+            Some(actual) => {
+                let threshold = rule.threshold.as_f64().unwrap_or(0.0);
+                gate_result(rule, actual >= threshold, &serde_json::json!(actual))
+            }
+            None => gate_result(rule, false, &serde_json::Value::Null),
+        },
         "security_scan" => gate_result(
             rule,
             result.security_pass == Some(true),
@@ -330,6 +328,55 @@ mod tests {
         assert!(!eval.all_pass);
         assert_eq!(eval.blocking_failures.len(), 1);
         assert_eq!(eval.blocking_failures[0].rule_id, "test_coverage");
+    }
+
+    #[test]
+    fn test_evaluate_coverage_missing_fails() {
+        let result = StageResult {
+            ci_build_pass: Some(true),
+            test_coverage: None,
+            has_conflict: Some(false),
+            diff_lines: Some(100),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::Deploy);
+        assert!(!eval.all_pass);
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "test_coverage"));
+    }
+
+    #[test]
+    fn test_evaluate_ci_missing_fails() {
+        let result = StageResult {
+            ci_build_pass: None,
+            test_coverage: Some(90.0),
+            has_conflict: Some(false),
+            diff_lines: Some(100),
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::Deploy);
+        assert!(!eval.all_pass);
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "ci_build"));
+    }
+
+    #[test]
+    fn test_evaluate_security_missing_fails() {
+        let result = StageResult {
+            cr_score: Some("A".into()),
+            security_pass: None,
+            ..Default::default()
+        };
+        let eval = evaluate_gates(&result, &DEFAULT_GATES, GatePhase::StageExit);
+        assert!(!eval.all_pass);
+        assert!(eval
+            .blocking_failures
+            .iter()
+            .any(|r| r.rule_id == "security_scan"));
     }
 
     #[test]

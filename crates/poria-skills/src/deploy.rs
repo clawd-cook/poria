@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use poria_channels::coding::{
-    create_merge_request_live, find_mr_live, CreateMrInput, FindMrQuery, JacpCredentials, MrStatus,
+    create_merge_request_live, find_mr_live, query_mr_ci_status, CreateMrInput, FindMrQuery,
+    JacpCredentials, MrStatus,
 };
 use poria_channels::xingyun::{bind_branch, BindBranchInput};
 use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
@@ -46,7 +47,11 @@ fn fixture_output() -> SkillOutput {
             "repo": "main",
             "changeId": "chg-fixture-001",
             "branch": "feature_TEST",
-            "pushed": true
+            "pushed": true,
+            "ciBuildPass": true,
+            "testCoverage": 90.0,
+            "ciSource": "gitlab_pipeline",
+            "coverageSource": "istanbul_summary"
         }),
         gates_pass: None,
     }
@@ -206,11 +211,21 @@ impl Skill for DeploySkill {
                     description: None,
                     source_branch: Some(branch.clone()),
                     target_branch: Some(base_branch.clone()),
-                    project_id: Some(project_path),
+                    project_id: Some(project_path.clone()),
                 },
             )
             .await?;
             (created.url, created.iid)
+        };
+
+        let coverage = crate::quality_gates::collect_coverage_report(worktree_path);
+        let ci = match mr_iid {
+            Some(iid) => query_mr_ci_status(&creds, &project_path, iid)
+                .await
+                .unwrap_or_else(|err| {
+                    poria_core::pipeline::CiBuildReport::missing(err.to_string())
+                }),
+            None => poria_core::pipeline::CiBuildReport::missing("MR iid missing"),
         };
 
         Ok(SkillOutput {
@@ -222,8 +237,15 @@ impl Skill for DeploySkill {
                 "branch": branch,
                 "pushed": true,
                 "alreadyBound": bound.already_bound,
+                "ciBuildPass": ci.pass,
+                "ciSource": ci.source,
+                "ciStatus": ci.status,
+                "ciUrl": ci.web_url,
+                "testCoverage": coverage.percent,
+                "coverageSource": coverage.source,
+                "coveragePath": coverage.path,
             }),
-            gates_pass: Some(true),
+            gates_pass: Some(ci.pass == Some(true) && coverage.percent.is_some()),
         })
     }
 }
@@ -250,6 +272,14 @@ mod tests {
         assert_eq!(
             output.output.get("mrUrl").and_then(|v| v.as_str()),
             Some("https://coding.jd.com/group/repo/-/merge_requests/1")
+        );
+        assert_eq!(
+            output.output.get("ciBuildPass").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            output.output.get("testCoverage").and_then(|v| v.as_f64()),
+            Some(90.0)
         );
     }
 }
