@@ -208,7 +208,7 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 - Formatter: `pnpm exec oxfmt .` (`.oxfmtrc.json`: sort imports, sort object keys, sort Tailwind classes; ignores `.claude`, `.trellis`, `submodules`)
 - Strict TS: `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`
 - ESM (`"type": "module"`), JSX `react-jsx` (no default React import)
-- UI: Ant Design 6 + `@ant-design/x*`, locale `zh_CN`, dark algorithm (`src/App.tsx`)
+- UI: Ant Design 6 + `@ant-design/x*`, locale `zh_CN`, default light theme (`src/App.tsx`)
 - Global state: `src/state/store.tsx` reducer + `src/state/actions.ts`. Do not introduce a second store.
 - IPC: wrap `invoke` in `src/lib/tauri.ts`. Tauri v2 maps JS **camelCase** args to Rust snake_case (`pipelineId` → `pipeline_id`, `gitUrl` → `git_url`, `backendTrdUrl` → `backend_trd_url`).
 - CSS: Tailwind v4 via Vite (no `tailwind.config.*`). Prefer Ant Design props for layout; Tailwind only where already used.
