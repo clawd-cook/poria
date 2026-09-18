@@ -9,6 +9,10 @@ inputs:
     description: Save rust-cache (true only on the main-branch warmer)
     required: false
     default: "false"
+  install-cli:
+    description: Download prebuilt cargo-tauri (false for cache-warm cargo build)
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -26,11 +30,40 @@ runs:
         cache-on-failure: true
         save-if: ${{ inputs.save-cache == 'true' }}
 
-    - name: Install cargo-binstall
-      uses: cargo-bins/cargo-binstall@main
+    - name: Cache cargo-tauri
+      if: inputs.install-cli == 'true'
+      id: cache-tauri-cli
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/cargo-tauri
+        key: cargo-tauri-${{ runner.os }}-${{ inputs.target }}-2.11.4
 
-    - name: Install Tauri CLI (prebuilt)
+    - name: Install Tauri CLI (prebuilt zip)
+      if: inputs.install-cli == 'true' && steps.cache-tauri-cli.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        TAURI_CLI_VERSION: "2.11.4"
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.cargo/bin"
+        archive="cargo-tauri-${{ inputs.target }}.zip"
+        url="https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v${TAURI_CLI_VERSION}/${archive}"
+        curl -fsSL -o /tmp/cargo-tauri.zip "$url"
+        rm -rf /tmp/cargo-tauri-extract
+        mkdir /tmp/cargo-tauri-extract
+        unzip -o /tmp/cargo-tauri.zip -d /tmp/cargo-tauri-extract
+        bin="$(find /tmp/cargo-tauri-extract -type f -name cargo-tauri | head -1)"
+        if [ -z "$bin" ]; then
+          echo "::error::cargo-tauri missing from ${archive}"
+          ls -laR /tmp/cargo-tauri-extract
+          exit 1
+        fi
+        install -m 0755 "$bin" "$HOME/.cargo/bin/cargo-tauri"
+
+    - name: Verify Tauri CLI
+      if: inputs.install-cli == 'true'
       shell: bash
       run: |
-        cargo binstall --no-confirm --disable-strategies compile tauri-cli --version "^2"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        export PATH="$HOME/.cargo/bin:$PATH"
         cargo tauri --version
