@@ -4,6 +4,7 @@ mod demand_status;
 mod demand_url;
 mod git_url;
 mod types;
+mod writeback;
 
 pub use bind_branch::{bind_branch, BindBranchInput, BindBranchResult};
 pub use demand_status::{format_demand_status, is_visible_demand_status};
@@ -12,6 +13,7 @@ pub use demand_url::{
 };
 pub use git_url::{normalize_git_url, repo_search_path_from_git_url, same_git_url};
 pub use types::*;
+pub use writeback::{writeback_pipeline_progress, writeback_remark, PipelineWriteback};
 
 use async_trait::async_trait;
 use poria_core::contracts::{CapabilityMetadata, Channel, ChannelContext};
@@ -210,7 +212,7 @@ struct JacpEnvelope {
     data: Option<serde_json::Value>,
 }
 
-pub(crate) async fn jacp_fetch(
+pub async fn jacp_fetch(
     credentials: &JacpCredentials,
     path: &str,
     method: reqwest::Method,

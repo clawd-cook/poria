@@ -511,6 +511,75 @@ pub async fn post_mr_note_live(
     Ok(())
 }
 
+/// Close an MR. Does not merge.
+pub async fn close_mr_live(
+    credentials: &JacpCredentials,
+    project_path: &str,
+    iid: i32,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let url = format!(
+        "{}/api/v4/projects/{}/merge_requests/{}",
+        coding_base_url(),
+        urlencoding_encode(project_path),
+        iid
+    );
+    let client = reqwest::Client::new();
+    let response = client
+        .put(&url)
+        .header("Content-Type", "application/json")
+        .header("Cookie", &credentials.cookie)
+        .json(&serde_json::json!({ "state_event": "close" }))
+        .send()
+        .await
+        .map_err(|e| format!("Close MR failed: {e}"))?;
+    if response.status().as_u16() == 401 {
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
+    }
+    if !response.status().is_success() {
+        return Err(format!("Close MR failed: HTTP {}", response.status()).into());
+    }
+    Ok(())
+}
+
+/// Create a revert MR via GitLab. Does not click Merge.
+pub async fn revert_mr_live(
+    credentials: &JacpCredentials,
+    project_path: &str,
+    iid: i32,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let url = format!(
+        "{}/api/v4/projects/{}/merge_requests/{}/revert",
+        coding_base_url(),
+        urlencoding_encode(project_path),
+        iid
+    );
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Cookie", &credentials.cookie)
+        .json(&serde_json::json!({
+            "branch": format!("revert-{iid}"),
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Revert MR failed: {e}"))?;
+    if response.status().as_u16() == 401 {
+        return Err(poria_core::types::AUTH_EXPIRED_USER_MESSAGE.into());
+    }
+    if !response.status().is_success() {
+        return Err(format!("Revert MR failed: HTTP {}", response.status()).into());
+    }
+    let data: serde_json::Value = response.json().await?;
+    data.get("web_url")
+        .or_else(|| data.get("merge_request").and_then(|mr| mr.get("web_url")))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| "Revert MR failed: empty web_url".into())
+}
+
 /// Find an existing MR matching the query.
 pub async fn find_mr_live(
     credentials: &JacpCredentials,
