@@ -1,4 +1,5 @@
 use std::process::Stdio;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -7,16 +8,24 @@ use tokio::process::Command;
 use tracing::{debug, error, info, warn};
 
 use super::agent_pool::{AgentQueryOptions, AgentSdk, SdkMessage};
+use super::path::resolve_claude_path;
 
 /// Real implementation of `AgentSdk` that spawns `claude` CLI processes.
 pub struct ClaudeCliSdk {
-    claude_path: String,
+    /// Called on every query so a saved `claude_path` is picked up without restart.
+    path_provider: Arc<dyn Fn() -> Option<String> + Send + Sync>,
 }
 
 impl ClaudeCliSdk {
     pub fn new(claude_path: Option<String>) -> Self {
         Self {
-            claude_path: claude_path.unwrap_or_else(|| "claude".into()),
+            path_provider: Arc::new(move || claude_path.clone()),
+        }
+    }
+
+    pub fn with_path_provider(provider: Arc<dyn Fn() -> Option<String> + Send + Sync>) -> Self {
+        Self {
+            path_provider: provider,
         }
     }
 }
@@ -111,15 +120,18 @@ impl AgentSdk for ClaudeCliSdk {
         options: AgentQueryOptions,
     ) -> Result<(Vec<SdkMessage>, Option<String>), Box<dyn std::error::Error + Send + Sync>> {
         let args = build_cli_args(prompt, &options);
+        let override_path = (self.path_provider)();
+        let resolved = resolve_claude_path(override_path.as_deref())?;
 
         debug!(
-            claude_path = %self.claude_path,
+            claude_path = %resolved.path,
+            source = ?resolved.source,
             args_count = args.len(),
             cwd = ?options.cwd,
             "spawning claude CLI"
         );
 
-        let mut cmd = Command::new(&self.claude_path);
+        let mut cmd = Command::new(&resolved.path);
         cmd.args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -131,8 +143,11 @@ impl AgentSdk for ClaudeCliSdk {
         }
 
         let mut child = cmd.spawn().map_err(|e| {
-            error!(path = %self.claude_path, error = %e, "failed to spawn claude CLI");
-            Box::new(e) as Box<dyn std::error::Error + Send + Sync>
+            error!(path = %resolved.path, error = %e, "failed to spawn claude CLI");
+            format!(
+                "无法启动 claude（路径 {}）: {e}。请确认已安装 Claude CLI，或在设置中填写绝对路径。",
+                resolved.path
+            )
         })?;
 
         let stdout = child

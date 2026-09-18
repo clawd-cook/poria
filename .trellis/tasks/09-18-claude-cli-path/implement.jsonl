@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "claude_path 跨 config / IPC / Settings / Agent spawn，必须同一份契约"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "设置探测和 which 解析只能在 Poria 窗口验证，不能用浏览器 1420"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "设置页改动走现有 Settings + invoke 封装，不另起 store"}
+{"file": ".trellis/tasks/09-17-harness-internalize/research/claude-invocation-analysis.md", "reason": "现有 claude -p spawn 约定，解析路径后仍走同一 CLI"}

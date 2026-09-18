@@ -96,6 +96,7 @@ Known 2026-09-17 fixtures:
 | `pnpm tauri dev` without a `tauri` on PATH | `sh: tauri: command not found` (`package.json` script is `"tauri": "tauri"`; `@tauri-apps/cli` is not a workspace dep) |
 | Port 1420 already used by leftover `pnpm dev` | Vite/Tauri fail (`strictPort`) |
 | Cursor browser on 1420 calls `listen`/`invoke` | `TypeError: Cannot read properties of undefined (reading 'transformCallback')` in `@tauri-apps/api/core.js` |
+| ReviewPrd `os error 2` / Settings Claude probe | See [Claude CLI Path](./claude-cli.md); GUI PATH often lacks Homebrew `claude` |
 | osascript without Accessibility | `-25211` `osascript不允许辅助访问` |
 | Click `menu 1 of group 1 of window 1` | `-1719` invalid index; search by AX name instead |
 | Duplicate git URL / `scope/name` | register rejected |

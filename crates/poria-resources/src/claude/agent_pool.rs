@@ -135,8 +135,21 @@ impl ClaudeAgentPool {
     }
 
     /// Create a new agent pool pre-initialized with the real Claude CLI SDK.
+    ///
+    /// `claude_path` is a static override. Prefer [`Self::new_with_path_provider`]
+    /// so saved `~/.poria/config.json` `claude_path` is read on every spawn.
     pub fn new_with_cli(max_concurrent: usize, claude_path: Option<String>) -> Self {
-        let sdk: Arc<dyn AgentSdk> = Arc::new(super::cli_sdk::ClaudeCliSdk::new(claude_path));
+        Self::new_with_path_provider(max_concurrent, move || claude_path.clone())
+    }
+
+    /// Create a pool that resolves the Claude binary on every dispatch.
+    pub fn new_with_path_provider(
+        max_concurrent: usize,
+        provider: impl Fn() -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        let sdk: Arc<dyn AgentSdk> = Arc::new(super::cli_sdk::ClaudeCliSdk::with_path_provider(
+            Arc::new(provider),
+        ));
         Self {
             sdk: Arc::new(Mutex::new(Some(sdk))),
             concurrency_semaphore: Arc::new(Semaphore::new(max_concurrent)),

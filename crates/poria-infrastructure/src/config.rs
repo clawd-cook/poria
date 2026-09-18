@@ -1,4 +1,8 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
+
+pub use crate::auth::get_config_file_path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoriaConfig {
@@ -6,6 +10,9 @@ pub struct PoriaConfig {
     pub timeouts: TimeoutConfig,
     pub retry: RetryConfig,
     pub paths: PathConfig,
+    /// Optional absolute path to the `claude` CLI. Empty / whitespace is unset.
+    #[serde(default)]
+    pub claude_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,19 +76,59 @@ impl Default for PoriaConfig {
                 backup_dir: "workspace/db/backup".into(),
                 log_dir: "workspace/logs".into(),
             },
+            claude_path: None,
         }
     }
 }
 
+impl PoriaConfig {
+    /// Trimmed override path, or `None` when unset / blank.
+    pub fn effective_claude_path(&self) -> Option<&str> {
+        self.claude_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+}
+
 pub fn load_config(overrides: Option<PoriaConfig>) -> PoriaConfig {
+    load_config_from(
+        get_config_file_path(None),
+        PathBuf::from("poria.config.json"),
+        overrides,
+    )
+}
+
+/// Load config preferring `user_config`, then CWD fallback when the user file is missing.
+pub fn load_config_from(
+    user_config: PathBuf,
+    cwd_fallback: PathBuf,
+    overrides: Option<PoriaConfig>,
+) -> PoriaConfig {
     let mut config = PoriaConfig::default();
 
-    if let Ok(content) = std::fs::read_to_string("poria.config.json") {
+    if user_config.is_file() {
+        if let Ok(content) = std::fs::read_to_string(&user_config) {
+            if let Ok(file_config) = serde_json::from_str::<PoriaConfig>(&content) {
+                config = file_config;
+            }
+        }
+    } else if let Ok(content) = std::fs::read_to_string(&cwd_fallback) {
         if let Ok(file_config) = serde_json::from_str::<PoriaConfig>(&content) {
             config = file_config;
         }
     }
 
+    apply_env_overrides(&mut config);
+
+    if let Some(overrides) = overrides {
+        config = overrides;
+    }
+
+    config
+}
+
+fn apply_env_overrides(config: &mut PoriaConfig) {
     if let Ok(val) = std::env::var("PORIA_CR_SCORE_THRESHOLD") {
         config.gates.cr_score_threshold = val;
     }
@@ -95,17 +142,20 @@ pub fn load_config(overrides: Option<PoriaConfig>) -> PoriaConfig {
             config.gates.diff_size_threshold = v;
         }
     }
+}
 
-    if let Some(overrides) = overrides {
-        config = overrides;
-    }
-
-    config
+pub fn normalize_claude_path(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn test_default_config() {
@@ -113,11 +163,122 @@ mod tests {
         assert_eq!(config.gates.cr_score_threshold, "B+");
         assert_eq!(config.gates.test_coverage_threshold, 80.0);
         assert_eq!(config.retry.max_stage_retries, 3);
+        assert_eq!(config.claude_path, None);
     }
 
     #[test]
     fn test_load_config_defaults() {
-        let config = load_config(None);
+        let missing_user = tempfile::tempdir().unwrap().path().join("config.json");
+        let missing_cwd = tempfile::tempdir()
+            .unwrap()
+            .path()
+            .join("poria.config.json");
+        let config = load_config_from(missing_user, missing_cwd, None);
         assert_eq!(config.gates.cr_score_threshold, "B+");
+        assert_eq!(config.claude_path, None);
+    }
+
+    #[test]
+    fn test_config_claude_path_defaults_when_field_missing() {
+        let mut value = serde_json::to_value(PoriaConfig::default()).unwrap();
+        value.as_object_mut().unwrap().remove("claude_path");
+        let parsed: PoriaConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.claude_path, None);
+        assert_eq!(parsed.effective_claude_path(), None);
+    }
+
+    #[test]
+    fn test_config_empty_claude_path_is_unset() {
+        let config = PoriaConfig {
+            claude_path: Some("  ".into()),
+            ..PoriaConfig::default()
+        };
+        assert_eq!(config.effective_claude_path(), None);
+        assert_eq!(normalize_claude_path(Some("")), None);
+        assert_eq!(
+            normalize_claude_path(Some(" /bin/claude ")).as_deref(),
+            Some("/bin/claude")
+        );
+
+        let json = serde_json::to_string(&config).unwrap();
+        let parsed: PoriaConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.claude_path.as_deref(), Some("  "));
+        assert_eq!(parsed.effective_claude_path(), None);
+    }
+
+    #[test]
+    fn test_load_config_prefers_user_file_over_cwd() {
+        let user_dir = tempfile::tempdir().unwrap();
+        let cwd_dir = tempfile::tempdir().unwrap();
+        let user_file = user_dir.path().join("config.json");
+        let cwd_file = cwd_dir.path().join("poria.config.json");
+
+        let user_config = PoriaConfig {
+            claude_path: Some("/opt/homebrew/bin/claude".into()),
+            gates: GateConfig {
+                cr_score_threshold: "A".into(),
+                ..PoriaConfig::default().gates
+            },
+            ..PoriaConfig::default()
+        };
+        std::fs::write(&user_file, serde_json::to_string(&user_config).unwrap()).unwrap();
+
+        let cwd_config = PoriaConfig {
+            claude_path: Some("/tmp/cwd-claude".into()),
+            gates: GateConfig {
+                cr_score_threshold: "C".into(),
+                ..PoriaConfig::default().gates
+            },
+            ..PoriaConfig::default()
+        };
+        std::fs::write(&cwd_file, serde_json::to_string(&cwd_config).unwrap()).unwrap();
+
+        let loaded = load_config_from(user_file, cwd_file, None);
+        assert_eq!(
+            loaded.effective_claude_path(),
+            Some("/opt/homebrew/bin/claude")
+        );
+        assert_eq!(loaded.gates.cr_score_threshold, "A");
+    }
+
+    #[test]
+    fn test_load_config_cwd_fallback_when_user_file_missing() {
+        let user_file = tempfile::tempdir().unwrap().path().join("config.json");
+        let cwd_dir = tempfile::tempdir().unwrap();
+        let cwd_file = cwd_dir.path().join("poria.config.json");
+
+        let cwd_config = PoriaConfig {
+            claude_path: Some("/usr/local/bin/claude".into()),
+            ..PoriaConfig::default()
+        };
+        std::fs::write(&cwd_file, serde_json::to_string(&cwd_config).unwrap()).unwrap();
+
+        let loaded = load_config_from(user_file, cwd_file, None);
+        assert_eq!(
+            loaded.effective_claude_path(),
+            Some("/usr/local/bin/claude")
+        );
+    }
+
+    #[test]
+    fn test_config_file_path_sits_next_to_auth() {
+        let root = Path::new("/tmp/.poria");
+        assert_eq!(
+            get_config_file_path(Some(root)),
+            PathBuf::from("/tmp/.poria/config.json")
+        );
+    }
+
+    #[test]
+    fn test_missing_claude_path_field_is_null_in_round_trip_value() {
+        let parsed: PoriaConfig = serde_json::from_value(Value::Object(
+            serde_json::to_value(PoriaConfig::default())
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .clone(),
+        ))
+        .unwrap();
+        assert_eq!(parsed.claude_path, None);
     }
 }

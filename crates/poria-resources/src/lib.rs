@@ -30,4 +30,8 @@ pub use claude::output_guard::{
     AgentOutput, DependencyEntry, GuardResult, OutputGuard, OutputGuardConfig, Violation,
     ViolationSeverity, ViolationType,
 };
+pub use claude::path::{
+    parse_which_stdout, probe_claude_cli, resolve_claude_path, ClaudePathSource, ClaudeProbeResult,
+    ResolvedClaudePath,
+};
 pub use claude::session_tracker::SessionTracker;

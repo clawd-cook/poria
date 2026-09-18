@@ -80,12 +80,23 @@ export interface AuthStatus {
 }
 
 export interface AppConfig {
-  cr_score_threshold: string;
-  test_coverage_threshold: number;
-  max_diff_lines: number;
   agent_timeout_ms: number;
-  max_retries: number;
+  claude_path: string | null;
+  cr_score_threshold: string;
   db_path: string;
+  max_diff_lines: number;
+  max_retries: number;
+  test_coverage_threshold: number;
+}
+
+export type ClaudePathSource = "config" | "which";
+
+export interface ClaudeProbeResult {
+  error: string | null;
+  ok: boolean;
+  resolvedPath: string | null;
+  source: ClaudePathSource | null;
+  version: string | null;
 }
 
 export interface SkillInfo {
