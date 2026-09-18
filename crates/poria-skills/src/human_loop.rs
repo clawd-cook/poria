@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use poria_core::pipeline::{
+    blocked_stage_index, hitl_escalate_message, hitl_notify_message, jme_notify_target,
+    read_human_loop_state,
+};
 use poria_core::types::{Pipeline, Stage};
 
-use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
 
 /// The action a human chose in a human-in-the-loop interaction.
@@ -55,11 +58,8 @@ pub trait HumanLoop: Send + Sync {
     ) -> Result<Option<HumanReply>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
-/// Fixture/stub coordinator for human-in-the-loop interactions.
-///
-/// In fixture mode every method succeeds immediately (no-op for void methods,
-/// `None` for poll). Outside fixture mode, methods return an error indicating
-/// the real implementation is not yet available.
+/// Coordinates desktop + 京ME HITL. Fixture mode is a no-op; otherwise notify/read
+/// go through JoyClaw (`poria-channels` JME). Gateway-down is best-effort.
 pub struct HumanLoopCoordinator {
     fixture: bool,
 }
@@ -78,58 +78,124 @@ impl Default for HumanLoopCoordinator {
     }
 }
 
+fn stage_label(stage: &Stage) -> String {
+    serde_json::to_value(stage.name)
+        .ok()
+        .and_then(|value| value.as_str().map(ToOwned::to_owned))
+        .unwrap_or_else(|| format!("{:?}", stage.name))
+}
+
+fn notify_target_for(pipeline: &Pipeline, issue_class: &str, stage: Option<&Stage>) -> String {
+    stage
+        .map(read_human_loop_state)
+        .and_then(|state| state.notify_target)
+        .filter(|target| !target.trim().is_empty())
+        .unwrap_or_else(|| jme_notify_target(pipeline, issue_class))
+}
+
 #[async_trait]
 impl HumanLoop for HumanLoopCoordinator {
     async fn notify(
         &self,
-        _pipeline: &Pipeline,
-        _stage: &Stage,
-        _issue_class: &str,
+        pipeline: &Pipeline,
+        stage: &Stage,
+        issue_class: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.fixture {
             return Ok(());
         }
-        Err(Box::new(SkillError::NotImplemented(
-            "HumanLoopCoordinator.notify".into(),
-        )))
+        let target = jme_notify_target(pipeline, issue_class);
+        let detail = stage
+            .issue
+            .as_ref()
+            .map(|issue| issue.message.as_str())
+            .unwrap_or("");
+        let message = hitl_notify_message(pipeline, &stage_label(stage), issue_class, detail);
+        match poria_channels::jme::send_message(&target, &message, Some(120), None).await {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                tracing::warn!(error = %err, target, "JME HITL notify failed");
+                Err(err)
+            }
+        }
     }
 
     async fn renotify(
         &self,
-        _pipeline: &Pipeline,
-        _stage: &Stage,
+        pipeline: &Pipeline,
+        stage: &Stage,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if self.fixture {
-            return Ok(());
-        }
-        Err(Box::new(SkillError::NotImplemented(
-            "HumanLoopCoordinator.renotify".into(),
-        )))
+        let issue_class = stage
+            .issue
+            .as_ref()
+            .map(|issue| issue.class.as_str())
+            .unwrap_or("unknown");
+        self.notify(pipeline, stage, issue_class).await
     }
 
     async fn escalate(
         &self,
-        _pipeline: &Pipeline,
-        _message: &str,
+        pipeline: &Pipeline,
+        message: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.fixture {
             return Ok(());
         }
-        Err(Box::new(SkillError::NotImplemented(
-            "HumanLoopCoordinator.escalate".into(),
-        )))
+        let stage = blocked_stage_index(pipeline).and_then(|idx| pipeline.stages.get(idx));
+        let issue_class = stage
+            .and_then(|s| s.issue.as_ref())
+            .map(|issue| issue.class.as_str())
+            .unwrap_or("unknown");
+        let target = notify_target_for(pipeline, issue_class, stage);
+        let body = hitl_escalate_message(pipeline, message);
+        match poria_channels::jme::send_message(&target, &body, Some(120), None).await {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                tracing::warn!(error = %err, target, "JME HITL escalate failed");
+                Err(err)
+            }
+        }
     }
 
     async fn poll_reply(
         &self,
-        _pipeline: &Pipeline,
+        pipeline: &Pipeline,
     ) -> Result<Option<HumanReply>, Box<dyn std::error::Error + Send + Sync>> {
         if self.fixture {
             return Ok(None);
         }
-        Err(Box::new(SkillError::NotImplemented(
-            "HumanLoopCoordinator.poll_reply".into(),
-        )))
+        let Some(idx) = blocked_stage_index(pipeline) else {
+            return Ok(None);
+        };
+        let stage = &pipeline.stages[idx];
+        let state = read_human_loop_state(stage);
+        if state.reply_consumed || state.manual_at.is_some() {
+            return Ok(None);
+        }
+        let issue_class = stage
+            .issue
+            .as_ref()
+            .map(|issue| issue.class.as_str())
+            .unwrap_or("unknown");
+        let chat = notify_target_for(pipeline, issue_class, Some(stage));
+        let since = state
+            .since
+            .or(state.notified_at)
+            .unwrap_or_else(|| pipeline.updated_at.to_rfc3339());
+        let replies = match poria_channels::jme::read_replies(&chat, &since, Some(120), None).await
+        {
+            Ok(replies) => replies,
+            Err(err) => {
+                tracing::debug!(error = %err, "JME HITL poll skipped");
+                return Ok(None);
+            }
+        };
+        for text in replies {
+            if let Some(reply) = parse_human_reply(&text) {
+                return Ok(Some(reply));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -286,5 +352,70 @@ mod tests {
     fn test_raw_message_is_trimmed() {
         let reply = parse_human_reply("  cancel  ").unwrap();
         assert_eq!(reply.raw_message, "cancel");
+    }
+
+    fn blocked_pipeline() -> Pipeline {
+        use chrono::Utc;
+        use poria_core::types::{
+            PipelineConfig, PipelineStatus, StageEnum, StageIssue, StageStatus,
+        };
+        Pipeline {
+            id: "pl-hitl".into(),
+            demand_id: 1,
+            demand_code: "D1".into(),
+            demand_name: None,
+            status: PipelineStatus::Blocked,
+            raw_link: String::new(),
+            operator: "erp.li".into(),
+            has_regressed: false,
+            config: PipelineConfig::default(),
+            stages: vec![Stage {
+                id: None,
+                pipeline_id: "pl-hitl".into(),
+                name: StageEnum::Design,
+                status: StageStatus::Blocked,
+                skill_id: None,
+                retry_count: 0,
+                max_retries: 3,
+                input: None,
+                output: None,
+                gate_results: None,
+                issue: Some(StageIssue {
+                    class: "requirement_ambiguous".into(),
+                    message: "P0 unanswered".into(),
+                    retryable: true,
+                }),
+                rollback: None,
+                agent_session_id: None,
+                started_at: None,
+                completed_at: None,
+            }],
+            repos: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn notify_is_implemented_via_jme_fixture() {
+        std::env::set_var("PORIA_JME_FIXTURE", "1");
+        let coordinator = HumanLoopCoordinator { fixture: false };
+        let pipeline = blocked_pipeline();
+        let result = coordinator
+            .notify(&pipeline, &pipeline.stages[0], "requirement_ambiguous")
+            .await;
+        std::env::remove_var("PORIA_JME_FIXTURE");
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn poll_reply_parses_jme_fixture_resume() {
+        std::env::set_var("PORIA_JME_FIXTURE", "1");
+        std::env::set_var("PORIA_JME_FIXTURE_REPLIES", "已修复");
+        let coordinator = HumanLoopCoordinator { fixture: false };
+        let reply = coordinator.poll_reply(&blocked_pipeline()).await.unwrap();
+        std::env::remove_var("PORIA_JME_FIXTURE_REPLIES");
+        std::env::remove_var("PORIA_JME_FIXTURE");
+        assert_eq!(reply.unwrap().action, HumanAction::Resume);
     }
 }

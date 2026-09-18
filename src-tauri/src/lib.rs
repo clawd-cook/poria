@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
@@ -10,6 +11,7 @@ pub struct AppState {
     pub agent_pool: Arc<poria_resources::ClaudeAgentPool>,
     pub auto_run: Arc<Mutex<AutoRunScheduler>>,
     pub event_store: Arc<poria_infrastructure::store::EventStore>,
+    pub human_reply_inflight: Arc<Mutex<HashSet<String>>>,
     pub repo_store: Arc<poria_infrastructure::store::RegisteredRepoStore>,
     pub session_tracker: Arc<poria_resources::SessionTracker>,
     pub store: Arc<poria_infrastructure::store::SqlitePipelineStore>,
@@ -67,6 +69,7 @@ pub fn run() {
                 agent_pool,
                 auto_run: Arc::new(Mutex::new(AutoRunScheduler::default())),
                 event_store,
+                human_reply_inflight: Arc::new(Mutex::new(HashSet::new())),
                 repo_store,
                 session_tracker,
                 store: store.clone(),
@@ -82,6 +85,7 @@ pub fn run() {
                     let _ =
                         commands::pipeline::poll_waiting_merges_once(&poll_handle, &state.store)
                             .await;
+                    let _ = commands::pipeline::poll_human_loops_once(&poll_handle, &state).await;
                 }
             });
 
