@@ -104,7 +104,7 @@ export interface ChannelInfo {
   version: string;
 }
 
-export type ViewType = "home" | "demands" | "repos" | "settings";
+export type ViewType = "channels" | "demands" | "home" | "repos" | "settings" | "skills";
 
 export type CloneStatus = "cloning" | "failed" | "ready";
 
