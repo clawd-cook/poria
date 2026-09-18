@@ -96,6 +96,7 @@ pub fn run() {
             commands::config::update_config,
             commands::config::probe_claude,
             commands::skills::list_skills,
+            commands::skills::get_skill,
             commands::channels::list_channels,
             commands::repos::register_repo,
             commands::repos::list_repos,

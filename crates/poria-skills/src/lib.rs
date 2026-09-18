@@ -20,14 +20,15 @@ mod workspace;
 
 pub use crate::backend_aid::insert_backend_coding_aid_vars;
 pub use claude_prompt::{
-    build_claude_skill_prompt, BUNDLED_SKILL_DIRS, SKILL_CODE_REVIEW, SKILL_GEN_CODE,
-    SKILL_GEN_TRD, SKILL_REVIEW_PRD,
+    build_claude_skill_prompt, bundled_skill_dir_name, BUNDLED_SKILL_DIRS, SKILL_CODE_REVIEW,
+    SKILL_GEN_CODE, SKILL_GEN_TRD, SKILL_REVIEW_PRD,
 };
 pub use error::SkillError;
 pub use fixture::is_fixture_mode;
 pub use workspace_layout::{
-    bundled_skills_complete, prepare_pipeline_workspace, repo_bundled_skills_dir,
-    workspace_claude_md, ARTIFACT_SYMLINK_NAMES,
+    bundled_skills_complete, list_bundled_skill_docs, parse_skill_markdown,
+    prepare_pipeline_workspace, read_bundled_skill_markdown, repo_bundled_skills_dir,
+    workspace_claude_md, BundledSkillDoc, ARTIFACT_SYMLINK_NAMES,
 };
 
 pub use human_loop::{parse_human_reply, HumanAction, HumanLoop, HumanLoopCoordinator, HumanReply};
