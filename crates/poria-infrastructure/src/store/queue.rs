@@ -48,6 +48,28 @@ impl PipelineQueue {
         conn.query_row("SELECT COUNT(*) FROM queue", [], |row| row.get(0))
             .map_err(|e| e.to_string())
     }
+
+    pub fn contains(&self, pipeline_id: &str) -> Result<bool, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM queue WHERE pipeline_id = ?1",
+                params![pipeline_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(count > 0)
+    }
+
+    pub fn remove(&self, pipeline_id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "DELETE FROM queue WHERE pipeline_id = ?1",
+            params![pipeline_id],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 pub struct WorkerLock {
@@ -107,4 +129,59 @@ fn is_process_alive(pid: u32) -> bool {
 #[cfg(not(unix))]
 fn is_process_alive(_pid: u32) -> bool {
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn test_queue() -> PipelineQueue {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pipeline_id TEXT NOT NULL UNIQUE,
+                priority INTEGER DEFAULT 0,
+                enqueued_at TEXT NOT NULL
+            );",
+        )
+        .unwrap();
+        PipelineQueue::new(conn)
+    }
+
+    #[test]
+    fn enqueue_is_idempotent_and_dequeues_by_priority() {
+        let queue = test_queue();
+        queue.enqueue("low", 0).unwrap();
+        queue.enqueue("high", 10).unwrap();
+        queue.enqueue("low", 99).unwrap();
+        assert!(queue.contains("low").unwrap());
+        assert_eq!(queue.size().unwrap(), 2);
+        assert_eq!(queue.dequeue().unwrap().as_deref(), Some("high"));
+        assert_eq!(queue.dequeue().unwrap().as_deref(), Some("low"));
+        assert_eq!(queue.dequeue().unwrap(), None);
+    }
+
+    #[test]
+    fn remove_drops_queued_id() {
+        let queue = test_queue();
+        queue.enqueue("p1", 0).unwrap();
+        queue.enqueue("p2", 0).unwrap();
+        queue.remove("p1").unwrap();
+        assert!(!queue.contains("p1").unwrap());
+        assert_eq!(queue.dequeue().unwrap().as_deref(), Some("p2"));
+    }
+
+    #[test]
+    fn worker_lock_acquire_and_release() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = WorkerLock::new(dir.path());
+        assert!(lock.acquire().unwrap());
+        assert!(lock.is_locked());
+        lock.release().unwrap();
+        assert!(!lock.is_locked());
+        assert!(lock.acquire().unwrap());
+        lock.release().unwrap();
+    }
 }

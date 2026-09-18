@@ -2987,6 +2987,7 @@ dependencies = [
 name = "poria-desktop"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "dirs 7.0.0",
  "hex",
@@ -3014,6 +3015,7 @@ dependencies = [
 name = "poria-infrastructure"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "dirs 7.0.0",
  "libc",

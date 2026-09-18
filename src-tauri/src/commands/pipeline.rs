@@ -537,8 +537,8 @@ async fn cancel_pipeline_inner(id: &str, app: &AppHandle, state: &AppState) -> R
         .store
         .save_stage_tx(None, &pipeline, &[cancel_event])?;
 
-    if let Ok(mut scheduler) = state.auto_run.lock() {
-        scheduler.drop_queued(id);
+    if let Err(error) = state.pipeline_queue.remove(id) {
+        tracing::warn!(error = %error, pipeline_id = %id, "failed to drop queued pipeline");
     }
 
     app.emit("pipeline:cancelled", id)
@@ -727,17 +727,18 @@ pub async fn execute_stage(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    if let Some(current) = state
-        .auto_run
-        .lock()
-        .map_err(|e| e.to_string())?
-        .current()
-        .map(str::to_string)
-    {
+    if let Some(current) = state.current_run.lock().map_err(|e| e.to_string())?.clone() {
         if current == pipeline_id {
             return Err("流水线正在自动执行".into());
         }
         return Err("请等待当前流水线自动执行完成".into());
+    }
+    if state
+        .pipeline_queue
+        .contains(&pipeline_id)
+        .map_err(|e| e.to_string())?
+    {
+        return Err("流水线已在自动执行队列中".into());
     }
     let advanced =
         execute_next_stage(&pipeline_id, &app, &AutoRunRuntime::from_state(&state)).await?;
@@ -1338,52 +1339,36 @@ pub(crate) async fn poll_human_loops_once(app: &AppHandle, state: &AppState) -> 
 }
 
 #[derive(Clone)]
-struct AutoRunRuntime {
+pub(crate) struct AutoRunRuntime {
     agent_pool: Arc<poria_resources::ClaudeAgentPool>,
-    auto_run: Arc<std::sync::Mutex<crate::AutoRunScheduler>>,
     repo_store: Arc<poria_infrastructure::store::RegisteredRepoStore>,
     store: Arc<SqlitePipelineStore>,
 }
 
 impl AutoRunRuntime {
-    fn from_state(state: &AppState) -> Self {
+    pub(crate) fn from_state(state: &AppState) -> Self {
         Self {
             agent_pool: state.agent_pool.clone(),
-            auto_run: state.auto_run.clone(),
             repo_store: state.repo_store.clone(),
             store: state.store.clone(),
         }
     }
 }
 
-fn enqueue_auto_run(app: AppHandle, state: &AppState, pipeline_id: String) {
-    let start_id = match state.auto_run.lock() {
-        Ok(mut scheduler) => scheduler.submit(pipeline_id),
-        Err(error) => {
-            tracing::error!(error = %error, "auto-run scheduler poisoned");
-            None
-        }
-    };
-    if let Some(id) = start_id {
-        spawn_auto_run(app, AutoRunRuntime::from_state(state), id);
+fn enqueue_auto_run(_app: AppHandle, state: &AppState, pipeline_id: String) {
+    if pipeline_id.trim().is_empty() {
+        return;
+    }
+    if let Err(error) = state.pipeline_queue.enqueue(&pipeline_id, 0) {
+        tracing::error!(
+            error = %error,
+            pipeline_id = %pipeline_id,
+            "failed to enqueue pipeline for worker"
+        );
     }
 }
 
-fn spawn_auto_run(app: AppHandle, runtime: AutoRunRuntime, pipeline_id: String) {
-    tauri::async_runtime::spawn(async move {
-        run_auto_loop(app.clone(), runtime.clone(), pipeline_id.clone()).await;
-        let next = runtime
-            .auto_run
-            .lock()
-            .ok()
-            .and_then(|mut scheduler| scheduler.finish(&pipeline_id));
-        if let Some(next_id) = next {
-            spawn_auto_run(app, runtime, next_id);
-        }
-    });
-}
-
-async fn run_auto_loop(app: AppHandle, runtime: AutoRunRuntime, pipeline_id: String) {
+pub(crate) async fn run_auto_loop(app: AppHandle, runtime: AutoRunRuntime, pipeline_id: String) {
     loop {
         match execute_next_stage(&pipeline_id, &app, &runtime).await {
             Ok(true) => continue,
