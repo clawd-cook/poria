@@ -4,7 +4,7 @@ import {
   ReloadOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Button, Descriptions, Flex, Space, Typography } from "antd";
+import { Alert, App, Button, Descriptions, Flex, Space, Typography, theme } from "antd";
 import { useState } from "react";
 
 import { invokeErrorMessage } from "../lib/errors";
@@ -21,6 +21,7 @@ interface HumanLoopCardProps {
 export function HumanLoopCard({ pipelineId, stage, issueClass, detail }: HumanLoopCardProps) {
   const { dispatch } = useStore();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [loading, setLoading] = useState<string | null>(null);
 
   async function handleAction(action: string) {
@@ -47,17 +48,16 @@ export function HumanLoopCard({ pipelineId, stage, issueClass, detail }: HumanLo
             <Descriptions.Item label="问题">{issueClass}</Descriptions.Item>
             <Descriptions.Item label="阶段">{stage}</Descriptions.Item>
           </Descriptions>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
             {detail}
           </Typography.Text>
-          <Flex gap={8}>
+          <Flex gap={token.marginXS}>
             <Button
-              type="primary"
+              disabled={loading !== null}
               icon={<ReloadOutlined />}
               loading={loading === "resume"}
-              disabled={loading !== null}
               onClick={() => handleAction("resume")}
-              style={{ backgroundColor: "#52c41a", borderColor: "#52c41a" }}
+              type="primary"
             >
               修复并重试
             </Button>

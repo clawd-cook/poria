@@ -77,7 +77,9 @@ function timeAgo(dateStr: string): string {
 }
 
 function stageLabel(stage: string | null): string | null {
-  if (!stage) return null;
+  if (!stage) {
+    return null;
+  }
   if (stage in STAGE_LABELS) {
     return STAGE_LABELS[stage as StageEnum];
   }
@@ -128,7 +130,7 @@ function pipelineToCard(pipeline: PipelineSummary): BoardCard {
 }
 
 export function HomeBoard() {
-  const { state, dispatch } = useStore();
+  const { dispatch, state } = useStore();
   const { token } = theme.useToken();
   const { message } = App.useApp();
   const loggedIn = state.auth.logged_in;
@@ -263,7 +265,7 @@ export function HomeBoard() {
   if (state.selectedPipelineId) {
     return (
       <Flex vertical style={{ height: "100%" }}>
-        <div style={{ padding: "8px 16px 0" }}>
+        <div style={{ padding: `${token.paddingSM}px ${token.paddingMD}px 0` }}>
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => dispatch({ id: null, type: "pipelineSelected" })}
@@ -282,8 +284,8 @@ export function HomeBoard() {
   }
 
   return (
-    <Flex vertical gap={12} style={{ height: "100%", padding: 16 }}>
-      <Flex align="center" gap={12} wrap="wrap">
+    <Flex gap={token.marginMD} style={{ height: "100%", padding: token.paddingLG }} vertical>
+      <Flex align="center" gap={token.marginMD} wrap="wrap">
         <Input.Search
           allowClear
           onChange={(event) => setKeywordInput(event.target.value)}
@@ -313,7 +315,7 @@ export function HomeBoard() {
         />
       </Flex>
 
-      <Flex gap={12} style={{ flex: 1, minHeight: 0, overflowX: "auto" }}>
+      <Flex gap={token.marginMD} style={{ flex: 1, minHeight: 0, overflowX: "auto" }}>
         <BoardColumn
           count={loggedIn ? unstartedCards.length : createdCards.length}
           label="未开始"
@@ -343,14 +345,14 @@ export function HomeBoard() {
               {error ? (
                 <Alert
                   action={
-                    <Flex gap={8}>
+                    <Flex gap={token.marginSM}>
                       {isAuthError(error) ? (
                         <Button onClick={() => void startLogin()} size="small">
                           登录
                         </Button>
                       ) : null}
                       <Button
-                        onClick={() => setReloadToken((token) => token + 1)}
+                        onClick={() => setReloadToken((count) => count + 1)}
                         size="small"
                         type="primary"
                       >
@@ -364,7 +366,7 @@ export function HomeBoard() {
                 />
               ) : null}
               {loading ? (
-                <Flex align="center" justify="center" style={{ padding: 16 }}>
+                <Flex align="center" justify="center" style={{ padding: token.paddingMD }}>
                   <Spin size="small" />
                 </Flex>
               ) : null}
@@ -438,20 +440,21 @@ function BoardColumn({
 }) {
   return (
     <Flex
-      gap={8}
+      gap={token.marginSM}
       style={{
-        background: token.colorFillAlter,
-        borderRadius: token.borderRadiusLG,
+        background: token.colorBgContainer,
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: token.borderRadius,
         flex: "0 0 260px",
         minWidth: 260,
-        padding: 12,
+        padding: token.paddingMD,
       }}
       vertical
     >
       <Text strong>
         {label} ({count})
       </Text>
-      <Flex gap={8} style={{ flex: 1, minHeight: 0, overflowY: "auto" }} vertical>
+      <Flex gap={token.marginSM} style={{ flex: 1, minHeight: 0, overflowY: "auto" }} vertical>
         {children}
       </Flex>
     </Flex>
@@ -467,11 +470,12 @@ function KanbanCard({
   onOpenDocs: () => void;
   onSelect: () => void;
 }) {
+  const { token } = theme.useToken();
   const stage = stageLabel(card.currentStage);
 
   return (
-    <Card hoverable onClick={onSelect} size="small" styles={{ body: { padding: 12 } }}>
-      <Flex align="flex-start" gap={8} justify="space-between">
+    <Card hoverable onClick={onSelect} size="small" styles={{ body: { padding: token.paddingMD } }}>
+      <Flex align="flex-start" gap={token.marginSM} justify="space-between">
         <Text ellipsis strong style={{ flex: 1 }}>
           {card.demand.name || card.demand.demand_code || `需求 ${card.demand.id}`}
         </Text>
@@ -481,9 +485,9 @@ function KanbanCard({
           <StatusBadge status={card.status} />
         )}
       </Flex>
-      <Flex align="center" gap={8} style={{ marginTop: 8 }} wrap="wrap">
-        {stage ? <Tag style={{ fontSize: 11, margin: 0 }}>{stage}</Tag> : null}
-        <Text style={{ fontSize: 11 }} type="secondary">
+      <Flex align="center" gap={token.marginSM} style={{ marginTop: token.marginSM }} wrap="wrap">
+        {stage ? <Tag style={{ margin: 0 }}>{stage}</Tag> : null}
+        <Text type="secondary">
           {card.demand.demand_code || `id:${card.demand.id}`}
           {card.updatedAt ? ` · ${timeAgo(card.updatedAt)}` : ""}
         </Text>

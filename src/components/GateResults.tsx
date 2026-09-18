@@ -1,10 +1,9 @@
-import { Table, Tag, Typography } from "antd";
+import { Table, Tag, theme } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import type { StageDetail, StageEnum } from "../lib/types";
 import { STAGE_LABELS } from "../lib/types";
-
-const { Title } = Typography;
+import { PageSectionTitle } from "./PageFrame";
 
 interface GateResult {
   gate: string;
@@ -60,6 +59,7 @@ const columns: ColumnsType<GateRow> = [
 ];
 
 export function GateResults({ stages }: { stages: StageDetail[] }) {
+  const { token } = theme.useToken();
   const allGates: GateRow[] = stages.flatMap((s) => {
     const results = parseGateResults(s.gate_results);
     return results.map((g, i) => ({
@@ -72,14 +72,9 @@ export function GateResults({ stages }: { stages: StageDetail[] }) {
   if (allGates.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <Title level={5}>门禁结果</Title>
-      <Table<GateRow>
-        columns={columns}
-        dataSource={allGates}
-        size="small"
-        pagination={false}
-      />
+    <div style={{ marginTop: token.margin }}>
+      <PageSectionTitle>门禁结果</PageSectionTitle>
+      <Table<GateRow> columns={columns} dataSource={allGates} pagination={false} size="small" />
     </div>
   );
 }

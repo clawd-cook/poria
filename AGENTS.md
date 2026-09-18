@@ -51,14 +51,14 @@ Shared Rust deps live in root `Cargo.toml` `[workspace.dependencies]`. Add versi
 
 ### Pipeline stages → skills
 
-| `StageEnum` | Skill id | Implementation |
-|---|---|---|
-| `Init` | `skill:init` | Export JoySpace docs into `~/.poria/projects/<demand_code>/`, create `~/.poria/workspaces/<pipeline_id>/` (doc + skill symlinks, `CLAUDE.md`), then frontend feature worktree + backend detached worktree |
-| `ReviewPrd` | `skill:review-prd` | Workspace-root `claude -p` short prompt naming `review-prd`; write `PRD_REVIEW.md` via symlink into projects |
-| `Design` | `skill:gen-trd` | Same cwd; write frontend `TRD.md` into the demand project dir via workspace symlink |
-| `Dev` | `skill:gen-code` | Same cwd; codegen + `TASK.md`; only the frontend worktree is modified |
-| `Cr` | `skill:code-review` | Same cwd; `CR.md` + gates |
-| `Deploy` | `skill:deploy` | Commit if dirty → **push** → EasyCI SELECT bind → find/create MR (frontend worktree cwd) |
+| `StageEnum` | Skill id            | Implementation                                                                                                                                                                                            |
+| ----------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Init`      | `skill:init`        | Export JoySpace docs into `~/.poria/projects/<demand_code>/`, create `~/.poria/workspaces/<pipeline_id>/` (doc + skill symlinks, `CLAUDE.md`), then frontend feature worktree + backend detached worktree |
+| `ReviewPrd` | `skill:review-prd`  | Workspace-root `claude -p` short prompt naming `review-prd`; write `PRD_REVIEW.md` via symlink into projects                                                                                              |
+| `Design`    | `skill:gen-trd`     | Same cwd; write frontend `TRD.md` into the demand project dir via workspace symlink                                                                                                                       |
+| `Dev`       | `skill:gen-code`    | Same cwd; codegen + `TASK.md`; only the frontend worktree is modified                                                                                                                                     |
+| `Cr`        | `skill:code-review` | Same cwd; `CR.md` + gates                                                                                                                                                                                 |
+| `Deploy`    | `skill:deploy`      | Commit if dirty → **push** → EasyCI SELECT bind → find/create MR (frontend worktree cwd)                                                                                                                  |
 
 Map source of truth: `crates/poria-skills/src/stage_skill_map.rs` and `crates/poria-commands/src/traits.rs` (`stage_skill_id`). Keep both in sync.
 
@@ -207,7 +207,7 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 - Formatter: `pnpm exec oxfmt .` (`.oxfmtrc.json`: sort imports, sort object keys, sort Tailwind classes; ignores `.claude`, `.trellis`, `submodules`)
 - Strict TS: `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`
 - ESM (`"type": "module"`), JSX `react-jsx` (no default React import)
-- UI: Ant Design 6 + `@ant-design/x*`, locale `zh_CN`, default light theme (`src/App.tsx`)
+- UI: Ant Design 6 + `@ant-design/x*`, locale `zh_CN`, light theme `poriaTheme` in `src/theme.ts` (Swiss/Minimal tokens, no extra brand palette)
 - Global state: `src/state/store.tsx` reducer + `src/state/actions.ts`. Do not introduce a second store.
 - IPC: wrap `invoke` in `src/lib/tauri.ts`. Tauri v2 maps JS **camelCase** args to Rust snake_case (`pipelineId` → `pipeline_id`, `gitUrl` → `git_url`, `backendTrdUrl` → `backend_trd_url`).
 - CSS: Tailwind v4 via Vite (no `tailwind.config.*`). Prefer Ant Design props for layout; Tailwind only where already used.
@@ -223,17 +223,17 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 
 ### File organization
 
-| Area | Path |
-|---|---|
-| Pages / widgets | `src/components/` |
-| Hooks | `src/hooks/` |
-| Store | `src/state/` |
-| Types + IPC | `src/lib/` |
-| Tauri commands | `src-tauri/src/commands/{auth,channels,config,demands,pipeline,projects,repos,skills}.rs` |
-| Capabilities | `src-tauri/capabilities/default.json` |
-| Domain | `crates/poria-core/` |
-| SQLite / auth | `crates/poria-infrastructure/` |
-| Channels | `crates/poria-channels/src/{coding,defect,jme,joyspace,xingyun}/` |
+| Area            | Path                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| Pages / widgets | `src/components/`                                                                         |
+| Hooks           | `src/hooks/`                                                                              |
+| Store           | `src/state/`                                                                              |
+| Types + IPC     | `src/lib/`                                                                                |
+| Tauri commands  | `src-tauri/src/commands/{auth,channels,config,demands,pipeline,projects,repos,skills}.rs` |
+| Capabilities    | `src-tauri/capabilities/default.json`                                                     |
+| Domain          | `crates/poria-core/`                                                                      |
+| SQLite / auth   | `crates/poria-infrastructure/`                                                            |
+| Channels        | `crates/poria-channels/src/{coding,defect,jme,joyspace,xingyun}/`                         |
 
 ## Integration contracts (do not guess)
 
@@ -249,15 +249,15 @@ Load `.trellis/spec/` for the layer you edit. Cross-layer payload / demand-filte
 
 ## Data paths
 
-| What | Where |
-|---|---|
-| Auth | `~/.poria/auth.json` |
-| Hosted clones | `~/.poria/repos/` |
-| Demand markdown | `~/.poria/projects/<demand_code>/` |
-| Pipeline workspaces | `~/.poria/workspaces/<pipeline_id>/` |
-| App config | `~/.poria/config.json` |
+| What                       | Where                                                      |
+| -------------------------- | ---------------------------------------------------------- |
+| Auth                       | `~/.poria/auth.json`                                       |
+| Hosted clones              | `~/.poria/repos/`                                          |
+| Demand markdown            | `~/.poria/projects/<demand_code>/`                         |
+| Pipeline workspaces        | `~/.poria/workspaces/<pipeline_id>/`                       |
+| App config                 | `~/.poria/config.json`                                     |
 | SQLite (release / default) | `~/Library/Application Support/com.poria.desktop/poria.db` |
-| SQLite (dev override) | `workspace/db/poria.db` if that file exists |
+| SQLite (dev override)      | `workspace/db/poria.db` if that file exists                |
 
 Do not commit credentials, `workspace/db/`, or `~/.poria` contents.
 
@@ -265,10 +265,10 @@ Do not commit credentials, `workspace/db/`, or `~/.poria` contents.
 
 GitHub Actions:
 
-| Workflow | Tag | Result |
-|---|---|---|
-| `.github/workflows/pre-publish.yml` | `vX.Y.Z-beta.N` | GitHub **pre-release** macOS DMGs |
-| `.github/workflows/publish.yml` | `vX.Y.Z` (no `-beta`/`-rc`/`-alpha`) | **latest** GitHub Release |
+| Workflow                            | Tag                                  | Result                            |
+| ----------------------------------- | ------------------------------------ | --------------------------------- |
+| `.github/workflows/pre-publish.yml` | `vX.Y.Z-beta.N`                      | GitHub **pre-release** macOS DMGs |
+| `.github/workflows/publish.yml`     | `vX.Y.Z` (no `-beta`/`-rc`/`-alpha`) | **latest** GitHub Release         |
 
 Both build `aarch64-apple-darwin` and `x86_64-apple-darwin`. `APPLE_*` secrets are **optional**; missing certs must ad-hoc sign and still produce a DMG (do not fail-fast on empty secrets). Unsigned notes should mention `xattr -cr`.
 

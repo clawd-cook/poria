@@ -20,7 +20,9 @@ export function StreamOutput({ pipelineId }: { pipelineId: string }) {
     return (
       <div style={{ padding: "16px 0", textAlign: "center" }}>
         <Spin size="small" />
-        <Text type="secondary" style={{ marginLeft: 8 }}>等待 Claude 输出...</Text>
+        <Text type="secondary" style={{ marginLeft: 8 }}>
+          等待 Claude 输出...
+        </Text>
       </div>
     );
   }
@@ -38,7 +40,9 @@ export function StreamOutput({ pipelineId }: { pipelineId: string }) {
 function ChunkLine({ chunk }: { chunk: StreamChunk }) {
   switch (chunk.type) {
     case "text":
-      return <Paragraph style={{ margin: "2px 0", whiteSpace: "pre-wrap" }}>{chunk.content}</Paragraph>;
+      return (
+        <Paragraph style={{ margin: "2px 0", whiteSpace: "pre-wrap" }}>{chunk.content}</Paragraph>
+      );
     case "tool_use":
       return (
         <Collapse
@@ -89,6 +93,10 @@ function ChunkLine({ chunk }: { chunk: StreamChunk }) {
         </Text>
       );
     default:
-      return <Text type="secondary" style={{ display: "block" }}>{chunk.content}</Text>;
+      return (
+        <Text type="secondary" style={{ display: "block" }}>
+          {chunk.content}
+        </Text>
+      );
   }
 }

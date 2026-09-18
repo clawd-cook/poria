@@ -251,7 +251,6 @@ export function StartPipelineWizard({
                 dispatch({ type: "viewChanged", view: "repos" });
               }}
               size="small"
-              type="primary"
             >
               去登记仓库
             </Button>

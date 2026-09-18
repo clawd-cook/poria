@@ -5,7 +5,7 @@ import {
   InfoCircleOutlined,
   PlayCircleOutlined,
 } from "@ant-design/icons";
-import { Empty, Tag, Timeline } from "antd";
+import { Empty, Tag, Timeline, theme } from "antd";
 import { useEffect, useRef } from "react";
 
 import type { PipelineEvent } from "../lib/types";
@@ -33,6 +33,7 @@ function formatTime(dateStr: string): string {
 
 export function EventStream({ events }: { events: PipelineEvent[] }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const { token } = theme.useToken();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -49,11 +50,19 @@ export function EventStream({ events }: { events: PipelineEvent[] }) {
       color: cfg.color as string,
       children: (
         <div>
-          <Tag color={cfg.color as string} style={{ marginRight: 8 }}>{event.kind}</Tag>
-          <span style={{ fontSize: 12, opacity: 0.45, marginRight: 8 }}>
+          <Tag color={cfg.color as string} style={{ marginRight: token.marginXS }}>
+            {event.kind}
+          </Tag>
+          <span
+            style={{
+              color: token.colorTextTertiary,
+              fontSize: token.fontSizeSM,
+              marginRight: token.marginXS,
+            }}
+          >
             {formatTime(event.created_at)}
           </span>
-          <span style={{ fontSize: 13 }}>{event.payload}</span>
+          <span style={{ fontSize: token.fontSize }}>{event.payload}</span>
         </div>
       ),
     };
