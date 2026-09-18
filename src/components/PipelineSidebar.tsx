@@ -1,5 +1,5 @@
 import { FilterOutlined } from "@ant-design/icons";
-import { List, Segmented, Tag, Typography } from "antd";
+import { List, Segmented, Tag, Typography, theme } from "antd";
 import { useMemo } from "react";
 
 import type { PipelineStatus, PipelineSummary } from "../lib/types";
@@ -37,6 +37,7 @@ function timeAgo(dateStr: string): string {
 
 export function PipelineSidebar() {
   const { state, dispatch } = useStore();
+  const { token } = theme.useToken();
   const { pipelines, selectedPipelineId, ui } = state;
 
   const filtered = useMemo(() => {
@@ -56,7 +57,7 @@ export function PipelineSidebar() {
       <div
         style={{
           padding: "8px 12px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
           display: "flex",
           alignItems: "center",
           gap: 8,
@@ -88,7 +89,7 @@ export function PipelineSidebar() {
                 position: "sticky",
                 top: 0,
                 zIndex: 1,
-                background: "inherit",
+                background: token.colorBgContainer,
               }}
             >
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -106,9 +107,7 @@ export function PipelineSidebar() {
                     padding: "8px 16px",
                     cursor: "pointer",
                     background:
-                      pipeline.id === selectedPipelineId
-                        ? "rgba(255,255,255,0.08)"
-                        : undefined,
+                      pipeline.id === selectedPipelineId ? token.colorPrimaryBg : undefined,
                   }}
                 >
                   <div style={{ width: "100%" }}>
@@ -120,10 +119,7 @@ export function PipelineSidebar() {
                         gap: 8,
                       }}
                     >
-                      <Text
-                        ellipsis
-                        style={{ fontSize: 13, fontWeight: 500 }}
-                      >
+                      <Text ellipsis style={{ fontSize: 13, fontWeight: 500 }}>
                         {pipeline.demand_name}
                       </Text>
                       <StatusBadge status={pipeline.status} />
@@ -137,9 +133,7 @@ export function PipelineSidebar() {
                       }}
                     >
                       {pipeline.current_stage && (
-                        <Tag style={{ fontSize: 11, margin: 0 }}>
-                          {pipeline.current_stage}
-                        </Tag>
+                        <Tag style={{ fontSize: 11, margin: 0 }}>{pipeline.current_stage}</Tag>
                       )}
                       <Text type="secondary" style={{ fontSize: 11 }}>
                         {timeAgo(pipeline.created_at)}

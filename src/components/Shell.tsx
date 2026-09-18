@@ -4,7 +4,7 @@ import {
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
-import { Layout, Menu } from "antd";
+import { Layout, Menu, theme } from "antd";
 import type { ReactNode } from "react";
 
 import type { ViewType } from "../lib/types";
@@ -47,6 +47,7 @@ function PersistentTab({ active, children }: { active: boolean; children: ReactN
 
 export function Shell() {
   const { state, dispatch } = useStore();
+  const { token } = theme.useToken();
   const currentView = state.ui.view;
 
   return (
@@ -54,6 +55,8 @@ export function Shell() {
       <Header
         style={{
           alignItems: "center",
+          background: token.colorBgContainer,
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
           display: "flex",
           flex: "0 0 48px",
           height: 48,
