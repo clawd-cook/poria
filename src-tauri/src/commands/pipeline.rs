@@ -10,18 +10,19 @@ use tauri_plugin_opener::OpenerExt;
 use poria_channels::coding::{normalize_git_url, repo_search_path_from_git_url};
 use poria_channels::xingyun::{feature_branch_name, is_joyspace_prd_link, xingyun_demand_view_url};
 use poria_commands::{
-    is_auth_expired, is_requirement_ambiguous, is_trd_unconfirmed, stage_error_outcome,
+    is_auth_expired, is_out_of_scope, is_requirement_ambiguous, is_security_violation,
+    is_trd_unconfirmed, stage_error_outcome,
 };
 use poria_core::contracts::{Channel, ChannelContext, Skill, SkillContext};
 use poria_core::pipeline::{
-    create_pipeline_id, evaluate_gates, parse_prd_review, GatePhase,
+    create_pipeline_id, evaluate_gates, parse_prd_review, parse_trd_scope, GatePhase,
     PipelineEvent as CorePipelineEvent, StageResult, DEFAULT_GATES,
 };
 use poria_core::types::{
     BackendContext, IssueClass, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, SkillInput,
     Stage, StageEnum, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS, AUTH_EXPIRED_USER_MESSAGE,
-    REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, STAGE_ORDER, TRD_UNCONFIRMED_ISSUE_CLASS,
-    TRD_UNCONFIRMED_USER_MESSAGE,
+    OUT_OF_SCOPE_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, SECURITY_VIOLATION_ISSUE_CLASS,
+    STAGE_ORDER, TRD_UNCONFIRMED_ISSUE_CLASS, TRD_UNCONFIRMED_USER_MESSAGE,
 };
 use poria_infrastructure::auth::{
     assert_path_under_projects_root, assert_path_under_repos_root,
@@ -938,6 +939,10 @@ fn emit_human_request(
                 REQUIREMENT_AMBIGUOUS_ISSUE_CLASS.to_string()
             } else if is_trd_unconfirmed(detail) {
                 TRD_UNCONFIRMED_ISSUE_CLASS.to_string()
+            } else if is_out_of_scope(detail) {
+                OUT_OF_SCOPE_ISSUE_CLASS.to_string()
+            } else if is_security_violation(detail) {
+                SECURITY_VIOLATION_ISSUE_CLASS.to_string()
             } else {
                 "stage_failed".into()
             }
@@ -1325,6 +1330,14 @@ fn blocked_issue_class(class: &str) -> IssueClass {
         || class.eq_ignore_ascii_case("TrdUnconfirmed")
     {
         IssueClass::TrdUnconfirmed
+    } else if class.eq_ignore_ascii_case(OUT_OF_SCOPE_ISSUE_CLASS)
+        || class.eq_ignore_ascii_case("OutOfScopeChange")
+    {
+        IssueClass::OutOfScopeChange
+    } else if class.eq_ignore_ascii_case(SECURITY_VIOLATION_ISSUE_CLASS)
+        || class.eq_ignore_ascii_case("SecurityViolation")
+    {
+        IssueClass::SecurityViolation
     } else {
         IssueClass::Unknown
     }
@@ -1353,6 +1366,40 @@ fn load_prd_review_status(project_dir: &Path) -> poria_core::pipeline::PrdReview
             p2_unanswered: vec![],
         },
     }
+}
+
+fn persist_trd_scope(pipeline: &mut Pipeline, project_dir: &Path, output: &serde_json::Value) {
+    let mut scope = json_string_list(output.get("trdScope"));
+    if scope.is_empty() {
+        if let Ok(markdown) = std::fs::read_to_string(project_dir.join("TRD.md")) {
+            scope = parse_trd_scope(&markdown);
+        }
+    }
+    pipeline.config.trd_scope = scope;
+}
+
+fn json_string_list(value: Option<&serde_json::Value>) -> Vec<String> {
+    value
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn output_guard_gate_results(passed: bool) -> serde_json::Value {
+    serde_json::json!([{
+        "gate": "OutputGuard",
+        "passed": passed,
+        "actual": if passed { "pass" } else { "block" },
+        "threshold": "pass",
+    }])
 }
 
 async fn notify_product_p0(pipeline: &Pipeline, detail: &str) {
@@ -1644,6 +1691,7 @@ async fn run_design_stage(
         .await
     {
         Ok(output) => {
+            persist_trd_scope(pipeline, &project_dir, &output.output);
             pipeline.stages[stage_idx].status = StageStatus::Completed;
             pipeline.stages[stage_idx].output = Some(output.output.clone());
             pipeline.stages[stage_idx].completed_at = Some(Utc::now());
@@ -1863,6 +1911,13 @@ async fn run_dev_stage(
         Ok(output) => {
             pipeline.stages[stage_idx].status = StageStatus::Completed;
             pipeline.stages[stage_idx].output = Some(output.output.clone());
+            pipeline.stages[stage_idx].gate_results = Some(output_guard_gate_results(
+                output
+                    .output
+                    .get("guardPass")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+            ));
             pipeline.stages[stage_idx].completed_at = Some(Utc::now());
             pipeline.updated_at = Utc::now();
             store
@@ -1879,14 +1934,13 @@ async fn run_dev_stage(
             emit_pipeline_updated(app, pipeline)?;
             Ok(())
         }
-        Err(err) => fail_or_block_stage(
-            pipeline,
-            stage_idx,
-            app,
-            store,
-            err.to_string(),
-            "dev_failed",
-        ),
+        Err(err) => {
+            let message = err.to_string();
+            if is_out_of_scope(&message) || is_security_violation(&message) {
+                pipeline.stages[stage_idx].gate_results = Some(output_guard_gate_results(false));
+            }
+            fail_or_block_stage(pipeline, stage_idx, app, store, message, "dev_failed")
+        }
     }
 }
 
@@ -2184,8 +2238,8 @@ pub async fn open_workspace(
 mod tests {
     use super::{
         blocked_issue_class, dedupe_latest_by_task_key, load_prd_review_status,
-        merge_init_workspace_output, require_prd_and_backend_trd_urls, submit_reuse_decision,
-        SubmitReuse,
+        merge_init_workspace_output, persist_trd_scope, require_prd_and_backend_trd_urls,
+        submit_reuse_decision, SubmitReuse,
     };
     use chrono::Utc;
     use poria_core::types::{Pipeline, PipelineConfig, PipelineStatus, RepoConfig};
@@ -2342,7 +2396,8 @@ mod tests {
     #[test]
     fn blocked_issue_class_maps_p0_and_auth() {
         use poria_core::types::{
-            IssueClass, AUTH_EXPIRED_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+            IssueClass, AUTH_EXPIRED_ISSUE_CLASS, OUT_OF_SCOPE_ISSUE_CLASS,
+            REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, SECURITY_VIOLATION_ISSUE_CLASS,
             TRD_UNCONFIRMED_ISSUE_CLASS,
         };
         assert_eq!(
@@ -2357,6 +2412,41 @@ mod tests {
             blocked_issue_class(TRD_UNCONFIRMED_ISSUE_CLASS),
             IssueClass::TrdUnconfirmed
         );
+        assert_eq!(
+            blocked_issue_class(OUT_OF_SCOPE_ISSUE_CLASS),
+            IssueClass::OutOfScopeChange
+        );
+        assert_eq!(
+            blocked_issue_class(SECURITY_VIOLATION_ISSUE_CLASS),
+            IssueClass::SecurityViolation
+        );
+    }
+
+    #[test]
+    fn persist_trd_scope_prefers_skill_output_then_trd_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "poria-scope-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("TRD.md"),
+            "## 允许修改范围\n\n- src/from-file/**\n",
+        )
+        .unwrap();
+        let mut pipeline = test_pipeline("pl-scope", "D-1", 1, PipelineStatus::Running);
+        persist_trd_scope(
+            &mut pipeline,
+            &dir,
+            &serde_json::json!({"trdScope": ["src/from-output/**"]}),
+        );
+        assert_eq!(pipeline.config.trd_scope, vec!["src/from-output/**"]);
+        persist_trd_scope(&mut pipeline, &dir, &serde_json::json!({}));
+        assert_eq!(pipeline.config.trd_scope, vec!["src/from-file/**"]);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

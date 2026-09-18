@@ -318,7 +318,8 @@ pub async fn git_sync_hosted_clone(
     let local_ref = format!("refs/heads/{branch}");
     let origin_branch = format!("origin/{branch}");
     if git_ref_exists(repo_path, &local_ref).await? {
-        let checkout = run_git(&["checkout", branch], Some(repo_path), GIT_QUERY_TIMEOUT_MS).await?;
+        let checkout =
+            run_git(&["checkout", branch], Some(repo_path), GIT_QUERY_TIMEOUT_MS).await?;
         if !checkout.status.success() {
             return Err(ResourceError::Other(format!(
                 "git checkout failed: {}",
@@ -367,6 +368,42 @@ pub async fn git_status_porcelain(repo_path: &Path) -> Result<String, ResourceEr
     } else {
         Err(git_failure("git status", &output))
     }
+}
+
+/// `git diff --numstat HEAD` (unstaged + compared to HEAD; untracked files omitted).
+pub async fn git_diff_numstat(repo_path: &Path) -> Result<String, ResourceError> {
+    let output = run_git(
+        &["diff", "--numstat", "HEAD"],
+        Some(repo_path),
+        GIT_QUERY_TIMEOUT_MS,
+    )
+    .await?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(git_failure("git diff --numstat", &output))
+    }
+}
+
+/// `git show <rev>:<path>` — empty string when the path is missing at that rev.
+pub async fn git_show_path(
+    repo_path: &Path,
+    rev_path: &str,
+) -> Result<Option<String>, ResourceError> {
+    let output = run_git(&["show", rev_path], Some(repo_path), GIT_QUERY_TIMEOUT_MS).await?;
+    if output.status.success() {
+        return Ok(Some(String::from_utf8_lossy(&output.stdout).into_owned()));
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("does not exist")
+        || stderr.contains("exists on disk, but not in")
+        || stderr.contains("bad revision")
+        || stderr.contains("unknown revision")
+        || stderr.contains("fatal: path")
+    {
+        return Ok(None);
+    }
+    Err(git_failure("git show", &output))
 }
 
 /// True when `git status --porcelain` is non-empty.

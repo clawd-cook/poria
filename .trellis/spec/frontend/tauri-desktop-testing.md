@@ -353,6 +353,21 @@ invoke("confirm_trd", { pipelineId, skipped: true }); // skip confirmation, stil
 - Unit: `cargo test -p poria-core -- trd_confirmed`; `cargo test -p poria-commands -- stage_error_outcome_trd`.
 - Manual: after Design, Dev hangs 阻塞; 查看 TRD.md; 确认 TRD; Dev continues.
 
+## Scenario: Dev OutputGuard blocks CR
+
+### 1. Scope / Trigger
+
+Use when changing `OutputGuard`, `GenCodeSkill` exit, `trd_scope`, or HumanLoopCard out-of-scope copy. Verify in `poria-desktop`.
+
+### 2. Signatures
+
+Design writes `## 允许修改范围` globs into `TRD.md`; desktop persists `pipeline.config.trd_scope`. Dev collects frontend worktree porcelain + numstat + new `package.json` / `Cargo.toml` deps, then `OutputGuard::check`. Block → `fail_or_block_stage` with `OutputGuardError` (files/deps in HITL detail). Warn (empty scope / large diff) does not block.
+
+### 3. Tests Required
+
+- Unit: `cargo test -p poria-core -- trd_scope`; `cargo test -p poria-resources -- output_guard`; `cargo test -p poria-skills -- output_guard`; `cargo test -p poria-commands -- output_guard`.
+- Manual: GenCode touching a file outside TRD scope leaves Dev 阻塞; 收回越界改动后继续; CR does not start until Guard passes.
+
 ## Common Mistake: Vite tab vs desktop window
 
 **Symptom**: 1420 shows the UI but 登记/登录/需求列表 fail or the store listener throws `transformCallback`.

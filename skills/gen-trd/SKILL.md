@@ -108,6 +108,15 @@ description: Generate the frontend TRD.md technical design from PRD and PRD_REVI
 
 完整目录树 + 命名。
 
+## 允许修改范围
+
+OutputGuard 在 Dev 结束时按本列表拦截越界修改。一行一个 glob，路径相对**前端 git worktree 根**。只列本期允许改的文件/目录，不要写后端仓。
+
+```
+src/pages/<本期页面>/**
+src/api/<本期接口>.ts
+```
+
 ## 页面详情（每页一节）
 
 ### 页面名

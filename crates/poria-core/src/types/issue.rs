@@ -15,6 +15,12 @@ pub const REQUIREMENT_AMBIGUOUS_ISSUE_CLASS: &str = "requirement_ambiguous";
 pub const TRD_UNCONFIRMED_ISSUE_CLASS: &str = "trd_unconfirmed";
 pub const TRD_UNCONFIRMED_USER_MESSAGE: &str = "TRD unconfirmed: 请确认前端 TRD.md 后再进入开发";
 
+/// Stored when Dev OutputGuard Block violations (out-of-scope files).
+pub const OUT_OF_SCOPE_ISSUE_CLASS: &str = "out_of_scope_change";
+
+/// Stored when Dev OutputGuard Block violations (blocked dependencies).
+pub const SECURITY_VIOLATION_ISSUE_CLASS: &str = "security_violation";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueClass {

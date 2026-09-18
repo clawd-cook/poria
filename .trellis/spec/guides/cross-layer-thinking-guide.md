@@ -312,6 +312,7 @@ When changing the demand start wizard, `submit_pipeline`, or design/dev prompt i
 - [ ] Is frontend `base_branch` the registered `default_branch`, not `git_current_branch`?
 - [ ] Do ReviewPrd/Design write `PRD_REVIEW.md` / `TRD.md` only under `~/.poria/projects/<demand_code>/` with Agent cwd = **workspace root** (`workspacePath`), not the frontend git worktree?
 - [ ] Do `gen_trd` / `gen_code` short prompts include `backend_trd_url` + base branch without overwriting frontend `TRD.md`?
+- [ ] Does Design persist `config.trd_scope` from TRD `## 允许修改范围`, and does Dev run OutputGuard so Block violations never start CR?
 
 → Read [Tauri Desktop Testing](../frontend/tauri-desktop-testing.md) (start pipeline IPC).
 

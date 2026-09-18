@@ -24,6 +24,7 @@ import { useState } from "react";
 
 import { isAuthExpiredIssue, isAuthExpiredMessage } from "../lib/auth";
 import { invokeErrorMessage } from "../lib/errors";
+import { isOutputGuardBlock } from "../lib/outputGuard";
 import { isP0UnansweredMessage, isRequirementAmbiguousIssue } from "../lib/prdReview";
 import { confirmTrd, humanLoopRespond, readDemandProjectFile, startLogin } from "../lib/tauri";
 import { isTrdUnconfirmedIssue, isTrdUnconfirmedMessage } from "../lib/trd";
@@ -62,6 +63,7 @@ export function HumanLoopCard({
   const authExpired = isAuthExpiredIssue(issueClass) || isAuthExpiredMessage(detail);
   const p0Blocked = isRequirementAmbiguousIssue(issueClass) || isP0UnansweredMessage(detail);
   const trdBlocked = isTrdUnconfirmedIssue(issueClass) || isTrdUnconfirmedMessage(detail);
+  const outputGuardBlocked = isOutputGuardBlock(issueClass, detail);
 
   async function handleAction(action: string) {
     setLoading(action);
@@ -142,7 +144,9 @@ export function HumanLoopCard({
               ? "P0 未答，无法进入设计"
               : trdBlocked
                 ? "请确认前端 TRD 后再进入开发"
-                : "Pipeline 需要协助"
+                : outputGuardBlocked
+                  ? "代码超出 TRD 允许范围，无法进入 CR"
+                  : "Pipeline 需要协助"
         }
         description={
           <Space direction="vertical" style={{ width: "100%" }}>
@@ -200,7 +204,11 @@ export function HumanLoopCard({
                 icon={<ReloadOutlined />}
                 loading={loading === "resume"}
                 onClick={() => void handleAction("resume")}
-                type={authExpired || p0Blocked || trdBlocked ? "default" : "primary"}
+                type={
+                  authExpired || p0Blocked || trdBlocked || outputGuardBlocked
+                    ? "default"
+                    : "primary"
+                }
               >
                 {authExpired
                   ? "登录后继续"
@@ -208,7 +216,9 @@ export function HumanLoopCard({
                     ? "答完后继续"
                     : trdBlocked
                       ? "确认后继续"
-                      : "修复并重试"}
+                      : outputGuardBlocked
+                        ? "收回越界改动后继续"
+                        : "修复并重试"}
               </Button>
               <Button
                 icon={<ForwardOutlined />}
