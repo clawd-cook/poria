@@ -6,6 +6,7 @@ mod dev_verify;
 mod error;
 mod fixture;
 mod human_loop;
+mod post_cr_notes;
 pub mod prompt_templates;
 mod quality_gates;
 mod stage_skill_map;
@@ -22,6 +23,8 @@ mod workspace;
 // --- Public re-exports ---
 
 pub use crate::backend_aid::insert_backend_coding_aid_vars;
+pub use crate::dev_verify::run_frontend_verify;
+pub use crate::post_cr_notes::post_cr_blocking_notes;
 pub use claude_prompt::{
     build_claude_skill_prompt, bundled_skill_dir_name, BUNDLED_SKILL_DIRS, SKILL_CODE_REVIEW,
     SKILL_GEN_CODE, SKILL_GEN_TRD, SKILL_REVIEW_PRD,

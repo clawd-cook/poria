@@ -23,11 +23,14 @@ pub(crate) struct VerifyCommand {
 /// Run convention or Settings commands in the frontend worktree after OutputGuard.
 ///
 /// Empty / missing override → discover from `package.json` + lockfile.
-/// Fixture mode never reaches this (GenCode returns earlier).
+/// Fixture mode skips local verify.
 pub async fn run_frontend_verify(
     worktree: &Path,
     override_commands: Option<&str>,
 ) -> Result<(), String> {
+    if crate::fixture::is_fixture_mode() {
+        return Ok(());
+    }
     let commands = match override_commands.map(str::trim).filter(|s| !s.is_empty()) {
         Some(raw) => parse_override_commands(raw),
         None => discover_verify_commands(worktree)?,

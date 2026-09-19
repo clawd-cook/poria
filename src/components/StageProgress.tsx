@@ -13,7 +13,7 @@ import { useState } from "react";
 import { invokeErrorMessage } from "../lib/errors";
 import { executeStage, skipStage } from "../lib/tauri";
 import type { StageDetail, StageStatus } from "../lib/types";
-import { STAGE_LABELS, STAGE_ORDER } from "../lib/types";
+import { STAGE_ORDER, stageLabel } from "../lib/types";
 import { useStore } from "../state/store";
 import { StreamOutput } from "./StreamOutput";
 
@@ -65,21 +65,19 @@ export function StageProgress({
   const { state } = useStore();
   const { message } = App.useApp();
   const [executing, setExecuting] = useState(false);
-  const stageMap = new Map(stages?.map((s) => [s.name, s]));
-
-  const orderedStages: StageDetail[] = STAGE_ORDER.map(
-    (name) =>
-      stageMap.get(name) ?? {
-        name,
-        status: "pending" as const,
-        retry_count: 0,
-        output_summary: null,
-        gate_results: null,
-        issue: null,
-        started_at: null,
-        completed_at: null,
-      },
-  );
+  const orderedStages: StageDetail[] =
+    stages && stages.length > 0
+      ? stages
+      : STAGE_ORDER.map((name) => ({
+          name,
+          status: "pending" as const,
+          retry_count: 0,
+          output_summary: null,
+          gate_results: null,
+          issue: null,
+          started_at: null,
+          completed_at: null,
+        }));
 
   const firstActionableIdx = orderedStages.findIndex(
     (s) => s.status === "pending" || s.status === "failed",
@@ -107,7 +105,7 @@ export function StageProgress({
   );
 
   const items = orderedStages.map((stage, i) => ({
-    title: STAGE_LABELS[stage.name],
+    title: stageLabel(stage.name),
     status: mapStatus(stage.status) as StepsStatus,
     icon: stageIcon(stage.status),
     description:
@@ -159,7 +157,7 @@ export function StageProgress({
           ) : (
             <>
               <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
-                {STAGE_LABELS[runningStage.name]} - Claude 输出
+                {stageLabel(runningStage.name)} - Claude 输出
               </Text>
               <StreamOutput pipelineId={pid} />
             </>

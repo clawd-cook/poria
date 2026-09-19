@@ -53,15 +53,20 @@ impl SqlitePipelineStore {
             ],
         ).map_err(|e| e.to_string())?;
 
-        for stage_enum in STAGE_ORDER {
-            let existing = pipeline.stages.iter().find(|s| s.name == *stage_enum);
+        let stage_names: Vec<StageEnum> = if pipeline.stages.is_empty() {
+            STAGE_ORDER.to_vec()
+        } else {
+            pipeline.stages.iter().map(|s| s.name).collect()
+        };
+        for stage_enum in stage_names {
+            let existing = pipeline.stages.iter().find(|s| s.name == stage_enum);
             let status_str = existing.map(|s| s.status).unwrap_or(StageStatus::Pending);
 
             tx.execute(
                 "INSERT INTO stages (pipeline_id, name, status, skill_id, retry_count, max_retries, input, output, gate_results, issue, rollback, agent_session_id, started_at, completed_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
                 params![
                     pipeline.id,
-                    serde_json::to_string(stage_enum).unwrap().trim_matches('"'),
+                    serde_json::to_string(&stage_enum).unwrap().trim_matches('"'),
                     serde_json::to_string(&status_str).unwrap().trim_matches('"'),
                     existing.and_then(|s| s.skill_id.as_deref()),
                     existing.map(|s| s.retry_count).unwrap_or(0),
@@ -442,6 +447,54 @@ mod tests {
         assert_eq!(loaded.demand_code, "REQ-001");
         assert_eq!(loaded.stages.len(), 6);
         assert_eq!(loaded.stages[0].name, StageEnum::Init);
+    }
+
+    #[test]
+    fn create_persists_materialized_job_order() {
+        let conn = test_conn();
+        let store = SqlitePipelineStore::new(conn);
+        let mut pipeline = test_pipeline();
+        pipeline.stages = vec![
+            Stage {
+                id: None,
+                pipeline_id: pipeline.id.clone(),
+                name: StageEnum::Init,
+                status: StageStatus::Pending,
+                skill_id: None,
+                retry_count: 0,
+                max_retries: 3,
+                input: None,
+                output: None,
+                gate_results: None,
+                issue: None,
+                rollback: None,
+                agent_session_id: None,
+                started_at: None,
+                completed_at: None,
+            },
+            Stage {
+                id: None,
+                pipeline_id: pipeline.id.clone(),
+                name: StageEnum::Deploy,
+                status: StageStatus::Pending,
+                skill_id: None,
+                retry_count: 0,
+                max_retries: 3,
+                input: None,
+                output: None,
+                gate_results: None,
+                issue: None,
+                rollback: None,
+                agent_session_id: None,
+                started_at: None,
+                completed_at: None,
+            },
+        ];
+        store.create(&pipeline).unwrap();
+        let loaded = store.load("pl-test-001").unwrap().unwrap();
+        assert_eq!(loaded.stages.len(), 2);
+        assert_eq!(loaded.stages[0].name, StageEnum::Init);
+        assert_eq!(loaded.stages[1].name, StageEnum::Deploy);
     }
 
     #[test]

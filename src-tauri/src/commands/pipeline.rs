@@ -31,6 +31,10 @@ use poria_core::types::{
     REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, SECURITY_VIOLATION_ISSUE_CLASS, STAGE_ORDER,
     TRD_UNCONFIRMED_ISSUE_CLASS, TRD_UNCONFIRMED_USER_MESSAGE,
 };
+use poria_core::workflow::{
+    default_steps_for_stage, fallback_workflow, materialize, next_ready_stage_index, steps_for_job,
+    MaterializedStep, StepRecord, StepRunStatus, DEFAULT_WORKFLOW_ID,
+};
 use poria_infrastructure::auth::{
     assert_path_under_projects_root, assert_path_under_repos_root,
     assert_path_under_workspaces_root, demand_project_folder_name, get_credentials,
@@ -42,8 +46,9 @@ use poria_infrastructure::store::{
 };
 use poria_resources::WorktreeResource;
 use poria_skills::{
-    prepare_pipeline_workspace, CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, HumanLoop,
-    HumanLoopCoordinator, InitSkill, ReviewPrdSkill,
+    post_cr_blocking_notes, prepare_pipeline_workspace, run_frontend_verify, CodeReviewSkill,
+    DeploySkill, GenCodeSkill, GenTrdSkill, HumanLoop, HumanLoopCoordinator, InitSkill,
+    ReviewPrdSkill,
 };
 
 use crate::AppState;
@@ -450,7 +455,7 @@ pub async fn submit_pipeline(
         .filter(|username| !username.is_empty())
         .ok_or_else(|| "请先登录".to_string())?;
 
-    let config = PipelineConfig {
+    let mut config = PipelineConfig {
         gates: poria_core::pipeline::DEFAULT_GATES.clone(),
         trd_scope: vec![],
         repos: vec![frontend_repo.clone()],
@@ -459,10 +464,18 @@ pub async fn submit_pipeline(
         backend_context: Some(backend_context),
         project_dir: None,
         trd_confirmed: false,
+        workflow_id: None,
+        jobs: Vec::new(),
     };
     if config.repos.len() != 1 {
         return Err("流水线只能包含前端仓库".into());
     }
+    let workflow = poria_infrastructure::workflow::load_default_workflow(
+        Some(&super::skills::bundled_workflows_dir(&app)?),
+        None,
+    )?;
+    config.jobs = materialize(&workflow).map_err(|e| e.to_string())?;
+    config.workflow_id = Some(DEFAULT_WORKFLOW_ID.to_string());
 
     let existing = state
         .store
@@ -496,26 +509,7 @@ pub async fn submit_pipeline(
         operator,
         has_regressed: false,
         config: config.clone(),
-        stages: STAGE_ORDER
-            .iter()
-            .map(|stage_enum| Stage {
-                id: None,
-                pipeline_id: pipeline_id.clone(),
-                name: *stage_enum,
-                status: StageStatus::Pending,
-                skill_id: None,
-                retry_count: 0,
-                max_retries: 3,
-                input: None,
-                output: None,
-                gate_results: None,
-                issue: None,
-                rollback: None,
-                agent_session_id: None,
-                started_at: None,
-                completed_at: None,
-            })
-            .collect(),
+        stages: stages_from_jobs(&pipeline_id, &config.jobs),
         repos: config.repos.clone(),
         created_at: now,
         updated_at: now,
@@ -1467,11 +1461,8 @@ async fn execute_next_stage(
         _ => {}
     }
 
-    let Some(stage_idx) = pipeline
-        .stages
-        .iter()
-        .position(|s| s.status != StageStatus::Completed && s.status != StageStatus::Skipped)
-    else {
+    let workflow = fallback_workflow(&pipeline.config.jobs);
+    let Some(stage_idx) = next_ready_stage_index(&pipeline.stages, &workflow) else {
         return Ok(false);
     };
 
@@ -1479,54 +1470,218 @@ async fn execute_next_stage(
         return Err("阶段正在执行".into());
     }
 
-    let stage_name = pipeline.stages[stage_idx].name;
-    match stage_name {
-        StageEnum::Init => {
-            run_init_stage(&mut pipeline, stage_idx, app, &store, &runtime.repo_store).await?;
-        }
-        StageEnum::ReviewPrd => {
-            run_review_prd_stage(
-                &mut pipeline,
-                stage_idx,
-                app,
-                &store,
-                runtime.agent_pool.clone(),
-            )
-            .await?;
-        }
-        StageEnum::Design => {
-            run_design_stage(
-                &mut pipeline,
-                stage_idx,
-                app,
-                &store,
-                runtime.agent_pool.clone(),
-            )
-            .await?;
-        }
-        StageEnum::Dev => {
-            run_dev_stage(
-                &mut pipeline,
-                stage_idx,
-                app,
-                &store,
-                runtime.agent_pool.clone(),
-            )
-            .await?;
-        }
-        StageEnum::Cr => {
-            run_cr_stage(
-                &mut pipeline,
-                stage_idx,
-                app,
-                &store,
-                runtime.agent_pool.clone(),
-            )
-            .await?;
-        }
-        StageEnum::Deploy => run_deploy_stage(&mut pipeline, stage_idx, app, &store).await?,
-    }
+    run_ready_job(&mut pipeline, stage_idx, app, runtime).await?;
     Ok(true)
+}
+
+fn stages_from_jobs(
+    pipeline_id: &str,
+    jobs: &[poria_core::workflow::MaterializedJob],
+) -> Vec<Stage> {
+    let names = if jobs.is_empty() {
+        STAGE_ORDER.to_vec()
+    } else {
+        jobs.iter().map(|job| job.id).collect()
+    };
+    names
+        .into_iter()
+        .map(|stage_enum| Stage {
+            id: None,
+            pipeline_id: pipeline_id.to_string(),
+            name: stage_enum,
+            status: StageStatus::Pending,
+            skill_id: None,
+            retry_count: 0,
+            max_retries: 3,
+            input: None,
+            output: None,
+            gate_results: None,
+            issue: None,
+            rollback: None,
+            agent_session_id: None,
+            started_at: None,
+            completed_at: None,
+        })
+        .collect()
+}
+
+fn job_steps(pipeline: &Pipeline, name: StageEnum) -> Vec<MaterializedStep> {
+    steps_for_job(&pipeline.config.jobs, name)
+        .map(|steps| steps.to_vec())
+        .filter(|steps| !steps.is_empty())
+        .unwrap_or_else(|| default_steps_for_stage(name))
+}
+
+fn merge_json(target: &mut serde_json::Value, incoming: &serde_json::Value) {
+    match (target, incoming) {
+        (serde_json::Value::Object(dst), serde_json::Value::Object(src)) => {
+            for (key, value) in src {
+                dst.insert(key.clone(), value.clone());
+            }
+        }
+        (target, incoming) => *target = incoming.clone(),
+    }
+}
+
+fn attach_step_records(output: &mut serde_json::Value, records: &[StepRecord]) {
+    if let serde_json::Value::Object(map) = output {
+        map.insert(
+            "steps".into(),
+            serde_json::to_value(records).unwrap_or_else(|_| serde_json::json!([])),
+        );
+    }
+}
+
+fn persist_running_output(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    output: &serde_json::Value,
+) -> Result<(), String> {
+    pipeline.stages[stage_idx].output = Some(output.clone());
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &[])
+        .map_err(|e| e.to_string())
+}
+
+async fn run_ready_job(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    runtime: &AutoRunRuntime,
+) -> Result<(), String> {
+    let store = runtime.store.clone();
+    let job_name = pipeline.stages[stage_idx].name;
+    let steps = job_steps(pipeline, job_name);
+    if steps.is_empty() {
+        return Err(format!("Job {} 没有 step", job_name.as_str()));
+    }
+
+    let mut combined = serde_json::json!({});
+    let mut records: Vec<StepRecord> = Vec::new();
+    for step in &steps {
+        match run_registered_action(&step.uses, pipeline, stage_idx, app, runtime).await {
+            Ok(output) => {
+                merge_json(&mut combined, &output);
+                records.push(StepRecord {
+                    id: step.id.clone(),
+                    uses: step.uses.clone(),
+                    status: StepRunStatus::Completed,
+                    error: None,
+                });
+                attach_step_records(&mut combined, &records);
+                persist_running_output(pipeline, stage_idx, &store, &combined)?;
+            }
+            Err(err) => {
+                records.push(StepRecord {
+                    id: step.id.clone(),
+                    uses: step.uses.clone(),
+                    status: StepRunStatus::Failed,
+                    error: Some(err.clone()),
+                });
+                attach_step_records(&mut combined, &records);
+                pipeline.stages[stage_idx].output = Some(combined);
+                return fail_job(pipeline, stage_idx, app, &store, err, job_name).await;
+            }
+        }
+    }
+
+    finish_job(pipeline, stage_idx, app, &store, combined, job_name).await
+}
+
+async fn run_registered_action(
+    uses: &str,
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    runtime: &AutoRunRuntime,
+) -> Result<serde_json::Value, String> {
+    match uses {
+        "skill:init" => execute_init_action(pipeline, stage_idx, app, runtime).await,
+        "skill:review-prd" => execute_review_prd_action(pipeline, stage_idx, app, runtime).await,
+        "skill:gen-trd" => execute_design_action(pipeline, stage_idx, app, runtime).await,
+        "skill:gen-code" => execute_dev_action(pipeline, stage_idx, app, runtime).await,
+        "skill:code-review" => execute_cr_action(pipeline, stage_idx, app, runtime).await,
+        "skill:deploy" => execute_deploy_action(pipeline, stage_idx, app, runtime).await,
+        "poria/dev-verify" => execute_dev_verify_action(pipeline).await,
+        "poria/post-cr-notes" => execute_post_cr_notes_action(pipeline, stage_idx).await,
+        other => Err(format!("未知 Action: {other}")),
+    }
+}
+
+async fn fail_job(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    message: String,
+    job_name: StageEnum,
+) -> Result<(), String> {
+    if job_name == StageEnum::Init {
+        return fail_init_stage(pipeline, stage_idx, app, store, message).await;
+    }
+    let class = match job_name {
+        StageEnum::Init => "init_failed",
+        StageEnum::ReviewPrd => "review_prd_failed",
+        StageEnum::Design => "design_failed",
+        StageEnum::Dev => "dev_failed",
+        StageEnum::Cr => "cr_failed",
+        StageEnum::Deploy => "deploy_failed",
+    };
+    if job_name == StageEnum::Dev && (is_out_of_scope(&message) || is_security_violation(&message))
+    {
+        pipeline.stages[stage_idx].gate_results = Some(output_guard_gate_results(false));
+    }
+    fail_or_block_stage(pipeline, stage_idx, app, store, message, class).await
+}
+
+async fn execute_dev_verify_action(pipeline: &Pipeline) -> Result<serde_json::Value, String> {
+    let worktree = resolve_frontend_worktree(pipeline)?;
+    let config = poria_infrastructure::config::load_config(None);
+    let commands = config.effective_dev_verify_commands();
+    run_frontend_verify(worktree.as_path(), commands).await?;
+    Ok(serde_json::json!({ "localVerifyPass": true }))
+}
+
+async fn execute_post_cr_notes_action(
+    pipeline: &Pipeline,
+    stage_idx: usize,
+) -> Result<serde_json::Value, String> {
+    let output = pipeline.stages[stage_idx].output.as_ref();
+    let iid = output
+        .and_then(|value| value.get("mrIid"))
+        .and_then(|value| value.as_i64())
+        .map(|value| value as i32);
+    let project_path = output
+        .and_then(|value| value.get("gitlabProjectPath"))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            pipeline
+                .config
+                .repos
+                .first()
+                .map(|repo| repo.gitlab_project_path.as_str())
+        })
+        .unwrap_or("")
+        .to_string();
+    let Some(iid) = iid else {
+        return Ok(serde_json::json!({ "crNotesPosted": 0 }));
+    };
+    if project_path.is_empty() {
+        return Ok(serde_json::json!({ "crNotesPosted": 0 }));
+    }
+    let creds = ensure_sso_credentials().await?;
+    let coding_creds = poria_channels::coding::JacpCredentials {
+        cookie: creds.cookie,
+        username: creds.username,
+    };
+    let posted = post_cr_blocking_notes(&coding_creds, &project_path, iid, pipeline)
+        .await
+        .map_err(|err| err.to_string())?;
+    Ok(serde_json::json!({ "crNotesPosted": posted }))
 }
 
 fn emit_human_request(
@@ -1650,17 +1805,18 @@ fn skip_actionable_stage(
     emit_pipeline_updated(app, &pipeline)
 }
 
-async fn run_init_stage(
+async fn execute_init_action(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &tauri::AppHandle,
-    store: &std::sync::Arc<SqlitePipelineStore>,
-    repo_store: &std::sync::Arc<poria_infrastructure::store::RegisteredRepoStore>,
-) -> Result<(), String> {
+    runtime: &AutoRunRuntime,
+) -> Result<serde_json::Value, String> {
+    let store = &runtime.store;
+    let repo_store = &runtime.repo_store;
     let creds = match ensure_sso_credentials().await {
         Ok(creds) => creds,
         Err(message) => {
-            return fail_init_stage(pipeline, stage_idx, app, store, message).await;
+            return Err(message);
         }
     };
 
@@ -1700,12 +1856,8 @@ async fn run_init_stage(
         .map_err(|e| e.to_string())?;
     emit_pipeline_updated(app, pipeline)?;
 
-    if let Err(message) = sync_repo_for_init(app, repo_store, &frontend_registered.id).await {
-        return fail_init_stage(pipeline, stage_idx, app, store, message).await;
-    }
-    if let Err(message) = sync_repo_for_init(app, repo_store, &backend_registered.id).await {
-        return fail_init_stage(pipeline, stage_idx, app, store, message).await;
-    }
+    sync_repo_for_init(app, repo_store, &frontend_registered.id).await?;
+    sync_repo_for_init(app, repo_store, &backend_registered.id).await?;
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
@@ -1724,25 +1876,25 @@ async fn run_init_stage(
     let mut output = match InitSkill::new().execute(input, ctx).await {
         Ok(output) => output.output,
         Err(err) => {
-            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
+            return Err(err.to_string());
         }
     };
 
     let workspace_dir = match get_pipeline_workspace_dir(None, &pipeline.id) {
         Ok(path) => path,
         Err(err) => {
-            return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+            return Err(err);
         }
     };
     let bundled_skills = match crate::commands::skills::bundled_skills_dir(app) {
         Ok(path) => path,
         Err(err) => {
-            return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+            return Err(err);
         }
     };
     if let Err(err) = prepare_pipeline_workspace(&workspace_dir, &project_dir, &bundled_skills) {
         let _ = cleanup_pipeline_workspace(&workspace_dir);
-        return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+        return Err(err);
     }
 
     let worktree_root = get_workspaces_root(None);
@@ -1751,11 +1903,11 @@ async fn run_init_stage(
     let backend_git_root = PathBuf::from(&backend_registered.local_path);
     if let Err(err) = assert_path_under_repos_root(None, &frontend_git_root) {
         let _ = cleanup_pipeline_workspace(&workspace_dir);
-        return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+        return Err(err);
     }
     if let Err(err) = assert_path_under_repos_root(None, &backend_git_root) {
         let _ = cleanup_pipeline_workspace(&workspace_dir);
-        return fail_init_stage(pipeline, stage_idx, app, store, err).await;
+        return Err(err);
     }
 
     let frontend_created = match worktree
@@ -1773,7 +1925,7 @@ async fn run_init_stage(
                 .remove_path(&frontend_git_root, &worktree.path(&frontend, &pipeline.id))
                 .await;
             let _ = cleanup_pipeline_workspace(&workspace_dir);
-            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
+            return Err(err.to_string());
         }
     };
 
@@ -1798,7 +1950,7 @@ async fn run_init_stage(
                 .remove_path(&backend_git_root, &workspace_dir.join(&backend.name))
                 .await;
             let _ = cleanup_pipeline_workspace(&workspace_dir);
-            return fail_init_stage(pipeline, stage_idx, app, store, err.to_string()).await;
+            return Err(err.to_string());
         }
     };
 
@@ -1824,24 +1976,9 @@ async fn run_init_stage(
     );
 
     pipeline.config.project_dir = Some(project_dir.to_string_lossy().to_string());
-    pipeline.stages[stage_idx].status = StageStatus::Completed;
     pipeline.stages[stage_idx].output = Some(output.clone());
     pipeline.stages[stage_idx].rollback = Some(rollback);
-    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-    pipeline.updated_at = Utc::now();
-    store
-        .save_stage_tx(
-            Some(&pipeline.stages[stage_idx]),
-            pipeline,
-            &[CorePipelineEvent::stage_completed(
-                &pipeline.id,
-                StageEnum::Init,
-                output,
-            )],
-        )
-        .map_err(|e| e.to_string())?;
-    emit_pipeline_updated(app, pipeline)?;
-    Ok(())
+    Ok(output)
 }
 
 async fn sync_repo_for_init(
@@ -2159,13 +2296,14 @@ async fn enforce_trd_confirmed(
     .await
 }
 
-async fn run_review_prd_stage(
+async fn execute_review_prd_action(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &tauri::AppHandle,
-    store: &std::sync::Arc<SqlitePipelineStore>,
-    agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
-) -> Result<(), String> {
+    runtime: &AutoRunRuntime,
+) -> Result<serde_json::Value, String> {
+    let store = &runtime.store;
+    let agent_pool = runtime.agent_pool.clone();
     let project_dir = resolve_demand_project_dir(pipeline)?;
     if !project_dir.join("PRD.md").is_file() {
         return Err("请先完成初始化，导出 PRD.md".into());
@@ -2231,46 +2369,19 @@ async fn run_review_prd_stage(
         .execute(input, ctx)
         .await
     {
-        Ok(output) => {
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_completed(
-                        &pipeline.id,
-                        StageEnum::ReviewPrd,
-                        output.output,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Ok(())
-        }
-        Err(err) => {
-            fail_or_block_stage(
-                pipeline,
-                stage_idx,
-                app,
-                store,
-                err.to_string(),
-                "review_prd_failed",
-            )
-            .await
-        }
+        Ok(output) => Ok(output.output),
+        Err(err) => Err(err.to_string()),
     }
 }
 
-async fn run_design_stage(
+async fn execute_design_action(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &tauri::AppHandle,
-    store: &std::sync::Arc<SqlitePipelineStore>,
-    agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
-) -> Result<(), String> {
+    runtime: &AutoRunRuntime,
+) -> Result<serde_json::Value, String> {
+    let store = &runtime.store;
+    let agent_pool = runtime.agent_pool.clone();
     let project_dir = resolve_demand_project_dir(pipeline)?;
     if !project_dir.join("PRD.md").is_file() {
         return Err("请先完成初始化，导出 PRD.md".into());
@@ -2283,9 +2394,7 @@ async fn run_design_stage(
     let workspace_str = workspace.to_string_lossy().into_owned();
     let worktree_str = worktree.to_string_lossy().into_owned();
 
-    if let Err(message) = enforce_prd_review_p0(pipeline, stage_idx, app, store).await {
-        return Err(message);
-    }
+    enforce_prd_review_p0(pipeline, stage_idx, app, store).await?;
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -2338,35 +2447,9 @@ async fn run_design_stage(
     {
         Ok(output) => {
             persist_trd_scope(pipeline, &project_dir, &output.output);
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_completed(
-                        &pipeline.id,
-                        StageEnum::Design,
-                        output.output,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Ok(())
+            Ok(output.output)
         }
-        Err(err) => {
-            fail_or_block_stage(
-                pipeline,
-                stage_idx,
-                app,
-                store,
-                err.to_string(),
-                "design_failed",
-            )
-            .await
-        }
+        Err(err) => Err(err.to_string()),
     }
 }
 
@@ -2488,13 +2571,14 @@ fn resolve_frontend_worktree(pipeline: &Pipeline) -> Result<PathBuf, String> {
     Ok(worktree)
 }
 
-async fn run_dev_stage(
+async fn execute_dev_action(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &tauri::AppHandle,
-    store: &std::sync::Arc<SqlitePipelineStore>,
-    agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
-) -> Result<(), String> {
+    runtime: &AutoRunRuntime,
+) -> Result<serde_json::Value, String> {
+    let store = &runtime.store;
+    let agent_pool = runtime.agent_pool.clone();
     let project_dir = resolve_demand_project_dir(pipeline)?;
     if !project_dir.join("TRD.md").is_file() {
         return Err("请先完成技术设计，生成 TRD.md".into());
@@ -2565,49 +2649,19 @@ async fn run_dev_stage(
         .execute(input, ctx)
         .await
     {
-        Ok(output) => {
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
-            pipeline.stages[stage_idx].gate_results = Some(output_guard_gate_results(
-                output
-                    .output
-                    .get("guardPass")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true),
-            ));
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_completed(
-                        &pipeline.id,
-                        StageEnum::Dev,
-                        output.output,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Ok(())
-        }
-        Err(err) => {
-            let message = err.to_string();
-            if is_out_of_scope(&message) || is_security_violation(&message) {
-                pipeline.stages[stage_idx].gate_results = Some(output_guard_gate_results(false));
-            }
-            fail_or_block_stage(pipeline, stage_idx, app, store, message, "dev_failed").await
-        }
+        Ok(output) => Ok(output.output),
+        Err(err) => Err(err.to_string()),
     }
 }
 
-async fn run_cr_stage(
+async fn execute_cr_action(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &tauri::AppHandle,
-    store: &std::sync::Arc<SqlitePipelineStore>,
-    agent_pool: std::sync::Arc<poria_resources::ClaudeAgentPool>,
-) -> Result<(), String> {
+    runtime: &AutoRunRuntime,
+) -> Result<serde_json::Value, String> {
+    let store = &runtime.store;
+    let agent_pool = runtime.agent_pool.clone();
     let project_dir = resolve_demand_project_dir(pipeline)?;
     let workspace = resolve_pipeline_workspace(pipeline)?;
     let worktree = resolve_frontend_worktree(pipeline)?;
@@ -2677,112 +2731,8 @@ async fn run_cr_stage(
         .execute(input, ctx)
         .await
     {
-        Ok(output) => {
-            let cr_result = StageResult {
-                cr_score: output
-                    .output
-                    .get("crScore")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string),
-                security_pass: output.output.get("securityPass").and_then(|v| v.as_bool()),
-                ..Default::default()
-            };
-            let evaluation = evaluate_gates(
-                &cr_result,
-                &pipeline_gate_rules(pipeline),
-                GatePhase::StageExit,
-            );
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
-            pipeline.stages[stage_idx].gate_results = Some(ui_from_gate_evaluation(&evaluation));
-            if !evaluation.all_pass {
-                let security_failed = evaluation
-                    .blocking_failures
-                    .iter()
-                    .any(|detail| detail.rule_id == "security_scan");
-                let cr_score_failed = evaluation
-                    .details
-                    .iter()
-                    .any(|detail| detail.rule_id == "cr_score" && !detail.pass);
-                if cr_score_failed && !security_failed {
-                    let findings = output.output.get("findings").cloned();
-                    if try_regress_cr_to_dev(
-                        pipeline,
-                        cr_result.cr_score.as_deref(),
-                        findings.as_ref(),
-                    ) {
-                        pipeline.updated_at = Utc::now();
-                        store
-                            .save_stage_tx(
-                                Some(&pipeline.stages[stage_idx]),
-                                pipeline,
-                                &[
-                                    CorePipelineEvent::stage_regressed(
-                                        &pipeline.id,
-                                        StageEnum::Cr,
-                                        StageEnum::Dev,
-                                        format!("CR score: {:?}", cr_result.cr_score),
-                                    ),
-                                    CorePipelineEvent::gate_regress_triggered(
-                                        &pipeline.id,
-                                        "cr_score",
-                                        StageEnum::Cr,
-                                        StageEnum::Dev,
-                                    ),
-                                ],
-                            )
-                            .map_err(|e| e.to_string())?;
-                        emit_pipeline_updated(app, pipeline)?;
-                        return Ok(());
-                    }
-                }
-                let mut message = blocking_gate_message(&evaluation);
-                if let Some(detail) = output
-                    .output
-                    .get("securityDetail")
-                    .and_then(|v| v.as_str())
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                {
-                    message = format!("{message}; {detail}");
-                }
-                if message.is_empty() {
-                    message = if cr_score_failed && !security_failed {
-                        "LOW_CR_SCORE: CR 评分未达标，已回退一次仍失败".into()
-                    } else {
-                        "CR 门禁未通过".into()
-                    };
-                }
-                return fail_or_block_stage(pipeline, stage_idx, app, store, message, "cr_failed")
-                    .await;
-            }
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.updated_at = Utc::now();
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[CorePipelineEvent::stage_completed(
-                        &pipeline.id,
-                        StageEnum::Cr,
-                        output.output,
-                    )],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            Ok(())
-        }
-        Err(err) => {
-            fail_or_block_stage(
-                pipeline,
-                stage_idx,
-                app,
-                store,
-                err.to_string(),
-                "cr_failed",
-            )
-            .await
-        }
+        Ok(output) => Ok(output.output),
+        Err(err) => Err(err.to_string()),
     }
 }
 
@@ -2801,12 +2751,13 @@ fn workspace_repo_field<'a>(pipeline: &'a Pipeline, key: &str) -> Option<&'a str
         .filter(|value| !value.is_empty())
 }
 
-async fn run_deploy_stage(
+async fn execute_deploy_action(
     pipeline: &mut Pipeline,
     stage_idx: usize,
     app: &tauri::AppHandle,
-    store: &std::sync::Arc<SqlitePipelineStore>,
-) -> Result<(), String> {
+    runtime: &AutoRunRuntime,
+) -> Result<serde_json::Value, String> {
+    let store = &runtime.store;
     let worktree = resolve_frontend_worktree(pipeline)?;
     if !worktree.join(".git").exists() {
         return Err(format!("前端工作区无效: {}", worktree.display()));
@@ -2817,13 +2768,7 @@ async fn run_deploy_stage(
         .first()
         .cloned()
         .ok_or("缺少前端仓库，无法部署")?;
-    let creds = match ensure_sso_credentials().await {
-        Ok(creds) => creds,
-        Err(message) => {
-            return fail_or_block_stage(pipeline, stage_idx, app, store, message, "deploy_failed")
-                .await;
-        }
-    };
+    let creds = ensure_sso_credentials().await?;
 
     pipeline.status = PipelineStatus::Running;
     pipeline.stages[stage_idx].status = StageStatus::Running;
@@ -2880,148 +2825,271 @@ async fn run_deploy_stage(
         extra,
     };
 
-    match DeploySkill::new().execute(input, ctx).await {
-        Ok(output) => {
-            let deploy_result = StageResult {
-                ci_build_pass: output.output.get("ciBuildPass").and_then(|v| v.as_bool()),
-                test_coverage: output.output.get("testCoverage").and_then(|v| v.as_f64()),
-                diff_lines: output
-                    .output
-                    .get("diffLines")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32),
-                has_conflict: output.output.get("hasConflict").and_then(|v| v.as_bool()),
-                ..Default::default()
-            };
-            let evaluation = evaluate_gates(
-                &deploy_result,
-                &pipeline_gate_rules(pipeline),
-                GatePhase::Deploy,
-            );
-            pipeline.stages[stage_idx].output = Some(output.output.clone());
-            pipeline.stages[stage_idx].gate_results = Some(ui_from_gate_evaluation(&evaluation));
-            if !evaluation.blocking_failures.is_empty() {
-                let mut message = blocking_gate_message(&evaluation);
-                if let Some(status) = output
-                    .output
-                    .get("ciStatus")
-                    .and_then(|v| v.as_str())
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                {
-                    message = format!("{message}; ciStatus={status}");
-                }
-                if let Some(source) = output
-                    .output
-                    .get("coverageSource")
-                    .and_then(|v| v.as_str())
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                {
-                    message = format!("{message}; coverageSource={source}");
-                }
-                if message.is_empty() {
-                    message = "Deploy 门禁未通过".into();
-                }
-                return fail_or_block_stage(
-                    pipeline,
-                    stage_idx,
-                    app,
-                    store,
-                    message,
-                    "deploy_failed",
-                )
-                .await;
+    let mut output = DeploySkill::new()
+        .execute(input, ctx)
+        .await
+        .map_err(|err| err.to_string())?
+        .output;
+    if let Some(obj) = output.as_object_mut() {
+        if !obj.contains_key("mrUrls") {
+            if let Some(url) = obj.get("mrUrl").and_then(|v| v.as_str()) {
+                obj.insert("mrUrls".into(), serde_json::json!([url]));
             }
-            pipeline.status = PipelineStatus::WaitingMerge;
-            pipeline.stages[stage_idx].status = StageStatus::Completed;
-            pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-            pipeline.updated_at = Utc::now();
-            let mut output_value = output.output.clone();
-            if let Some(obj) = output_value.as_object_mut() {
-                if !obj.contains_key("mrUrls") {
-                    if let Some(url) = obj.get("mrUrl").and_then(|v| v.as_str()) {
-                        obj.insert("mrUrls".into(), serde_json::json!([url]));
-                    }
-                }
-                if !obj.contains_key("gitlabProjectPath") {
-                    obj.insert(
-                        "gitlabProjectPath".into(),
-                        serde_json::Value::String(gitlab_project_path.clone()),
-                    );
-                }
-            }
-            pipeline.stages[stage_idx].output = Some(output_value.clone());
-            let mr_urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
-            let mut rollback_cmds = Vec::new();
-            for url in &mr_urls {
-                rollback_cmds.push(poria_core::types::RollbackCommand {
-                    command_type: poria_core::types::RollbackCommandType::CloseMr,
-                    params: [("mrUrl".into(), url.clone())].into_iter().collect(),
-                });
-            }
-            if let Some(branch) = output_value
-                .get("branch")
-                .and_then(|v| v.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                rollback_cmds.push(poria_core::types::RollbackCommand {
-                    command_type: poria_core::types::RollbackCommandType::DeleteBranch,
-                    params: [("branch".into(), branch.to_string())]
-                        .into_iter()
-                        .collect(),
-                });
-            }
-            if !rollback_cmds.is_empty() {
-                pipeline.stages[stage_idx].rollback =
-                    Some(poria_core::types::RollbackInstruction {
-                        stage_index: stage_idx as i32,
-                        commands: rollback_cmds,
-                    });
-            }
-            store
-                .save_stage_tx(
-                    Some(&pipeline.stages[stage_idx]),
-                    pipeline,
-                    &[
-                        CorePipelineEvent::stage_completed(
-                            &pipeline.id,
-                            StageEnum::Deploy,
-                            output_value,
-                        ),
-                        CorePipelineEvent::pipeline_waiting_merge(&pipeline.id, mr_urls.clone()),
-                    ],
-                )
-                .map_err(|e| e.to_string())?;
-            emit_pipeline_updated(app, pipeline)?;
-            let _ = app.emit(
-                "human:request",
-                serde_json::json!({
-                    "pipelineId": pipeline.id,
-                    "stage": "deploy",
-                    "issueClass": "waiting_merge",
-                    "detail": format!(
-                        "MR 已创建，等待审查人确认后在 Coding 合入（Poria 不会自动点合并）。{}",
-                        mr_urls.join(" ")
-                    ),
-                }),
-            );
-            spawn_delivery_side_effects(pipeline.clone(), false, None, None);
-            Ok(())
         }
-        Err(err) => {
-            fail_or_block_stage(
-                pipeline,
-                stage_idx,
-                app,
-                store,
-                err.to_string(),
-                "deploy_failed",
-            )
-            .await
+        if !obj.contains_key("gitlabProjectPath") {
+            obj.insert(
+                "gitlabProjectPath".into(),
+                serde_json::Value::String(gitlab_project_path),
+            );
         }
     }
+    Ok(output)
+}
+
+async fn finish_job(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    output: serde_json::Value,
+    job_name: StageEnum,
+) -> Result<(), String> {
+    match job_name {
+        StageEnum::Cr => finish_cr_job(pipeline, stage_idx, app, store, output).await,
+        StageEnum::Deploy => finish_deploy_job(pipeline, stage_idx, app, store, output).await,
+        StageEnum::Dev => {
+            pipeline.stages[stage_idx].gate_results = Some(output_guard_gate_results(
+                output
+                    .get("guardPass")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+            ));
+            complete_job(pipeline, stage_idx, app, store, output, job_name).await
+        }
+        _ => complete_job(pipeline, stage_idx, app, store, output, job_name).await,
+    }
+}
+
+async fn complete_job(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    output: serde_json::Value,
+    job_name: StageEnum,
+) -> Result<(), String> {
+    pipeline.stages[stage_idx].status = StageStatus::Completed;
+    pipeline.stages[stage_idx].output = Some(output.clone());
+    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+    pipeline.updated_at = Utc::now();
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_completed(
+                &pipeline.id,
+                job_name,
+                output,
+            )],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+    Ok(())
+}
+
+async fn finish_cr_job(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    output: serde_json::Value,
+) -> Result<(), String> {
+    let cr_result = StageResult {
+        cr_score: output
+            .get("crScore")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        security_pass: output.get("securityPass").and_then(|v| v.as_bool()),
+        ..Default::default()
+    };
+    let evaluation = evaluate_gates(
+        &cr_result,
+        &pipeline_gate_rules(pipeline),
+        GatePhase::StageExit,
+    );
+    pipeline.stages[stage_idx].output = Some(output.clone());
+    pipeline.stages[stage_idx].gate_results = Some(ui_from_gate_evaluation(&evaluation));
+    if !evaluation.all_pass {
+        let security_failed = evaluation
+            .blocking_failures
+            .iter()
+            .any(|detail| detail.rule_id == "security_scan");
+        let cr_score_failed = evaluation
+            .details
+            .iter()
+            .any(|detail| detail.rule_id == "cr_score" && !detail.pass);
+        if cr_score_failed && !security_failed {
+            let findings = output.get("findings").cloned();
+            if try_regress_cr_to_dev(pipeline, cr_result.cr_score.as_deref(), findings.as_ref()) {
+                pipeline.updated_at = Utc::now();
+                store
+                    .save_stage_tx(
+                        Some(&pipeline.stages[stage_idx]),
+                        pipeline,
+                        &[
+                            CorePipelineEvent::stage_regressed(
+                                &pipeline.id,
+                                StageEnum::Cr,
+                                StageEnum::Dev,
+                                format!("CR score: {:?}", cr_result.cr_score),
+                            ),
+                            CorePipelineEvent::gate_regress_triggered(
+                                &pipeline.id,
+                                "cr_score",
+                                StageEnum::Cr,
+                                StageEnum::Dev,
+                            ),
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+                emit_pipeline_updated(app, pipeline)?;
+                return Ok(());
+            }
+        }
+        let mut message = blocking_gate_message(&evaluation);
+        if let Some(detail) = output
+            .get("securityDetail")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            message = format!("{message}; {detail}");
+        }
+        if message.is_empty() {
+            message = if cr_score_failed && !security_failed {
+                "LOW_CR_SCORE: CR 评分未达标，已回退一次仍失败".into()
+            } else {
+                "CR 门禁未通过".into()
+            };
+        }
+        return fail_or_block_stage(pipeline, stage_idx, app, store, message, "cr_failed").await;
+    }
+    complete_job(pipeline, stage_idx, app, store, output, StageEnum::Cr).await
+}
+
+async fn finish_deploy_job(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    app: &AppHandle,
+    store: &std::sync::Arc<SqlitePipelineStore>,
+    output: serde_json::Value,
+) -> Result<(), String> {
+    let deploy_result = StageResult {
+        ci_build_pass: output.get("ciBuildPass").and_then(|v| v.as_bool()),
+        test_coverage: output.get("testCoverage").and_then(|v| v.as_f64()),
+        diff_lines: output
+            .get("diffLines")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32),
+        has_conflict: output.get("hasConflict").and_then(|v| v.as_bool()),
+        ..Default::default()
+    };
+    let evaluation = evaluate_gates(
+        &deploy_result,
+        &pipeline_gate_rules(pipeline),
+        GatePhase::Deploy,
+    );
+    pipeline.stages[stage_idx].output = Some(output.clone());
+    pipeline.stages[stage_idx].gate_results = Some(ui_from_gate_evaluation(&evaluation));
+    if !evaluation.blocking_failures.is_empty() {
+        let mut message = blocking_gate_message(&evaluation);
+        if let Some(status) = output
+            .get("ciStatus")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            message = format!("{message}; ciStatus={status}");
+        }
+        if let Some(source) = output
+            .get("coverageSource")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            message = format!("{message}; coverageSource={source}");
+        }
+        if message.is_empty() {
+            message = "Deploy 门禁未通过".into();
+        }
+        return fail_or_block_stage(pipeline, stage_idx, app, store, message, "deploy_failed")
+            .await;
+    }
+    pipeline.status = PipelineStatus::WaitingMerge;
+    pipeline.stages[stage_idx].status = StageStatus::Completed;
+    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
+    pipeline.updated_at = Utc::now();
+    let mut output_value = output;
+    if let Some(obj) = output_value.as_object_mut() {
+        if !obj.contains_key("mrUrls") {
+            if let Some(url) = obj.get("mrUrl").and_then(|v| v.as_str()) {
+                obj.insert("mrUrls".into(), serde_json::json!([url]));
+            }
+        }
+    }
+    pipeline.stages[stage_idx].output = Some(output_value.clone());
+    let mr_urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
+    let mut rollback_cmds = Vec::new();
+    for url in &mr_urls {
+        rollback_cmds.push(poria_core::types::RollbackCommand {
+            command_type: poria_core::types::RollbackCommandType::CloseMr,
+            params: [("mrUrl".into(), url.clone())].into_iter().collect(),
+        });
+    }
+    if let Some(branch) = output_value
+        .get("branch")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        rollback_cmds.push(poria_core::types::RollbackCommand {
+            command_type: poria_core::types::RollbackCommandType::DeleteBranch,
+            params: [("branch".into(), branch.to_string())]
+                .into_iter()
+                .collect(),
+        });
+    }
+    if !rollback_cmds.is_empty() {
+        pipeline.stages[stage_idx].rollback = Some(poria_core::types::RollbackInstruction {
+            stage_index: stage_idx as i32,
+            commands: rollback_cmds,
+        });
+    }
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[
+                CorePipelineEvent::stage_completed(&pipeline.id, StageEnum::Deploy, output_value),
+                CorePipelineEvent::pipeline_waiting_merge(&pipeline.id, mr_urls.clone()),
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+    let _ = app.emit(
+        "human:request",
+        serde_json::json!({
+            "pipelineId": pipeline.id,
+            "stage": "deploy",
+            "issueClass": "waiting_merge",
+            "detail": format!(
+                "MR 已创建，等待审查人确认后在 Coding 合入（Poria 不会自动点合并）。{}",
+                mr_urls.join(" ")
+            ),
+        }),
+    );
+    spawn_delivery_side_effects(pipeline.clone(), false, None, None);
+    Ok(())
 }
 
 /// Skip a pending, failed, or blocked stage in a pipeline.
@@ -3088,7 +3156,7 @@ mod tests {
     use super::{
         blocked_issue_class, dedupe_latest_by_task_key, load_prd_review_status,
         merge_init_workspace_output, persist_trd_scope, pipeline_to_summary,
-        require_prd_and_backend_trd_urls, submit_reuse_decision, SubmitReuse,
+        require_prd_and_backend_trd_urls, stages_from_jobs, submit_reuse_decision, SubmitReuse,
     };
     use chrono::Utc;
     use poria_core::types::{
@@ -3182,6 +3250,30 @@ mod tests {
         );
         assert_eq!(merged["repos"][0]["baseBranch"].as_str(), Some("master"));
         assert!(merged.get("prdPath").is_some());
+    }
+
+    #[test]
+    fn stages_from_jobs_follow_materialized_workflow() {
+        let jobs = poria_core::workflow::materialize(&poria_core::workflow::bundled_demand_to_mr())
+            .unwrap();
+        let stages = stages_from_jobs("p1", &jobs);
+        assert_eq!(stages.len(), 6);
+        assert_eq!(stages[0].name, StageEnum::Init);
+        assert_eq!(stages[3].name, StageEnum::Dev);
+        assert_eq!(stages[5].name, StageEnum::Deploy);
+        let omitted = stages_from_jobs(
+            "p2",
+            &[poria_core::workflow::MaterializedJob {
+                id: StageEnum::Init,
+                needs: vec![],
+                steps: vec![poria_core::workflow::MaterializedStep {
+                    id: "skill:init".into(),
+                    uses: "skill:init".into(),
+                }],
+            }],
+        );
+        assert_eq!(omitted.len(), 1);
+        assert_eq!(omitted[0].name, StageEnum::Init);
     }
 
     #[test]

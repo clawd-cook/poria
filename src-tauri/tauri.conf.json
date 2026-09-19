@@ -35,7 +35,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../skills": "skills"
+      "../skills": "skills",
+      "../workflows": "workflows"
     }
   }
 }

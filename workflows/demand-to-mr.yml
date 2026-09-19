@@ -1,0 +1,27 @@
+name: demand-to-mr
+jobs:
+  init:
+    steps:
+      - uses: skill:init
+  review_prd:
+    needs: [init]
+    steps:
+      - uses: skill:review-prd
+  design:
+    needs: [review_prd]
+    steps:
+      - uses: skill:gen-trd
+  dev:
+    needs: [design]
+    steps:
+      - uses: skill:gen-code
+      - uses: poria/dev-verify
+  cr:
+    needs: [dev]
+    steps:
+      - uses: skill:code-review
+  deploy:
+    needs: [cr]
+    steps:
+      - uses: skill:deploy
+      - uses: poria/post-cr-notes

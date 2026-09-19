@@ -36,6 +36,10 @@ export const STAGE_LABELS: Record<StageEnum, string> = {
   review_prd: "需求评审",
 };
 
+export function stageLabel(name: string): string {
+  return STAGE_LABELS[name as StageEnum] ?? name;
+}
+
 export interface StageDetail {
   name: StageEnum;
   status: StageStatus;

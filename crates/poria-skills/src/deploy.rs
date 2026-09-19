@@ -4,16 +4,15 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use poria_channels::coding::{
-    create_merge_request_live, find_mr_live, post_mr_note_live, query_mr_ci_status, CreateMrInput,
-    FindMrQuery, JacpCredentials, MrStatus,
+    create_merge_request_live, find_mr_live, query_mr_ci_status, CreateMrInput, FindMrQuery,
+    JacpCredentials, MrStatus,
 };
 use poria_channels::xingyun::{bind_branch, BindBranchInput};
 use poria_core::contracts::{CapabilityMetadata, Skill, SkillContext};
-use poria_core::types::{SkillInput, SkillOutput, StageEnum};
+use poria_core::types::{SkillInput, SkillOutput};
 use poria_resources::{git_add_all, git_commit, git_has_changes, git_push_set_upstream};
 
 use crate::artifacts::strip_project_docs_from_worktree;
-use crate::cr_findings::cr_stage_mr_notes;
 use crate::fixture::is_fixture_mode;
 
 pub struct DeploySkill {
@@ -54,8 +53,7 @@ fn fixture_output() -> SkillOutput {
             "ciBuildPass": true,
             "testCoverage": 90.0,
             "ciSource": "gitlab_pipeline",
-            "coverageSource": "istanbul_summary",
-            "crNotesPosted": 0
+            "coverageSource": "istanbul_summary"
         }),
         gates_pass: None,
     }
@@ -92,43 +90,6 @@ fn credentials_from_ctx(
         cookie: cookie.to_string(),
         username: username.to_string(),
     })
-}
-
-fn cr_stage_output(pipeline: &poria_core::types::Pipeline) -> Option<&serde_json::Value> {
-    pipeline
-        .stages
-        .iter()
-        .find(|stage| stage.name == StageEnum::Cr)
-        .and_then(|stage| stage.output.as_ref())
-}
-
-async fn post_cr_blocking_notes(
-    creds: &JacpCredentials,
-    project_path: &str,
-    iid: i32,
-    pipeline: &poria_core::types::Pipeline,
-) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-    let notes = cr_stage_mr_notes(cr_stage_output(pipeline));
-    let mut posted = 0;
-    for note in notes {
-        match post_mr_note_live(creds, project_path, iid, &note).await {
-            Ok(()) => posted += 1,
-            Err(err) => {
-                let message = err.to_string();
-                if message.contains(poria_core::types::AUTH_EXPIRED_USER_MESSAGE)
-                    || message.contains("请先登录")
-                {
-                    return Err(err);
-                }
-                tracing::warn!(
-                    pipeline_id = %pipeline.id,
-                    error = %message,
-                    "failed to post independent CR note; deploy continues"
-                );
-            }
-        }
-    }
-    Ok(posted)
 }
 
 fn xingyun_creds(creds: &JacpCredentials) -> poria_channels::xingyun::JacpCredentials {
@@ -259,13 +220,6 @@ impl Skill for DeploySkill {
             (created.url, created.iid)
         };
 
-        let cr_notes_posted = match mr_iid {
-            Some(iid) => {
-                post_cr_blocking_notes(&creds, &project_path, iid, &input.pipeline).await?
-            }
-            None => 0,
-        };
-
         let coverage = crate::quality_gates::collect_coverage_report(worktree_path);
         let ci = match mr_iid {
             Some(iid) => query_mr_ci_status(&creds, &project_path, iid)
@@ -294,7 +248,6 @@ impl Skill for DeploySkill {
                 "testCoverage": coverage.percent,
                 "coverageSource": coverage.source,
                 "coveragePath": coverage.path,
-                "crNotesPosted": cr_notes_posted,
             }),
             gates_pass: Some(ci.pass == Some(true) && coverage.percent.is_some()),
         })
@@ -348,9 +301,6 @@ mod tests {
             output.output.get("testCoverage").and_then(|v| v.as_f64()),
             Some(90.0)
         );
-        assert_eq!(
-            output.output.get("crNotesPosted").and_then(|v| v.as_i64()),
-            Some(0)
-        );
+        assert!(output.output.get("crNotesPosted").is_none());
     }
 }

@@ -4,3 +4,4 @@ pub mod logger;
 pub mod metrics;
 pub mod plugin_loader;
 pub mod store;
+pub mod workflow;

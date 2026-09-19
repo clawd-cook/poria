@@ -46,6 +46,26 @@ pub(crate) fn bundled_skills_dir(app: &AppHandle) -> Result<PathBuf, String> {
     ))
 }
 
+pub(crate) fn bundled_workflows_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../workflows");
+    if dev.join("demand-to-mr.yml").is_file() {
+        return Ok(dev.canonicalize().unwrap_or(dev));
+    }
+    let resource = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("无法解析资源目录: {e}"))?;
+    let bundled = resource.join("workflows");
+    if bundled.join("demand-to-mr.yml").is_file() {
+        return Ok(bundled);
+    }
+    Err(format!(
+        "找不到随包 workflow 目录（已试 {} 与 {}）",
+        dev.display(),
+        bundled.display()
+    ))
+}
+
 fn skill_from_doc(dir: &str, doc: BundledSkillDoc) -> SkillDetail {
     SkillDetail {
         description: doc.description,

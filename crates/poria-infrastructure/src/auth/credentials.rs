@@ -7,6 +7,7 @@ const CONFIG_FILE_NAME: &str = "config.json";
 const REPOS_DIR_NAME: &str = "repos";
 const PROJECTS_DIR_NAME: &str = "projects";
 const WORKSPACES_DIR_NAME: &str = "workspaces";
+const WORKFLOWS_DIR_NAME: &str = "workflows";
 const ERP_COOKIE_NAME: &str = "erp_erp";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,7 +62,14 @@ pub fn get_workspaces_root(home: Option<&Path>) -> PathBuf {
     get_user_root(home).join(WORKSPACES_DIR_NAME)
 }
 
-pub fn get_pipeline_workspace_dir(home: Option<&Path>, pipeline_id: &str) -> Result<PathBuf, String> {
+pub fn get_workflows_root(home: Option<&Path>) -> PathBuf {
+    get_user_root(home).join(WORKFLOWS_DIR_NAME)
+}
+
+pub fn get_pipeline_workspace_dir(
+    home: Option<&Path>,
+    pipeline_id: &str,
+) -> Result<PathBuf, String> {
     validate_path_segment(pipeline_id, "流水线 ID")?;
     Ok(get_workspaces_root(home).join(pipeline_id))
 }
@@ -276,11 +284,10 @@ mod tests {
         assert!(get_pipeline_workspace_dir(Some(dir.path()), "../escape").is_err());
         let ok = dir.path().join(".poria").join("workspaces").join("p1");
         assert!(assert_path_under_workspaces_root(Some(dir.path()), &ok).is_ok());
-        assert!(assert_path_under_workspaces_root(
-            Some(dir.path()),
-            Path::new("/tmp/elsewhere")
-        )
-        .is_err());
+        assert!(
+            assert_path_under_workspaces_root(Some(dir.path()), Path::new("/tmp/elsewhere"))
+                .is_err()
+        );
     }
 
     #[test]

@@ -24,6 +24,26 @@ pub const STAGE_ORDER: &[StageEnum] = &[
     StageEnum::Deploy,
 ];
 
+impl StageEnum {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StageEnum::Init => "init",
+            StageEnum::ReviewPrd => "review_prd",
+            StageEnum::Design => "design",
+            StageEnum::Dev => "dev",
+            StageEnum::Cr => "cr",
+            StageEnum::Deploy => "deploy",
+        }
+    }
+
+    pub fn from_job_id(id: &str) -> Option<Self> {
+        STAGE_ORDER
+            .iter()
+            .copied()
+            .find(|stage| stage.as_str() == id)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PipelineStatus {
@@ -110,6 +130,12 @@ pub struct PipelineConfig {
     /// Frontend `TRD.md` has been confirmed (or confirmation explicitly skipped).
     #[serde(default)]
     pub trd_confirmed: bool,
+    /// Workflow id stamped at submit (`demand-to-mr`). Absent on legacy pipelines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    /// Materialized jobs from the workflow YAML (order = serial ready preference).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jobs: Vec<crate::workflow::MaterializedJob>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -189,6 +215,7 @@ mod tests {
             }),
             project_dir: None,
             trd_confirmed: false,
+            ..Default::default()
         };
 
         let parsed: PipelineConfig =
@@ -239,6 +266,14 @@ mod tests {
         assert!(!STAGE_ORDER
             .iter()
             .any(|stage| format!("{stage:?}") == "Workspace"));
+    }
+
+    #[test]
+    fn stage_enum_job_id_round_trips() {
+        for stage in STAGE_ORDER {
+            assert_eq!(StageEnum::from_job_id(stage.as_str()), Some(*stage));
+        }
+        assert_eq!(StageEnum::from_job_id("workspace"), None);
     }
 
     #[test]
