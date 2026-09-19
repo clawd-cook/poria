@@ -84,6 +84,10 @@ function reducer(state: AppState, action: Action): AppState {
             ? {
                 ...p,
                 current_stage: action.currentStage,
+                issue_class:
+                  action.issueClass === undefined ? p.issue_class : (action.issueClass ?? null),
+                issue_detail:
+                  action.issueDetail === undefined ? p.issue_detail : (action.issueDetail ?? null),
                 status: action.status as PipelineSummary["status"],
                 updated_at: new Date().toISOString(),
               }
@@ -118,6 +122,15 @@ function reducer(state: AppState, action: Action): AppState {
           issueClass: action.issueClass,
           detail: action.detail,
         },
+        pipelines: state.pipelines.map((pipeline) =>
+          pipeline.id === action.pipelineId
+            ? {
+                ...pipeline,
+                issue_class: action.issueClass,
+                issue_detail: action.detail,
+              }
+            : pipeline,
+        ),
       };
 
     case "humanRequestDismissed":
@@ -216,7 +229,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .then((pipelines) => dispatch({ type: "hydrate", pipelines }))
           .catch(() => {});
       }),
-      listen<{ id: string; status: string; currentStage: string }>("pipeline:updated", (e) => {
+      listen<{
+        id: string;
+        status: string;
+        currentStage: string;
+        issueClass?: string | null;
+        issueDetail?: string | null;
+      }>("pipeline:updated", (e) => {
         dispatch({ type: "pipelineUpdated", ...e.payload });
       }),
       listen<PipelineEvent>("stage:progress", (e) => {

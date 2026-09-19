@@ -7,6 +7,9 @@ export interface PipelineSummary {
   current_stage: string | null;
   created_at: string;
   updated_at: string;
+  /** Blocked-stage issue class, or `waiting_merge` while polling MR. */
+  issue_class: string | null;
+  issue_detail: string | null;
 }
 
 export type PipelineStatus =

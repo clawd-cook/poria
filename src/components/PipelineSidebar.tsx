@@ -2,24 +2,34 @@ import { FilterOutlined } from "@ant-design/icons";
 import { List, Segmented, Tag, Typography, theme } from "antd";
 import { useMemo } from "react";
 
-import type { PipelineStatus, PipelineSummary } from "../lib/types";
+import { pipelineHitlLane } from "../lib/hitlLane";
+import type { PipelineSummary } from "../lib/types";
 import { useStore } from "../state/store";
 import { StatusBadge } from "./StatusBadge";
 
 const { Text } = Typography;
 
-const STATUS_GROUPS: { label: string; statuses: PipelineStatus[] }[] = [
-  { label: "运行中", statuses: ["running"] },
-  { label: "待合并", statuses: ["waiting_merge"] },
-  { label: "已阻塞", statuses: ["blocked"] },
-  { label: "已完成", statuses: ["completed"] },
-  { label: "已失败", statuses: ["failed"] },
-  { label: "其他", statuses: ["created", "cancelled"] },
+const STATUS_GROUPS: {
+  label: string;
+  match: (pipeline: PipelineSummary) => boolean;
+}[] = [
+  { label: "运行中", match: (pipeline) => pipeline.status === "running" },
+  { label: "待确认", match: (pipeline) => pipelineHitlLane(pipeline) === "confirm" },
+  { label: "待验收", match: (pipeline) => pipelineHitlLane(pipeline) === "review" },
+  { label: "已阻塞", match: (pipeline) => pipelineHitlLane(pipeline) === "blocked" },
+  { label: "已完成", match: (pipeline) => pipeline.status === "completed" },
+  { label: "已失败", match: (pipeline) => pipeline.status === "failed" },
+  {
+    label: "其他",
+    match: (pipeline) => pipeline.status === "created" || pipeline.status === "cancelled",
+  },
 ];
 
 const FILTER_OPTIONS = [
   { label: "全部", value: "all" },
   { label: "运行中", value: "running" },
+  { label: "待确认", value: "confirm" },
+  { label: "待验收", value: "review" },
   { label: "已阻塞", value: "blocked" },
   { label: "已完成", value: "completed" },
   { label: "已失败", value: "failed" },
@@ -42,13 +52,16 @@ export function PipelineSidebar() {
 
   const filtered = useMemo(() => {
     if (!ui.filter) return pipelines;
+    if (ui.filter === "confirm" || ui.filter === "review" || ui.filter === "blocked") {
+      return pipelines.filter((pipeline) => pipelineHitlLane(pipeline) === ui.filter);
+    }
     return pipelines.filter((p) => p.status === ui.filter);
   }, [pipelines, ui.filter]);
 
   const grouped = useMemo(() => {
     return STATUS_GROUPS.map((group) => ({
       ...group,
-      items: filtered.filter((p) => group.statuses.includes(p.status)),
+      items: filtered.filter((pipeline) => group.match(pipeline)),
     })).filter((g) => g.items.length > 0);
   }, [filtered]);
 
