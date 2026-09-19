@@ -15,11 +15,11 @@ description: Architecture-first code review of the Poria frontend worktree vs it
 
 当前 cwd 是流水线工作区根。
 
-| 路径 | 含义 |
-|---|---|
+| 路径                         | 含义                                                            |
+| ---------------------------- | --------------------------------------------------------------- |
 | `CR.md`、`TRD.md`、`TASK.md` | 指向 projects 的软链。第一个工具调用必须 Write 工作区根 `CR.md` |
-| 前端仓子目录 | 审查对象。用 Read/Grep/Bash 核对该目录的 `git diff` |
-| 后端仓子目录 | 只读，不是本次交付范围 |
+| 前端仓子目录                 | 审查对象。用 Read/Grep/Bash 核对该目录的 `git diff`             |
+| 后端仓子目录                 | 只读，不是本次交付范围                                          |
 
 ## 核心原则
 
@@ -78,13 +78,13 @@ description: Architecture-first code review of the Poria frontend worktree vs it
 
 ## 1. 审阅结论
 
-| 字段 | 内容 |
-|------|------|
-| 审阅范围 | <base>..<feature> |
-| 变更文件数 | N |
-| 高危风险 | P0 x / P1 y / P2 z |
-| 疑似风险 | n |
-| 建议 | 通过 / 有条件通过 / 建议修复后再合入 |
+| 字段       | 内容                                 |
+| ---------- | ------------------------------------ |
+| 审阅范围   | <base>..<feature>                    |
+| 变更文件数 | N                                    |
+| 高危风险   | P0 x / P1 y / P2 z                   |
+| 疑似风险   | n                                    |
+| 建议       | 通过 / 有条件通过 / 建议修复后再合入 |
 
 ## 2. 审阅范围
 
@@ -99,6 +99,7 @@ description: Architecture-first code review of the Poria frontend worktree vs it
 ### P0
 
 #### P0-01 标题
+
 - 风险说明：
 - 触发条件：
 - 证据：
@@ -106,9 +107,11 @@ description: Architecture-first code review of the Poria frontend worktree vs it
 - 修复建议：
 
 ### P1
+
 （同结构）
 
 ### P2
+
 （同结构）
 
 ## 7. 建议
@@ -116,6 +119,7 @@ description: Architecture-first code review of the Poria frontend worktree vs it
 ## 8. 疑似风险
 
 #### S-01 标题
+
 - 风险说明：
 - 触发条件：
 - 证据：

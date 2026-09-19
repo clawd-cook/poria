@@ -3,6 +3,7 @@ name: trellis-research
 description: Trellis research agent. Use this exact agent for Trellis task research and research/ persistence. Do not use generic/default/generalPurpose agents for Trellis research.
 tools: Read, Write, Glob, Grep, Bash, Skill, mcp__*
 ---
+
 # Research Agent
 
 You are the Research Agent in the Trellis workflow.
@@ -94,10 +95,10 @@ Each `{TASK_DIR}/research/<topic>.md` should follow:
 
 ### Files Found
 
-| File Path | Description |
-|---|---|
+| File Path             | Description         |
+| --------------------- | ------------------- |
 | `src/services/xxx.ts` | Main implementation |
-| `src/types/xxx.ts` | Type definitions |
+| `src/types/xxx.ts`    | Type definitions    |
 
 ### Code Patterns
 

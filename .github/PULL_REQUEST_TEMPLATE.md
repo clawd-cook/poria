@@ -35,7 +35,6 @@ Fixes #
 
 跨层字段（需求筛选、`backendTrdUrl`、前端 `TRD.md` / 后端 `BACKEND_TRD.md`）如有变动，写明前后契约：
 
-
 ## 验证
 
 - [ ] `src/` 有改动：已跑 `pnpm typecheck`

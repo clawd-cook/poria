@@ -40,15 +40,15 @@ poria-desktop        # Tauri IPC 壳，#[tauri::command] 全在这里
 
 一条流水线从需求开始，到提交合并请求结束，固定七个阶段：
 
-| 阶段 | 做什么 | 产出 |
-|---|---|---|
-| 初始化（Init） | 从 JoySpace 导出需求 PRD 和后端 TRD | `PRD.md`、`BACKEND_TRD.md` |
-| 需求评审（ReviewPrd） | Claude 读 PRD，生成澄清问题清单 | `PRD_REVIEW.md` |
-| 技术设计（Design） | Claude 基于 PRD 和后端 TRD 生成前端技术方案 | `TRD.md` |
-| 工作区（Workspace） | 创建 git worktree + feature 分支 | `feature_<demand_code>` 分支 |
-| 开发（Dev） | Claude 按 TRD 改代码 | 代码变更 + `TASK.md` |
-| 代码审查（Cr） | Claude 自审代码变更 | `CR.md` + 评分 |
-| 部署（Deploy） | commit → push → EasyCI 绑定 → 创建 MR | Coding 上的合并请求 |
+| 阶段                  | 做什么                                      | 产出                         |
+| --------------------- | ------------------------------------------- | ---------------------------- |
+| 初始化（Init）        | 从 JoySpace 导出需求 PRD 和后端 TRD         | `PRD.md`、`BACKEND_TRD.md`   |
+| 需求评审（ReviewPrd） | Claude 读 PRD，生成澄清问题清单             | `PRD_REVIEW.md`              |
+| 技术设计（Design）    | Claude 基于 PRD 和后端 TRD 生成前端技术方案 | `TRD.md`                     |
+| 工作区（Workspace）   | 创建 git worktree + feature 分支            | `feature_<demand_code>` 分支 |
+| 开发（Dev）           | Claude 按 TRD 改代码                        | 代码变更 + `TASK.md`         |
+| 代码审查（Cr）        | Claude 自审代码变更                         | `CR.md` + 评分               |
+| 部署（Deploy）        | commit → push → EasyCI 绑定 → 创建 MR       | Coding 上的合并请求          |
 
 所有文档产出物存在 `~/.poria/projects/<demand_code>/` 下。阶段顺序固定，定义在 `crates/poria-skills/src/stage_skill_map.rs` 的 `STAGE_ORDER` 数组里。
 
@@ -146,12 +146,12 @@ cmd.current_dir(&worktree_path);
 
 重点看工具白名单的设计。每个阶段允许的工具集不同：
 
-| 阶段 | 允许的工具 | 原因 |
-|---|---|---|
-| ReviewPrd | Read, Grep | 只需要读 PRD，不能改文件 |
-| Design | Read, Grep, Write | 需要写 TRD.md |
-| Dev | Read, Write, Edit, Bash, Glob, Grep | 需要改代码、跑命令 |
-| Cr | Read, Grep | 只审查，不改代码 |
+| 阶段      | 允许的工具                          | 原因                     |
+| --------- | ----------------------------------- | ------------------------ |
+| ReviewPrd | Read, Grep                          | 只需要读 PRD，不能改文件 |
+| Design    | Read, Grep, Write                   | 需要写 TRD.md            |
+| Dev       | Read, Write, Edit, Bash, Glob, Grep | 需要改代码、跑命令       |
+| Cr        | Read, Grep                          | 只审查，不改代码         |
 
 工具白名单限制了每个阶段的 agent 能做什么，防止需求评审阶段的 agent 去改代码，或者代码审查阶段的 agent 去改文件。
 
@@ -161,12 +161,12 @@ cmd.current_dir(&worktree_path);
 
 每个阶段有独立的预算和超时配置：
 
-| 阶段 | 预算上限 | 最大轮次 | 超时 |
-|---|---|---|---|
-| ReviewPrd | $1 | 10 | 5 分钟 |
-| Design | $3 | 20 | 10 分钟 |
-| Dev | $10 | 100 | 30 分钟 |
-| Cr | $5 | 30 | 15 分钟 |
+| 阶段      | 预算上限 | 最大轮次 | 超时    |
+| --------- | -------- | -------- | ------- |
+| ReviewPrd | $1       | 10       | 5 分钟  |
+| Design    | $3       | 20       | 10 分钟 |
+| Dev       | $10      | 100      | 30 分钟 |
+| Cr        | $5       | 30       | 15 分钟 |
 
 超过预算或轮次自动停止。返回值 `AgentTaskResult` 包含 success 标志、结果文本、session_id、实际花费和消息列表。
 

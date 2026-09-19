@@ -35,9 +35,11 @@ For each remaining dirty path, decide whether it belongs to **the current task**
 Then route:
 
 - **Any remaining path looks like current-task work** — bail out with:
+
   > "Working tree has uncommitted code changes from this task: `<list>`. Return to workflow Phase 3.4 to commit them before running `/trellis-finish-work`."
 
   Do NOT run `git commit` here. Do NOT prompt the user to commit. The user goes back to Phase 3.4 and the AI drives the batched commit there.
+
 - **All remaining paths look unrelated** (other parallel-window work) — report them once and continue to Step 3:
   > "FYI, dirty files outside this task's scope — leaving them for the other window: `<list>`."
 - **Genuinely unsure** — ask the user once: "Are `<list>` this task's work I forgot to commit, or another window's? (commit / ignore)" — then route per their answer.

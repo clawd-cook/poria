@@ -31,42 +31,42 @@ graph TD
 
 ## Jobs and dependencies
 
-| Job | Purpose | Depends on | Runner |
-| --- | --- | --- | --- |
-| validate | Accept only `vX.Y.Z`; emit `tag` and `version` | none | ubuntu-latest |
-| build-macos | Typecheck, bundle, sign or ad-hoc, package DMG | validate | macos-latest, matrix arch `aarch64` |
-| create-release | Latest release with DMG, SHA-256, install notes | validate, build-macos | ubuntu-latest |
+| Job            | Purpose                                         | Depends on            | Runner                              |
+| -------------- | ----------------------------------------------- | --------------------- | ----------------------------------- |
+| validate       | Accept only `vX.Y.Z`; emit `tag` and `version`  | none                  | ubuntu-latest                       |
+| build-macos    | Typecheck, bundle, sign or ad-hoc, package DMG  | validate              | macos-latest, matrix arch `aarch64` |
+| create-release | Latest release with DMG, SHA-256, install notes | validate, build-macos | ubuntu-latest                       |
 
 ## Requirements
 
-| ID | Requirement | Priority | Acceptance |
-| --- | --- | --- | --- |
-| REQ-001 | Tag is exact `vX.Y.Z` | High | Reject prerelease suffixes and `v1.0` |
-| REQ-002 | Trigger excludes beta, rc, alpha | High | Those tags never start this workflow |
-| REQ-003 | One Apple Silicon DMG | High | Asset `Poria-{VERSION}-aarch64.dmg` |
-| REQ-004 | Do not build Intel | High | Matrix has no `x86_64-apple-darwin` |
-| REQ-005 | Sync tag version into bundle metadata | High | `tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json` equal `VERSION` |
-| REQ-006 | GitHub latest, not prerelease | High | `--latest`; existing betas stay prerelease |
-| REQ-007 | Frontend typecheck before bundle | Medium | Typecheck job step passes |
-| REQ-008 | Missing Apple certificate still yields a DMG | High | Ad-hoc sign; notes mention `xattr -cr` |
-| REQ-009 | DMG larger than 1 MB | High | Smaller file fails the build |
-| REQ-010 | SHA-256 in notes | Medium | Checksums listed |
+| ID      | Requirement                                  | Priority | Acceptance                                                                |
+| ------- | -------------------------------------------- | -------- | ------------------------------------------------------------------------- |
+| REQ-001 | Tag is exact `vX.Y.Z`                        | High     | Reject prerelease suffixes and `v1.0`                                     |
+| REQ-002 | Trigger excludes beta, rc, alpha             | High     | Those tags never start this workflow                                      |
+| REQ-003 | One Apple Silicon DMG                        | High     | Asset `Poria-{VERSION}-aarch64.dmg`                                       |
+| REQ-004 | Do not build Intel                           | High     | Matrix has no `x86_64-apple-darwin`                                       |
+| REQ-005 | Sync tag version into bundle metadata        | High     | `tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json` equal `VERSION` |
+| REQ-006 | GitHub latest, not prerelease                | High     | `--latest`; existing betas stay prerelease                                |
+| REQ-007 | Frontend typecheck before bundle             | Medium   | Typecheck job step passes                                                 |
+| REQ-008 | Missing Apple certificate still yields a DMG | High     | Ad-hoc sign; notes mention `xattr -cr`                                    |
+| REQ-009 | DMG larger than 1 MB                         | High     | Smaller file fails the build                                              |
+| REQ-010 | SHA-256 in notes                             | Medium   | Checksums listed                                                          |
 
 ### Security
 
-| ID | Constraint |
-| --- | --- |
+| ID      | Constraint                                                                           |
+| ------- | ------------------------------------------------------------------------------------ |
 | SEC-001 | Apple certificate, notarization identity, and Tauri updater key are optional secrets |
-| SEC-002 | `contents: write` only; do not echo secrets |
-| SEC-003 | Artifacts are installers only |
+| SEC-002 | `contents: write` only; do not echo secrets                                          |
+| SEC-003 | Artifacts are installers only                                                        |
 
 ### Performance
 
-| ID | Metric | Target |
-| --- | --- | --- |
-| PERF-001 | Validate timeout | 5 min |
-| PERF-002 | Build timeout | 30 min |
-| PERF-003 | Release timeout | 10 min |
+| ID       | Metric           | Target |
+| -------- | ---------------- | ------ |
+| PERF-001 | Validate timeout | 5 min  |
+| PERF-002 | Build timeout    | 30 min |
+| PERF-003 | Release timeout  | 10 min |
 
 ## Input and output
 
@@ -92,32 +92,32 @@ graph TD
 
 ## Error handling
 
-| Error | Response | Recovery |
-| --- | --- | --- |
-| `v1.0.1-beta.1` or `v1.0.1-rc.1` | Do not start, or fail validate | Use the beta workflow or a stable tag |
-| Typecheck or compile failure | Fail build | New patch tag after the fix |
-| Empty Apple certificate | Ad-hoc sign, still publish as latest | Configure secrets later |
-| Notarization rejected when identity is set | Fail build | Inspect Apple log |
-| Duplicate GitHub release for the tag | Fail release | Operator deletes the release or uses a new tag |
+| Error                                      | Response                             | Recovery                                       |
+| ------------------------------------------ | ------------------------------------ | ---------------------------------------------- |
+| `v1.0.1-beta.1` or `v1.0.1-rc.1`           | Do not start, or fail validate       | Use the beta workflow or a stable tag          |
+| Typecheck or compile failure               | Fail build                           | New patch tag after the fix                    |
+| Empty Apple certificate                    | Ad-hoc sign, still publish as latest | Configure secrets later                        |
+| Notarization rejected when identity is set | Fail build                           | Inspect Apple log                              |
+| Duplicate GitHub release for the tag       | Fail release                         | Operator deletes the release or uses a new tag |
 
 ## Quality gates
 
-| Gate | Bypass |
-| --- | --- |
-| Tag regex `^[0-9]+\.[0-9]+\.[0-9]+$` after stripping `v` | None |
-| Frontend typecheck | None |
-| Tauri bundle for `aarch64-apple-darwin` | None |
-| Apple identity | Skip; ad-hoc |
-| DMG &gt; 1 MB | None |
-| Release is latest, not prerelease | None |
+| Gate                                                     | Bypass       |
+| -------------------------------------------------------- | ------------ |
+| Tag regex `^[0-9]+\.[0-9]+\.[0-9]+$` after stripping `v` | None         |
+| Frontend typecheck                                       | None         |
+| Tauri bundle for `aarch64-apple-darwin`                  | None         |
+| Apple identity                                           | Skip; ad-hoc |
+| DMG &gt; 1 MB                                            | None         |
+| Release is latest, not prerelease                        | None         |
 
 ## Edge cases
 
-| Scenario | Expected behavior |
-| --- | --- |
-| `v1.2.3-beta.1` | This workflow does not start |
+| Scenario                               | Expected behavior                                  |
+| -------------------------------------- | -------------------------------------------------- |
+| `v1.2.3-beta.1`                        | This workflow does not start                       |
 | Stable tag while a beta release exists | This release becomes latest; beta stays prerelease |
-| Tag not on `main` | Builds the tagged commit |
+| Tag not on `main`                      | Builds the tagged commit                           |
 
 ## Related
 

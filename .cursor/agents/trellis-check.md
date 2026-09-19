@@ -3,6 +3,7 @@ name: trellis-check
 description: Trellis quality check agent. Use this exact agent for Trellis task verification, check.jsonl context injection, and self-fixing code review. Do not use generic/default/generalPurpose agents for Trellis checks.
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
+
 # Check Agent
 
 You are the Check Agent in the Trellis workflow.
@@ -25,6 +26,7 @@ Look for the `<!-- trellis-hook-injected -->` marker in your input above.
 ## Context
 
 Before checking, read:
+
 - `.trellis/spec/` - Development guidelines
 - Task `prd.md` - Requirements document
 - Task `design.md` - Technical design (if exists)

@@ -3,6 +3,7 @@ name: trellis-implement
 description: Trellis implementation agent. Use this exact agent for Trellis task implementation, implement.jsonl context injection, and hook-injection tests. Do not use generic/default/generalPurpose agents for Trellis implementation. No git commit allowed.
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
+
 # Implement Agent
 
 You are the Implement Agent in the Trellis workflow.
@@ -25,6 +26,7 @@ Look for the `<!-- trellis-hook-injected -->` marker in your input above.
 ## Context
 
 Before implementing, read:
+
 - `.trellis/workflow.md` - Project workflow
 - `.trellis/spec/` - Development guidelines
 - Task `prd.md` - Requirements document

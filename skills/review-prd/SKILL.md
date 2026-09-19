@@ -13,12 +13,12 @@ description: Analyze a Poria demand PRD from the frontend perspective and write 
 
 当前 cwd 是流水线工作区根（不是 git 仓根，也不是 `~/.poria/projects`）。
 
-| 路径 | 含义 |
-|---|---|
+| 路径                                                                      | 含义                                                                         |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `PRD.md`、`BACKEND_TRD.md`、`PRD_REVIEW.md`、`TRD.md`、`TASK.md`、`CR.md` | 指向 `~/.poria/projects/<demand_code>/` 的软链。写入这些文件名即落到文档真源 |
-| 前端仓子目录 | feature worktree，可读代码。禁止把项目文档写进该 git 根 |
-| 后端仓子目录 | 只读 detached worktree。禁止修改后端仓任何文件 |
-| `.claude/skills/` | 随包 skill 软链。不要改 |
+| 前端仓子目录                                                              | feature worktree，可读代码。禁止把项目文档写进该 git 根                      |
+| 后端仓子目录                                                              | 只读 detached worktree。禁止修改后端仓任何文件                               |
+| `.claude/skills/`                                                         | 随包 skill 软链。不要改                                                      |
 
 默认全部模块纳入本期（PRD 明确写二期/不做的除外）。`An` 行留空给产品回填。
 
@@ -87,10 +87,10 @@ description: Analyze a Poria demand PRD from the frontend perspective and write 
 
 ## 1. 本期范围
 
-| # | 模块 | 是否本期 | 说明 | 待澄清问题 |
-|---|---|---|---|---|
-| 1 | 行程卡片 | ✅ 本期 | 展示用户行程节点 | Q1–Q2、Q4 |
-| 2 | 旧版入口 | ⛔ 不做 | 二期功能 | — |
+| #   | 模块     | 是否本期 | 说明             | 待澄清问题 |
+| --- | -------- | -------- | ---------------- | ---------- |
+| 1   | 行程卡片 | ✅ 本期  | 展示用户行程节点 | Q1–Q2、Q4  |
+| 2   | 旧版入口 | ⛔ 不做  | 二期功能         | —          |
 
 ## 2. 前端落地澄清清单
 

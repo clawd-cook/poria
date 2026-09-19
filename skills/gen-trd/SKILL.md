@@ -13,12 +13,12 @@ description: Generate the frontend TRD.md technical design from PRD and PRD_REVI
 
 当前 cwd 是流水线工作区根。
 
-| 路径 | 含义 |
-|---|---|
+| 路径                                                  | 含义                                               |
+| ----------------------------------------------------- | -------------------------------------------------- |
 | `PRD.md`、`PRD_REVIEW.md`、`TRD.md`、`BACKEND_TRD.md` | 指向 projects 的软链。写入 `TRD.md` 即落到文档真源 |
-| 前端仓子目录 | feature worktree，可读代码 |
-| 后端仓子目录 | 只读。禁止修改后端仓任何文件 |
-| `BACKEND_TRD.md` / 后端 TRD URL | 只读参考，**不是**前端 `TRD.md` |
+| 前端仓子目录                                          | feature worktree，可读代码                         |
+| 后端仓子目录                                          | 只读。禁止修改后端仓任何文件                       |
+| `BACKEND_TRD.md` / 后端 TRD URL                       | 只读参考，**不是**前端 `TRD.md`                    |
 
 默认本期做完 PRD 前端可见项（明确二期/不做除外）。无 API.md 则用「仅高保真 UI」。grilling 用推荐答案写入附录 B。
 
@@ -28,10 +28,10 @@ description: Generate the frontend TRD.md technical design from PRD and PRD_REVI
 
 ## API 双模式
 
-| 模式 | 条件 | 写法 |
-|------|------|------|
+| 模式            | 条件        | 写法                                                              |
+| --------------- | ----------- | ----------------------------------------------------------------- |
 | **仅高保真 UI** | 无 API 文档 | 文案写死；接口列表用预设语义接口（用途+包含信息），**禁止字段名** |
-| **对接字段** | 有 API.md | 列值、状态文案对接接口字段，禁止把可接口驱动的内容写死 |
+| **对接字段**    | 有 API.md   | 列值、状态文案对接接口字段，禁止把可接口驱动的内容写死            |
 
 ## 执行流程
 
@@ -54,13 +54,13 @@ description: Generate the frontend TRD.md technical design from PRD and PRD_REVI
 
 ### 2. 信息归类
 
-| 来源 | 归入章节 |
-|------|----------|
-| 本期范围 | 概要「本期做/本期不做」 |
-| PRD 页面总览 | 页面统计 + 各页介绍 |
-| PRD 各页规则 | 功能边界 |
-| 接口（语义或真实） | 接口列表 + 流程图 |
-| 缺口、未决项 | 未确定项 |
+| 来源               | 归入章节                |
+| ------------------ | ----------------------- |
+| 本期范围           | 概要「本期做/本期不做」 |
+| PRD 页面总览       | 页面统计 + 各页介绍     |
+| PRD 各页规则       | 功能边界                |
+| 接口（语义或真实） | 接口列表 + 流程图       |
+| 缺口、未决项       | 未确定项                |
 
 ### 3. Grilling 方案压测（门禁）
 
@@ -91,13 +91,13 @@ description: Generate the frontend TRD.md technical design from PRD and PRD_REVI
 
 ## 元信息
 
-| 字段 | 内容 |
-|------|------|
-| 需求 | <需求名> |
-| 仓库 | <前端仓名> |
+| 字段     | 内容                     |
+| -------- | ------------------------ |
+| 需求     | <需求名>                 |
+| 仓库     | <前端仓名>               |
 | API 模式 | 仅高保真 UI / 已对接 API |
-| UI 来源 | ui/ 路径 / 无 UI |
-| 本期范围 | ... |
+| UI 来源  | ui/ 路径 / 无 UI         |
+| 本期范围 | ...                      |
 
 ## 概要
 
@@ -111,10 +111,11 @@ description: Generate the frontend TRD.md technical design from PRD and PRD_REVI
 ## 允许修改范围
 
 OutputGuard 在 Dev 结束时按本列表拦截越界修改。一行一个 glob，路径相对**前端 git worktree 根**。只列本期允许改的文件/目录，不要写后端仓。
-
 ```
+
 src/pages/<本期页面>/**
 src/api/<本期接口>.ts
+
 ```
 
 ## 页面详情（每页一节）

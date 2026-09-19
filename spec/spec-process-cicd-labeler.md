@@ -26,21 +26,21 @@ graph TD
 
 ## Jobs and dependencies
 
-| Job | Purpose | When | Runner |
-| --- | --- | --- | --- |
-| sync-labels | Create or update labels from `.github/labels.yml`; do not delete extra labels | `push` only | ubuntu-latest |
-| label-pr | Match changed files to labels; `sync-labels: true` on the PR | `pull_request` only | ubuntu-latest |
+| Job         | Purpose                                                                       | When                | Runner        |
+| ----------- | ----------------------------------------------------------------------------- | ------------------- | ------------- |
+| sync-labels | Create or update labels from `.github/labels.yml`; do not delete extra labels | `push` only         | ubuntu-latest |
+| label-pr    | Match changed files to labels; `sync-labels: true` on the PR                  | `pull_request` only | ubuntu-latest |
 
 ## Requirements
 
-| ID | Requirement | Priority | Acceptance |
-| --- | --- | --- | --- |
-| REQ-001 | Catalog is the source for label name, color, description | High | Push to `main` updates GitHub labels |
-| REQ-002 | Do not delete labels missing from the catalog | High | `skip-delete: true` |
-| REQ-003 | Path labels follow `.github/labeler.yml` | High | PR files under `src/` get `frontend`, and so on |
-| REQ-004 | CI paths include composite actions | Medium | Changes under `.github/actions/**` get `ci` |
-| REQ-005 | Documentation paths include `spec/` | Medium | Changes under `spec/**` get `documentation` |
-| REQ-006 | Permissions are least privilege | High | `contents: read`; `issues: write`; `pull-requests: write` |
+| ID      | Requirement                                              | Priority | Acceptance                                                |
+| ------- | -------------------------------------------------------- | -------- | --------------------------------------------------------- |
+| REQ-001 | Catalog is the source for label name, color, description | High     | Push to `main` updates GitHub labels                      |
+| REQ-002 | Do not delete labels missing from the catalog            | High     | `skip-delete: true`                                       |
+| REQ-003 | Path labels follow `.github/labeler.yml`                 | High     | PR files under `src/` get `frontend`, and so on           |
+| REQ-004 | CI paths include composite actions                       | Medium   | Changes under `.github/actions/**` get `ci`               |
+| REQ-005 | Documentation paths include `spec/`                      | Medium   | Changes under `spec/**` get `documentation`               |
+| REQ-006 | Permissions are least privilege                          | High     | `contents: read`; `issues: write`; `pull-requests: write` |
 
 ## Execution constraints
 
@@ -50,10 +50,10 @@ graph TD
 
 ## Error handling
 
-| Error | Response | Recovery |
-| --- | --- | --- |
+| Error                | Response                 | Recovery                     |
+| -------------------- | ------------------------ | ---------------------------- |
 | Labeler mapping miss | PR may lack a path label | Extend `.github/labeler.yml` |
-| Fork PR token limits | Label step may no-op | Maintainer applies labels |
+| Fork PR token limits | Label step may no-op     | Maintainer applies labels    |
 
 ## Related
 

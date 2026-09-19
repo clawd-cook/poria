@@ -16,9 +16,9 @@
 
 <!-- 无跨层字段可写「无」。有则列出： -->
 
-| 字段 | 方向 | 说明 |
-|------|------|------|
-|      | 例如 TS camelCase → Rust snake_case |  |
+| 字段 | 方向                                | 说明 |
+| ---- | ----------------------------------- | ---- |
+|      | 例如 TS camelCase → Rust snake_case |      |
 
 - [ ] 后端仓仍不进入 `pipeline.repos`（若涉及启动流水线）
 - [ ] `submit_pipeline` 仍发送 `backendTrdUrl`（若涉及启动流水线）

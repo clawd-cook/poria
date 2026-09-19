@@ -10,12 +10,12 @@ Security fixes ship on the latest stable `vX.Y.Z` GitHub Release (currently **1.
 
 The 2.0 line is **pre-release only** (`v2.0.x-beta.*`, current `v2.0.1-beta.1`). Pre-releases are not a supported security surface.
 
-| Version | Supported |
-| --- | --- |
-| 1.1.x | Yes |
-| 1.0.x | Best effort for high-severity issues that still apply |
-| `v2.0.x-beta*`, other `v*-beta*` / `v*-rc*` / `v*-alpha*` | No |
-| &lt; 1.0 | No |
+| Version                                                   | Supported                                             |
+| --------------------------------------------------------- | ----------------------------------------------------- |
+| 1.1.x                                                     | Yes                                                   |
+| 1.0.x                                                     | Best effort for high-severity issues that still apply |
+| `v2.0.x-beta*`, other `v*-beta*` / `v*-rc*` / `v*-alpha*` | No                                                    |
+| &lt; 1.0                                                  | No                                                    |
 
 Unsigned or ad-hoc signed DMGs from CI are expected when Apple notarization secrets are not configured. That is a packaging limitation, not a supported hardened release. Current publish workflows build **Apple Silicon** (`aarch64-apple-darwin`) only.
 

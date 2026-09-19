@@ -25,21 +25,21 @@ graph TD
 
 ## Jobs and dependencies
 
-| Job | Purpose | Depends on | Runner |
-| --- | --- | --- | --- |
-| warm | Install toolchain, save cache, `cargo build --release` for `poria-desktop` | none | macos-latest |
+| Job  | Purpose                                                                    | Depends on | Runner       |
+| ---- | -------------------------------------------------------------------------- | ---------- | ------------ |
+| warm | Install toolchain, save cache, `cargo build --release` for `poria-desktop` | none       | macos-latest |
 
 Path filters (all must be in the workflow `on.push.paths`): `Cargo.lock`, `Cargo.toml`, `crates/**`, `src-tauri/**`, `.github/actions/setup-macos-tauri/**`, `.github/workflows/warm-rust-cache.yml`.
 
 ## Requirements
 
-| ID | Requirement | Priority | Acceptance |
-| --- | --- | --- | --- |
-| REQ-001 | Save Cargo cache | High | Composite `save-cache: true` |
-| REQ-002 | Do not install Tauri CLI | High | Composite `install-cli: false` |
-| REQ-003 | Release-build desktop crate only | High | `-p poria-desktop` for `aarch64-apple-darwin` |
-| REQ-004 | Read-only contents | High | `permissions.contents: read` |
-| REQ-005 | Single flight | Medium | Concurrency group `warm-rust-cache`, cancel in-progress |
+| ID      | Requirement                      | Priority | Acceptance                                              |
+| ------- | -------------------------------- | -------- | ------------------------------------------------------- |
+| REQ-001 | Save Cargo cache                 | High     | Composite `save-cache: true`                            |
+| REQ-002 | Do not install Tauri CLI         | High     | Composite `install-cli: false`                          |
+| REQ-003 | Release-build desktop crate only | High     | `-p poria-desktop` for `aarch64-apple-darwin`           |
+| REQ-004 | Read-only contents               | High     | `permissions.contents: read`                            |
+| REQ-005 | Single flight                    | Medium   | Concurrency group `warm-rust-cache`, cancel in-progress |
 
 ## Execution constraints
 
@@ -49,10 +49,10 @@ Path filters (all must be in the workflow `on.push.paths`): `Cargo.lock`, `Cargo
 
 ## Error handling
 
-| Error | Response | Recovery |
-| --- | --- | --- |
-| Compile failure | Fail the job; publish still can cold-compile | Fix crates on `main` |
-| Cache backend miss later | Publish jobs still succeed, slower | Re-run this workflow |
+| Error                    | Response                                     | Recovery             |
+| ------------------------ | -------------------------------------------- | -------------------- |
+| Compile failure          | Fail the job; publish still can cold-compile | Fix crates on `main` |
+| Cache backend miss later | Publish jobs still succeed, slower           | Re-run this workflow |
 
 ## Related
 
