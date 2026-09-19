@@ -19,6 +19,8 @@ export type Action =
       id: string;
       status: string;
       currentStage: string;
+      issueClass?: string | null;
+      issueDetail?: string | null;
     }
   | { type: "pipelineSelected"; id: string | null }
   | { type: "detailLoaded"; detail: PipelineDetail }

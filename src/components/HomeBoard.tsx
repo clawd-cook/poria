@@ -18,6 +18,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { isAuthExpiredMessage } from "../lib/auth";
 import { invokeErrorMessage } from "../lib/errors";
+import { pipelineHitlLane, type HitlLane } from "../lib/hitlLane";
+import { issueClassLabel } from "../lib/issueClass";
 import { demandTaskKey } from "../lib/taskKey";
 import { listDemands, resolveDemandLink, startLogin } from "../lib/tauri";
 import {
@@ -39,18 +41,29 @@ const { Text } = Typography;
 
 const DEFAULT_PAGE_SIZE = 20;
 
-const LOCAL_COLUMNS: { key: string; label: string; status: PipelineStatus }[] = [
-  { key: "running", label: "运行中", status: "running" },
-  { key: "blocked", label: "阻塞", status: "blocked" },
-  { key: "waiting_merge", label: "待合并", status: "waiting_merge" },
-  { key: "completed", label: "完成", status: "completed" },
-  { key: "failed", label: "失败", status: "failed" },
-  { key: "cancelled", label: "已取消", status: "cancelled" },
+const LOCAL_COLUMNS: {
+  key: string;
+  label: string;
+  match: (pipeline: PipelineSummary) => boolean;
+}[] = [
+  { key: "running", label: "运行中", match: (pipeline) => pipeline.status === "running" },
+  {
+    key: "confirm",
+    label: "待确认",
+    match: (pipeline) => pipelineHitlLane(pipeline) === "confirm",
+  },
+  { key: "review", label: "待验收", match: (pipeline) => pipelineHitlLane(pipeline) === "review" },
+  { key: "blocked", label: "阻塞", match: (pipeline) => pipelineHitlLane(pipeline) === "blocked" },
+  { key: "completed", label: "完成", match: (pipeline) => pipeline.status === "completed" },
+  { key: "failed", label: "失败", match: (pipeline) => pipeline.status === "failed" },
+  { key: "cancelled", label: "已取消", match: (pipeline) => pipeline.status === "cancelled" },
 ];
 
 type BoardCard = {
   currentStage: string | null;
   demand: DemandListItem;
+  hitlLane: HitlLane | null;
+  issueClass: string | null;
   key: string;
   pipelineId: string | null;
   status: PipelineStatus | "unstarted";
@@ -134,6 +147,8 @@ function pipelineToCard(pipeline: PipelineSummary): BoardCard {
   return {
     currentStage: pipeline.current_stage,
     demand: pipelineToDemand(pipeline),
+    hitlLane: pipelineHitlLane(pipeline),
+    issueClass: pipeline.issue_class,
     key: demandTaskKey(pipeline.demand_code, pipeline.demand_id),
     pipelineId: pipeline.id,
     status: pipeline.status,
@@ -294,6 +309,8 @@ export function HomeBoard() {
     .map((item) => ({
       currentStage: null,
       demand: item,
+      hitlLane: null,
+      issueClass: null,
       key: demandTaskKey(item.demand_code, item.id),
       pipelineId: null,
       status: "unstarted" as const,
@@ -483,9 +500,7 @@ export function HomeBoard() {
         </BoardColumn>
 
         {LOCAL_COLUMNS.map((column) => {
-          const items = filteredPipelines
-            .filter((pipeline) => pipeline.status === column.status)
-            .map(pipelineToCard);
+          const items = filteredPipelines.filter(column.match).map(pipelineToCard);
           return (
             <BoardColumn count={items.length} key={column.key} label={column.label} token={token}>
               {items.map((card) => (
@@ -571,6 +586,9 @@ function KanbanCard({
         )}
       </Flex>
       <Flex align="center" gap={token.marginSM} style={{ marginTop: token.marginSM }} wrap="wrap">
+        {card.hitlLane === "confirm" || card.hitlLane === "review" ? (
+          <Tag style={{ margin: 0 }}>{issueClassLabel(card.issueClass)}</Tag>
+        ) : null}
         {stage ? <Tag style={{ margin: 0 }}>{stage}</Tag> : null}
         <Text type="secondary">
           {card.demand.demand_code || `id:${card.demand.id}`}

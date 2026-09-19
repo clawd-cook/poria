@@ -59,6 +59,8 @@ pub struct PipelineSummary {
     pub current_stage: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub issue_class: Option<String>,
+    pub issue_detail: Option<String>,
 }
 
 /// Frontend-facing stage detail.
@@ -120,6 +122,8 @@ fn pipeline_to_summary(p: &Pipeline) -> PipelineSummary {
         .trim_matches('"')
         .to_string();
 
+    let (issue_class, issue_detail) = summary_hitl_issue(p);
+
     PipelineSummary {
         id: p.id.clone(),
         demand_id: p.demand_id,
@@ -129,7 +133,25 @@ fn pipeline_to_summary(p: &Pipeline) -> PipelineSummary {
         current_stage,
         created_at: p.created_at.to_rfc3339(),
         updated_at: p.updated_at.to_rfc3339(),
+        issue_class,
+        issue_detail,
     }
+}
+
+fn summary_hitl_issue(pipeline: &Pipeline) -> (Option<String>, Option<String>) {
+    if pipeline.status == PipelineStatus::WaitingMerge {
+        return (
+            Some("waiting_merge".into()),
+            Some("MR 待审查人确认后合入（不会自动点合并）".into()),
+        );
+    }
+    let issue = blocked_stage_index(pipeline)
+        .and_then(|idx| pipeline.stages.get(idx))
+        .and_then(|stage| stage.issue.as_ref());
+    (
+        issue.map(|item| item.class.clone()),
+        issue.map(|item| item.message.clone()),
+    )
 }
 
 /// Convert a core Stage to a StageDetail for the detail view.
@@ -1146,12 +1168,15 @@ fn emit_pipeline_updated(app: &tauri::AppHandle, pipeline: &Pipeline) -> Result<
         .unwrap_or_default()
         .trim_matches('"')
         .to_string();
+    let (issue_class, issue_detail) = summary_hitl_issue(pipeline);
     app.emit(
         "pipeline:updated",
         serde_json::json!({
             "id": pipeline.id,
             "status": status,
             "currentStage": current_stage,
+            "issueClass": issue_class,
+            "issueDetail": issue_detail,
         }),
     )
     .map_err(|e| e.to_string())?;
@@ -3052,11 +3077,14 @@ pub async fn open_workspace(
 mod tests {
     use super::{
         blocked_issue_class, dedupe_latest_by_task_key, load_prd_review_status,
-        merge_init_workspace_output, persist_trd_scope, require_prd_and_backend_trd_urls,
-        submit_reuse_decision, SubmitReuse,
+        merge_init_workspace_output, persist_trd_scope, pipeline_to_summary,
+        require_prd_and_backend_trd_urls, submit_reuse_decision, SubmitReuse,
     };
     use chrono::Utc;
-    use poria_core::types::{Pipeline, PipelineConfig, PipelineStatus, RepoConfig};
+    use poria_core::types::{
+        Pipeline, PipelineConfig, PipelineStatus, RepoConfig, Stage, StageEnum, StageIssue,
+        StageStatus, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+    };
 
     fn test_pipeline(id: &str, code: &str, demand_id: i64, status: PipelineStatus) -> Pipeline {
         let now = Utc::now();
@@ -3304,5 +3332,58 @@ mod tests {
         let answered = load_prd_review_status(&dir);
         assert!(answered.p0_done);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn blocked_stage(pipeline_id: &str, class: &str, message: &str) -> Stage {
+        Stage {
+            id: None,
+            pipeline_id: pipeline_id.into(),
+            name: StageEnum::Design,
+            status: StageStatus::Blocked,
+            skill_id: None,
+            retry_count: 0,
+            max_retries: 3,
+            input: None,
+            output: None,
+            gate_results: None,
+            issue: Some(StageIssue {
+                class: class.into(),
+                message: message.into(),
+                retryable: false,
+            }),
+            rollback: None,
+            agent_session_id: None,
+            started_at: None,
+            completed_at: None,
+        }
+    }
+
+    #[test]
+    fn pipeline_summary_exposes_blocked_issue_for_hitl_lanes() {
+        let mut pipeline = test_pipeline("pl-hitl", "REQ-HITL", 7, PipelineStatus::Blocked);
+        pipeline.stages = vec![blocked_stage(
+            "pl-hitl",
+            REQUIREMENT_AMBIGUOUS_ISSUE_CLASS,
+            "P0 unanswered: Q1",
+        )];
+        let summary = pipeline_to_summary(&pipeline);
+        assert_eq!(summary.status, "blocked");
+        assert_eq!(
+            summary.issue_class.as_deref(),
+            Some(REQUIREMENT_AMBIGUOUS_ISSUE_CLASS)
+        );
+        assert_eq!(summary.issue_detail.as_deref(), Some("P0 unanswered: Q1"));
+    }
+
+    #[test]
+    fn pipeline_summary_waiting_merge_uses_waiting_merge_class() {
+        let pipeline = test_pipeline("pl-mr", "REQ-MR", 8, PipelineStatus::WaitingMerge);
+        let summary = pipeline_to_summary(&pipeline);
+        assert_eq!(summary.status, "waiting_merge");
+        assert_eq!(summary.issue_class.as_deref(), Some("waiting_merge"));
+        assert!(summary
+            .issue_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("不会自动点合并")));
     }
 }

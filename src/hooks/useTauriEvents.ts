@@ -15,7 +15,13 @@ export function useTauriEvents() {
           .then((pipelines) => dispatch({ type: "hydrate", pipelines }))
           .catch(() => {});
       }),
-      listen<{ id: string; status: string; currentStage: string }>("pipeline:updated", (e) => {
+      listen<{
+        id: string;
+        status: string;
+        currentStage: string;
+        issueClass?: string | null;
+        issueDetail?: string | null;
+      }>("pipeline:updated", (e) => {
         dispatch({ type: "pipelineUpdated", ...e.payload });
       }),
       listen<PipelineEvent>("stage:progress", (e) => {
