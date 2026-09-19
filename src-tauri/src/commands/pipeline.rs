@@ -21,14 +21,15 @@ use poria_core::contracts::{Skill, SkillContext};
 use poria_core::pipeline::{
     blocked_stage_index, create_pipeline_id, escalate_after, evaluate_gates, jme_notify_target,
     parse_prd_review, parse_trd_scope, read_human_loop_state, rfc3339_elapsed,
-    stamp_human_loop_notified, try_consume_human_reply, write_human_loop_state, GatePhase,
+    stamp_human_loop_notified, try_consume_human_reply, write_human_loop_state,
     PipelineEvent as CorePipelineEvent, StageResult, DEFAULT_GATES,
 };
 use poria_core::types::{
-    BackendContext, IssueClass, Pipeline, PipelineConfig, PipelineStatus, RepoConfig, SkillInput,
-    Stage, StageEnum, StageIssue, StageStatus, AUTH_EXPIRED_ISSUE_CLASS, AUTH_EXPIRED_USER_MESSAGE,
-    OUT_OF_SCOPE_ISSUE_CLASS, REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, SECURITY_VIOLATION_ISSUE_CLASS,
-    STAGE_ORDER, TRD_UNCONFIRMED_ISSUE_CLASS, TRD_UNCONFIRMED_USER_MESSAGE,
+    BackendContext, GateEvaluation, GatePhase, IssueClass, Pipeline, PipelineConfig,
+    PipelineStatus, RepoConfig, SkillInput, Stage, StageEnum, StageIssue, StageStatus,
+    AUTH_EXPIRED_ISSUE_CLASS, AUTH_EXPIRED_USER_MESSAGE, OUT_OF_SCOPE_ISSUE_CLASS,
+    REQUIREMENT_AMBIGUOUS_ISSUE_CLASS, SECURITY_VIOLATION_ISSUE_CLASS, STAGE_ORDER,
+    TRD_UNCONFIRMED_ISSUE_CLASS, TRD_UNCONFIRMED_USER_MESSAGE,
 };
 use poria_infrastructure::auth::{
     assert_path_under_projects_root, assert_path_under_repos_root,
@@ -41,7 +42,7 @@ use poria_infrastructure::store::{
 };
 use poria_resources::WorktreeResource;
 use poria_skills::{
-    prepare_pipeline_workspace, CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill,
+    prepare_pipeline_workspace, CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, HumanLoop,
     HumanLoopCoordinator, InitSkill, ReviewPrdSkill,
 };
 
@@ -2014,7 +2015,7 @@ fn pipeline_gate_rules(pipeline: &Pipeline) -> Vec<poria_core::types::GateRule> 
     }
 }
 
-fn ui_from_gate_evaluation(eval: &poria_core::pipeline::GateEvaluation) -> serde_json::Value {
+fn ui_from_gate_evaluation(eval: &GateEvaluation) -> serde_json::Value {
     serde_json::Value::Array(
         eval.details
             .iter()
@@ -2030,7 +2031,7 @@ fn ui_from_gate_evaluation(eval: &poria_core::pipeline::GateEvaluation) -> serde
     )
 }
 
-fn blocking_gate_message(eval: &poria_core::pipeline::GateEvaluation) -> String {
+fn blocking_gate_message(eval: &GateEvaluation) -> String {
     eval.blocking_failures
         .iter()
         .map(|detail| format!("{}: {}", detail.rule_id, detail.message))
@@ -2827,7 +2828,7 @@ async fn run_deploy_stage(
     extra.insert("base_branch".into(), serde_json::Value::String(base_branch));
     extra.insert(
         "gitlab_project_path".into(),
-        serde_json::Value::String(gitlab_project_path),
+        serde_json::Value::String(gitlab_project_path.clone()),
     );
 
     let ctx = SkillContext {
