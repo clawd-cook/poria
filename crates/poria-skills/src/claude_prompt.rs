@@ -37,6 +37,9 @@ pub fn build_claude_skill_prompt(
     let mut prompt = format!(
         "使用 {skill_dir} skill。需求号 {demand_code}。工作区根 `{workspace_path}`。前端目录 `{frontend_dir}`。后端只读目录 `{backend_dir}`。按 SKILL.md 非交互完成，不要提问。"
     );
+    if skill_dir == SKILL_CODE_REVIEW {
+        prompt.push_str(" 你是独立评审者，不要沿用 gen-code 会话，不要改业务代码。");
+    }
     let url = backend_trd_url.trim();
     if !url.is_empty() {
         prompt.push_str(&format!(" 后端 TRD `{url}`。"));
@@ -161,6 +164,31 @@ mod tests {
     }
 
     #[test]
+    fn code_review_prompt_marks_independent_reviewer() {
+        let prompt = build_claude_skill_prompt(
+            SKILL_CODE_REVIEW,
+            "R1",
+            "/tmp/.poria/workspaces/p1",
+            "/tmp/.poria/workspaces/p1/fe",
+            "/tmp/.poria/workspaces/p1/be",
+            "",
+            "master",
+        );
+        assert!(prompt.contains("独立评审者"));
+        assert!(prompt.contains("gen-code"));
+        let gen_code = build_claude_skill_prompt(
+            SKILL_GEN_CODE,
+            "R1",
+            "/tmp/.poria/workspaces/p1",
+            "/tmp/.poria/workspaces/p1/fe",
+            "/tmp/.poria/workspaces/p1/be",
+            "",
+            "master",
+        );
+        assert!(!gen_code.contains("独立评审者"));
+    }
+
+    #[test]
     fn bundled_skill_dir_name_maps_claude_stages_only() {
         assert_eq!(
             bundled_skill_dir_name("skill:review-prd"),
@@ -200,6 +228,9 @@ mod tests {
             assert!(body.contains("非交互"));
             assert!(!body.contains("请 review TASK.md，确认后"));
             assert!(!body.contains("停下，说"));
+            if name == SKILL_CODE_REVIEW {
+                assert!(body.contains("独立评审者"));
+            }
         }
     }
 }

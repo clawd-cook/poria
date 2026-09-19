@@ -44,6 +44,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] Dev exit OutputGuard: Design `trd_scope` / TRD `## 允许修改范围`; Block out-of-scope files or blocked deps — no CR
 - [ ] Dev local verify after OutputGuard: package.json / Settings commands in the frontend worktree; `LocalVerifyError` retries then HITL; no CR
 - [ ] CI / coverage / security gates: EasyCI/Coding pipeline + report files / npm audit; missing data is fail, never agent self-score
+- [ ] Independent CR reviewer: new Claude `-p` session + reviewer system prompt; P0/P1 posted as Coding MR notes after Deploy
 - [ ] Exception routing: `ISSUE_POLICIES` retry / CR regress once / HITL shows issue class, not a generic fail
 - [ ] HITL: Blocked → JME notify + desktop card; first reply wins; escalate_at then degrade to manual
 - [ ] Xingyun writeback on WaitingMerge/Completed/Failed/Cancelled; quality-gate defect; unmerged close MR / merged revert MR (no auto-merge)
