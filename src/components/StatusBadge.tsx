@@ -1,22 +1,24 @@
-import { Tag } from "antd";
+import type { PipelineStatus } from "@/lib/types";
 
-import type { PipelineStatus } from "../lib/types";
+import { Badge } from "./ui/badge";
 
-const STATUS_CONFIG: Record<PipelineStatus, { color: string; label: string }> = {
-  created: { color: "default", label: "未开始" },
-  running: { color: "processing", label: "运行中" },
-  waiting_merge: { color: "warning", label: "待合并" },
-  blocked: { color: "error", label: "已阻塞" },
-  completed: { color: "success", label: "已完成" },
-  failed: { color: "error", label: "已失败" },
-  cancelled: { color: "default", label: "已取消" },
+const STATUS_CONFIG: Record<
+  PipelineStatus,
+  {
+    label: string;
+    variant: "default" | "destructive" | "outline" | "secondary" | "success" | "warning";
+  }
+> = {
+  blocked: { label: "已阻塞", variant: "destructive" },
+  cancelled: { label: "已取消", variant: "secondary" },
+  completed: { label: "已完成", variant: "success" },
+  created: { label: "未开始", variant: "secondary" },
+  failed: { label: "已失败", variant: "destructive" },
+  running: { label: "运行中", variant: "default" },
+  waiting_merge: { label: "待合并", variant: "warning" },
 };
 
 export function StatusBadge({ status }: { status: PipelineStatus }) {
   const config = STATUS_CONFIG[status];
-  return (
-    <Tag color={config.color} style={{ margin: 0 }}>
-      {config.label}
-    </Tag>
-  );
+  return <Badge variant={config.variant}>{config.label}</Badge>;
 }

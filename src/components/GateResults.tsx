@@ -1,20 +1,20 @@
-import { Table, Tag, theme } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { StageDetail, StageEnum } from "@/lib/types";
+import { STAGE_LABELS } from "@/lib/types";
 
-import type { StageDetail, StageEnum } from "../lib/types";
-import { STAGE_LABELS } from "../lib/types";
 import { PageSectionTitle } from "./PageFrame";
+import { Badge } from "./ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 interface GateResult {
+  actual: string;
   gate: string;
   passed: boolean;
-  actual: string;
   threshold: string;
 }
 
 interface GateRow extends GateResult {
-  stage: StageEnum;
   key: string;
+  stage: StageEnum;
 }
 
 function parseGateResults(raw: string | null): GateResult[] {
@@ -26,55 +26,47 @@ function parseGateResults(raw: string | null): GateResult[] {
   }
 }
 
-const columns: ColumnsType<GateRow> = [
-  {
-    title: "阶段",
-    dataIndex: "stage",
-    key: "stage",
-    render: (stage: StageEnum) => STAGE_LABELS[stage],
-  },
-  {
-    title: "门禁",
-    dataIndex: "gate",
-    key: "gate",
-  },
-  {
-    title: "结果",
-    dataIndex: "passed",
-    key: "passed",
-    render: (passed: boolean) => (
-      <Tag color={passed ? "success" : "error"}>{passed ? "通过" : "未通过"}</Tag>
-    ),
-  },
-  {
-    title: "实际值",
-    dataIndex: "actual",
-    key: "actual",
-  },
-  {
-    title: "阈值",
-    dataIndex: "threshold",
-    key: "threshold",
-  },
-];
-
 export function GateResults({ stages }: { stages: StageDetail[] }) {
-  const { token } = theme.useToken();
   const allGates: GateRow[] = stages.flatMap((s) => {
     const results = parseGateResults(s.gate_results);
     return results.map((g, i) => ({
       ...g,
-      stage: s.name,
       key: `${s.name}-${i}`,
+      stage: s.name,
     }));
   });
 
   if (allGates.length === 0) return null;
 
   return (
-    <div style={{ marginTop: token.margin }}>
+    <div className="mt-4">
       <PageSectionTitle>门禁结果</PageSectionTitle>
-      <Table<GateRow> columns={columns} dataSource={allGates} pagination={false} size="small" />
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>阶段</TableHead>
+            <TableHead>门禁</TableHead>
+            <TableHead>结果</TableHead>
+            <TableHead>实际值</TableHead>
+            <TableHead>阈值</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {allGates.map((row) => (
+            <TableRow key={row.key}>
+              <TableCell>{STAGE_LABELS[row.stage] ?? row.stage}</TableCell>
+              <TableCell>{row.gate}</TableCell>
+              <TableCell>
+                <Badge variant={row.passed ? "success" : "destructive"}>
+                  {row.passed ? "通过" : "未通过"}
+                </Badge>
+              </TableCell>
+              <TableCell>{row.actual}</TableCell>
+              <TableCell>{row.threshold}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

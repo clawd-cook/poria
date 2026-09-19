@@ -1,39 +1,32 @@
-import { NodeIndexOutlined } from "@ant-design/icons";
-import { Badge, Card, Col, Empty, Row, Tag, Typography, theme } from "antd";
+import { Plug } from "lucide-react";
 import { useEffect } from "react";
 
-import { listChannels } from "../lib/tauri";
-import type { ChannelInfo } from "../lib/types";
-import { useStore } from "../state/store";
-import { PageFrame } from "./PageFrame";
+import { listChannels } from "@/lib/tauri";
+import type { ChannelInfo } from "@/lib/types";
+import { useStore } from "@/state/store";
 
-const { Paragraph, Text } = Typography;
+import { EmptyState } from "./EmptyState";
+import { PageFrame } from "./PageFrame";
+import { Badge } from "./ui/badge";
+import { Card, CardContent } from "./ui/card";
 
 function ChannelCard({ channel }: { channel: ChannelInfo }) {
-  const { token } = theme.useToken();
   return (
-    <Card hoverable size="small">
-      <div
-        style={{
-          alignItems: "flex-start",
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: token.marginSM,
-        }}
-      >
-        <Text strong>
-          <NodeIndexOutlined style={{ color: token.colorSuccess, marginRight: token.marginXS }} />
-          {channel.name}
-        </Text>
-        <div style={{ alignItems: "center", display: "flex", gap: token.marginXS }}>
-          <Badge status="success" />
-          <Tag>v{channel.version}</Tag>
+    <Card>
+      <CardContent className="p-4">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <p className="flex items-center gap-2 font-semibold">
+            <Plug aria-hidden className="text-success size-4" />
+            {channel.name}
+          </p>
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="bg-success size-2 rounded-full" />
+            <Badge variant="secondary">v{channel.version}</Badge>
+          </div>
         </div>
-      </div>
-      <Paragraph type="secondary" style={{ marginBottom: token.marginXXS }}>
-        {channel.description || "暂无描述"}
-      </Paragraph>
-      <Text type="secondary">ID: {channel.id}</Text>
+        <p className="text-muted-foreground mb-1 text-sm">{channel.description || "暂无描述"}</p>
+        <p className="text-muted-foreground text-xs">ID: {channel.id}</p>
+      </CardContent>
     </Card>
   );
 }
@@ -43,22 +36,20 @@ export function ChannelsPage() {
 
   useEffect(() => {
     listChannels()
-      .then((channels) => dispatch({ type: "channelsLoaded", channels }))
+      .then((channels) => dispatch({ channels, type: "channelsLoaded" }))
       .catch(() => {});
   }, [dispatch]);
 
   return (
     <PageFrame description={`已注册 ${state.channels.length} 个渠道`} title="渠道">
       {state.channels.length === 0 ? (
-        <Empty description="暂无已注册的渠道" />
+        <EmptyState description="暂无已注册的渠道" />
       ) : (
-        <Row gutter={[16, 16]}>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {state.channels.map((channel) => (
-            <Col key={channel.id} md={12} xl={8} xs={24}>
-              <ChannelCard channel={channel} />
-            </Col>
+            <ChannelCard channel={channel} key={channel.id} />
           ))}
-        </Row>
+        </div>
       )}
     </PageFrame>
   );

@@ -1,29 +1,38 @@
-import { ReloadOutlined, SyncOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Flex, Input, Tag, Typography, theme } from "antd";
+import { RefreshCcw, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-import { invokeErrorMessage } from "../lib/errors";
-import { registerRepo, retryClone, syncRepo, updateRepoDefaultBranch } from "../lib/tauri";
-import type { CloneStatus, RegisteredRepo, RepoSyncStatus } from "../lib/types";
-import { useStore } from "../state/store";
+import { invokeErrorMessage } from "@/lib/errors";
+import { registerRepo, retryClone, syncRepo, updateRepoDefaultBranch } from "@/lib/tauri";
+import type { CloneStatus, RegisteredRepo, RepoSyncStatus } from "@/lib/types";
+import { useStore } from "@/state/store";
+
+import { EmptyState } from "./EmptyState";
 import { PageFrame } from "./PageFrame";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 
-const { Text } = Typography;
-
-const STATUS_CONFIG: Record<CloneStatus, { color: string; label: string }> = {
-  cloning: { color: "processing", label: "进行中" },
-  failed: { color: "error", label: "失败" },
-  ready: { color: "success", label: "成功" },
+const STATUS_CONFIG: Record<
+  CloneStatus,
+  { label: string; variant: "default" | "destructive" | "success" }
+> = {
+  cloning: { label: "进行中", variant: "default" },
+  failed: { label: "失败", variant: "destructive" },
+  ready: { label: "成功", variant: "success" },
 };
 
-const SYNC_CONFIG: Record<RepoSyncStatus, { color: string; label: string }> = {
-  failed: { color: "error", label: "同步失败" },
-  idle: { color: "default", label: "未同步" },
-  synced: { color: "success", label: "已同步" },
-  syncing: { color: "processing", label: "同步中" },
+const SYNC_CONFIG: Record<
+  RepoSyncStatus,
+  { label: string; variant: "destructive" | "secondary" | "success" | "default" }
+> = {
+  failed: { label: "同步失败", variant: "destructive" },
+  idle: { label: "未同步", variant: "secondary" },
+  synced: { label: "已同步", variant: "success" },
+  syncing: { label: "同步中", variant: "default" },
 };
 
-function groupReposByScope(repos: RegisteredRepo[]): { scope: string; repos: RegisteredRepo[] }[] {
+function groupReposByScope(repos: RegisteredRepo[]): { repos: RegisteredRepo[]; scope: string }[] {
   const grouped = new Map<string, RegisteredRepo[]>();
   for (const repo of repos) {
     const current = grouped.get(repo.scope);
@@ -49,10 +58,17 @@ function formatSyncTime(value: string | null): string {
   return new Date(parsed).toLocaleString();
 }
 
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success("已复制");
+  } catch {
+    toast.error("复制失败");
+  }
+}
+
 export function RepoListPage() {
   const { state } = useStore();
-  const { message } = App.useApp();
-  const { token } = theme.useToken();
   const [gitUrl, setGitUrl] = useState("");
   const [registering, setRegistering] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
@@ -71,9 +87,9 @@ export function RepoListPage() {
     try {
       await registerRepo(trimmed);
       setGitUrl("");
-      message.success("已开始克隆");
+      toast.success("已开始克隆");
     } catch (error) {
-      message.error(invokeErrorMessage(error, "登记失败"));
+      toast.error(invokeErrorMessage(error, "登记失败"));
     } finally {
       setRegistering(false);
     }
@@ -83,9 +99,9 @@ export function RepoListPage() {
     setRetryingId(id);
     try {
       await retryClone(id);
-      message.success("已重新克隆");
+      toast.success("已重新克隆");
     } catch (error) {
-      message.error(invokeErrorMessage(error, "重试失败"));
+      toast.error(invokeErrorMessage(error, "重试失败"));
     } finally {
       setRetryingId(null);
     }
@@ -96,12 +112,12 @@ export function RepoListPage() {
     try {
       const updated = await syncRepo(id);
       if (updated.sync_status === "failed") {
-        message.error(updated.sync_error || "同步失败");
+        toast.error(updated.sync_error || "同步失败");
       } else {
-        message.success("已同步主分支");
+        toast.success("已同步主分支");
       }
     } catch (error) {
-      message.error(invokeErrorMessage(error, "同步失败"));
+      toast.error(invokeErrorMessage(error, "同步失败"));
     } finally {
       setSyncingId(null);
     }
@@ -110,19 +126,19 @@ export function RepoListPage() {
   async function handleSaveBranch(id: string, defaultBranch: string) {
     const trimmed = defaultBranch.trim();
     if (!trimmed) {
-      message.error("主分支不能为空");
+      toast.error("主分支不能为空");
       return;
     }
     setSavingBranchId(id);
     try {
       const updated = await updateRepoDefaultBranch(id, trimmed);
       if (updated.sync_status === "failed") {
-        message.warning(updated.sync_error || "主分支已保存，但同步失败");
+        toast.warning(updated.sync_error || "主分支已保存，但同步失败");
       } else {
-        message.success("已保存主分支并同步");
+        toast.success("已保存主分支并同步");
       }
     } catch (error) {
-      message.error(invokeErrorMessage(error, "保存主分支失败"));
+      toast.error(invokeErrorMessage(error, "保存主分支失败"));
     } finally {
       setSavingBranchId(null);
     }
@@ -130,38 +146,33 @@ export function RepoListPage() {
 
   return (
     <PageFrame description="登记 git URL 后会克隆到 ~/.poria/repos/scope/name" title="仓库">
-      <Flex gap={token.marginXS} style={{ marginBottom: token.marginLG, maxWidth: 720 }}>
+      <form
+        className="mb-6 flex max-w-3xl gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleRegister();
+        }}
+      >
         <Input
+          aria-label="Git URL"
           disabled={registering}
           onChange={(event) => setGitUrl(event.target.value)}
-          onPressEnter={() => {
-            void handleRegister();
-          }}
           placeholder="git@coding.jd.com:ls/ls-entrance.git"
           value={gitUrl}
         />
-        <Button
-          disabled={!gitUrl.trim()}
-          loading={registering}
-          onClick={() => {
-            void handleRegister();
-          }}
-          type="primary"
-        >
+        <Button disabled={!gitUrl.trim()} loading={registering} type="submit">
           登记
         </Button>
-      </Flex>
+      </form>
 
       {groups.length === 0 ? (
-        <Empty description="暂无已登记仓库" />
+        <EmptyState description="暂无已登记仓库" />
       ) : (
-        <Flex gap={token.margin} vertical>
+        <div className="grid gap-4">
           {groups.map((group) => (
             <div key={group.scope}>
-              <Text strong style={{ display: "block", marginBottom: token.marginXS }}>
-                {group.scope}
-              </Text>
-              <Flex gap={token.marginXS} vertical>
+              <p className="mb-2 font-semibold">{group.scope}</p>
+              <div className="grid gap-2">
                 {group.repos.map((repo) => (
                   <RepoRow
                     key={repo.id}
@@ -180,10 +191,10 @@ export function RepoListPage() {
                     syncing={syncingId === repo.id || repo.sync_status === "syncing"}
                   />
                 ))}
-              </Flex>
+              </div>
             </div>
           ))}
-        </Flex>
+        </div>
       )}
     </PageFrame>
   );
@@ -212,86 +223,73 @@ function RepoRow({
   useEffect(() => {
     setBranch(repo.default_branch || "master");
   }, [repo.default_branch]);
-  const { token } = theme.useToken();
   const branchDirty = branch.trim() !== (repo.default_branch || "master");
   const ready = repo.clone_status === "ready";
 
   return (
-    <Flex
-      align="flex-start"
-      gap={token.marginSM}
-      justify="space-between"
-      style={{
-        background: token.colorBgContainer,
-        border: `1px solid ${token.colorBorderSecondary}`,
-        borderRadius: token.borderRadius,
-        padding: token.paddingMD,
-      }}
-    >
-      <Flex gap={token.marginXXS} style={{ minWidth: 0 }} vertical>
-        <Flex align="center" gap={token.marginXS} wrap>
-          <Text ellipsis strong>
-            {repo.name}
-          </Text>
-          <Tag color={status.color} style={{ margin: 0 }}>
-            {status.label}
-          </Tag>
-          <Tag color={sync.color} style={{ margin: 0 }}>
-            {sync.label}
-          </Tag>
-        </Flex>
-        <Text copyable ellipsis type="secondary">
+    <div className="border-border bg-card flex items-start justify-between gap-3 rounded-lg border p-4">
+      <div className="grid min-w-0 gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate font-semibold">{repo.name}</p>
+          <Badge variant={status.variant}>{status.label}</Badge>
+          <Badge variant={sync.variant}>{sync.label}</Badge>
+        </div>
+        <button
+          className="text-muted-foreground hover:text-foreground cursor-pointer truncate text-left text-sm"
+          onClick={() => void copyText(repo.git_url)}
+          type="button"
+        >
           {repo.git_url}
-        </Text>
-        <Text ellipsis type="secondary">
-          {repo.local_path}
-        </Text>
-        <Text type="secondary">最近同步：{formatSyncTime(repo.last_synced_at)}</Text>
-        <Flex align="center" gap={token.marginXS}>
-          <Text style={{ flex: "0 0 auto" }}>主分支</Text>
+        </button>
+        <p className="text-muted-foreground truncate text-sm">{repo.local_path}</p>
+        <p className="text-muted-foreground text-sm">
+          最近同步：{formatSyncTime(repo.last_synced_at)}
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm">主分支</span>
           <Input
             aria-label="主分支"
+            className="max-w-44"
             disabled={!ready || savingBranch || syncing}
             onChange={(event) => setBranch(event.target.value)}
-            onPressEnter={() => {
-              if (ready && branchDirty) {
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && ready && branchDirty) {
                 onSaveBranch(branch);
               }
             }}
-            size="small"
-            style={{ maxWidth: 180 }}
             value={branch}
           />
           <Button
             disabled={!ready || !branchDirty || !branch.trim()}
             loading={savingBranch}
-            onClick={() => {
-              onSaveBranch(branch);
-            }}
-            size="small"
+            onClick={() => onSaveBranch(branch)}
+            size="sm"
+            variant="outline"
           >
             保存
           </Button>
-        </Flex>
+        </div>
         {repo.clone_status === "failed" && repo.error ? (
-          <Text type="danger">{repo.error}</Text>
+          <p className="text-destructive text-sm">{repo.error}</p>
         ) : null}
         {repo.sync_status === "failed" && repo.sync_error ? (
-          <Text type="danger">{repo.sync_error}</Text>
+          <p className="text-destructive text-sm">{repo.sync_error}</p>
         ) : null}
-      </Flex>
-      <Flex gap={token.marginXS}>
+      </div>
+      <div className="flex gap-2">
         {ready ? (
-          <Button icon={<SyncOutlined />} loading={syncing} onClick={onSync} size="small">
+          <Button loading={syncing} onClick={onSync} size="sm" variant="outline">
+            <RefreshCcw aria-hidden />
             同步
           </Button>
         ) : null}
         {repo.clone_status === "failed" ? (
-          <Button icon={<ReloadOutlined />} loading={retrying} onClick={onRetry} size="small">
+          <Button loading={retrying} onClick={onRetry} size="sm" variant="outline">
+            <RotateCcw aria-hidden />
             重试
           </Button>
         ) : null}
-      </Flex>
-    </Flex>
+      </div>
+    </div>
   );
 }

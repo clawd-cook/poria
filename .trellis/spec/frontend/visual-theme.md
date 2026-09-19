@@ -1,46 +1,50 @@
-# Visual Theme (Ant Design + Swiss / Minimal)
+# Visual Theme (Tailwind + shadcn, restaurant-warm)
 
-> Light theme for the Poria desktop shell. Captured 2026-09-18.
+> Light theme for the Poria desktop shell. Captured 2026-09-19 from ui-ux-pro-max (`design-system/poria/MASTER.md`).
 
 ## 1. Scope / Trigger
 
-Use this spec when changing `ConfigProvider` theme, `src/theme.ts`, `PageFrame`, sider chrome, or page-level padding/title. Do **not** invent a second palette, load web fonts, or restyle Vite `:1420` as proof — verify in the Poria window.
+Use this spec when changing `src/styles.css` tokens, `PageFrame`, sider chrome, shadcn primitives, or page-level padding/title. Do **not** load Google Fonts from a CDN, reintroduce Ant Design, or restyle Vite `:1420` as proof — verify in the Poria window.
 
 ## 2. Signatures
 
-- `src/theme.ts` → `poriaTheme: ThemeConfig` passed to `ConfigProvider` in `src/App.tsx`
+- Tokens live in `src/styles.css` `:root` + `@theme inline`; Tailwind utilities map to them (`bg-primary`, `text-muted-foreground`)
 - `src/styles.css` hides all scrollbars (`scrollbar-width: none` / `::-webkit-scrollbar { display: none }`); overflow still scrolls
-- Seeds: `colorPrimary` `#1677FF`, `colorBgLayout` `#F5F5F5`, `colorBgContainer` `#FFFFFF`, `borderRadius` `4`, `fontSize` `14`, `fontWeightStrong` `600`
-- Font stack: OS UI fonts including `Helvetica Neue` (no Google Fonts)
-- Motion: `motionDurationFast/Mid/Slow` = `0.1s` / `0.2s` / `0.3s`
-- Shadows: `boxShadow*` tokens are `none`; hierarchy is border + layout background
-- Menu selected: `itemSelectedBg` `#E6F4FF`
-- Pages wrap content in `PageFrame` (`h1` at heading-3 size). Nested sections use `PageSectionTitle` (`h2` at heading-5 size).
+- Seeds: primary `#DC2626` (CTAs only), accent `#A16207`, background `#FAFAF8`, sidebar `#EBE8E3`, foreground `#1C1917`, card `#FFFFFF`, border `#E7E3DC`, radius `0.5rem`
+- Fonts (self-hosted `@fontsource`): headings Playfair Display SC (`font-serif` / `.font-display`); body Karla (`font-sans`)
+- Motion: 150–300ms color/opacity; honor `prefers-reduced-motion`
+- Hierarchy: hairline `border-border` on cream layout; cards are white plates
+- Nav selected: `bg-primary/10 text-primary` (not a solid red fill)
+- Pages wrap content in `PageFrame` (`h1` serif). Nested sections use `PageSectionTitle` (`h2`)
+- Primitives: `src/components/ui/*` (Button, Card, Dialog, Sheet, Input, Select, Tabs, Alert, Badge, Table)
+- Icons: Lucide outline, `size-4` in controls; decorative icons `aria-hidden`
+- Toasts: `sonner` (`toast.success` / `toast.error` / `toast.warning` / `toast.info`)
 
 ## 3. Contracts
 
 | Surface | Owns |
 | --- | --- |
-| Theme tokens | Single primary. Status uses `success` / `warning` / `error` / `info`. Preset hues only on Tag/chart. |
-| Layout | `bg-layout` around `bg-container`. Sider is container + 1px `colorBorderSecondary`. |
-| PageFrame | Title + optional description/extra; padding `token.paddingLG`. |
-| Cards / repo rows | Hairline border, no drop shadow. Clickable cards keep `hoverable`. |
+| Theme tokens | Semantic CSS variables. Status uses `success` / `warning` / `destructive` / `primary`. No second brand palette. |
+| Layout | `bg-background` canvas. Sider is `bg-sidebar`, not `bg-card`. Cards stay white. |
+| PageFrame | Title + optional description/extra; padding `p-6`. |
+| Cards / repo rows | Hairline border, no drop shadow. Clickable cards use `hover:border-primary`. |
 | Scrollbars | Hidden everywhere; never draw a gutter or thumb. 看板 lane: vertical wheel pans horizontally unless the hovered column can still scroll vertically; empty chrome can be dragged. |
-| Icons | `@ant-design/icons`. Color from tokens (`colorPrimary`, `colorSuccess`), never raw hex. |
+| Icons | `lucide-react`. Color from tokens (`text-primary`, `text-success`), never raw hex. |
 
 ## 4. Validation & Error Matrix
 
 | Condition | What you see |
 | --- | --- |
-| Hard-coded `#1677ff` / `#52c41a` / `#303030` | Breaks theme and light/dark later — use `theme.useToken()` |
-| Two `type="primary"` buttons on one decision | Demote extras to default |
+| Hard-coded `#1677ff` / Ant Design `theme.useToken()` | Breaks the restaurant-warm system — use Tailwind tokens |
+| Two primary buttons on one decision | Demote extras to `variant="outline"` |
 | `prefers-reduced-motion: reduce` | Transitions collapse via `src/styles.css` |
+| Icon-only control without name | Add `aria-label` (or visible text) |
 
 ## 5. Good / Base / Bad Cases
 
-- **Good**: Sider wordmark is tracked uppercase; content sits on `#F5F5F5`; cards are bordered white; selected nav is `#E6F4FF`.
-- **Base**: Ant Design v6 default algorithm, `zh_CN`, light only.
-- **Bad**: Teal/orange brand overlay; Inter from Google Fonts; card shadows; magic padding like `11px`.
+- **Good**: Sider is warm stone `#EBE8E3`, not white; content sits on light canvas `#FAFAF8`; cards are white; selected nav is a light terracotta wash, not a red slab.
+- **Base**: Tailwind v4 + shadcn New York, light only, zh-CN copy.
+- **Bad**: Ant Design ConfigProvider; Inter/Helvetica-only chrome; Swiss `#1677FF`; Google Fonts CDN; emoji as icons.
 
 ## 6. Tests Required
 
@@ -52,19 +56,17 @@ Use this spec when changing `ConfigProvider` theme, `src/theme.ts`, `PageFrame`,
 #### Wrong
 
 ```text
-ConfigProvider with no theme
-Skill icon color="#1677ff"
-Repo row border #303030
-Page Title level={4} + padding 24 copied per page
-Visible scrollbar / hover-to-show bar
+import { Button } from "antd"
+theme.useToken()
+icon style={{ color: "#1677ff" }}
+Page Title with inline padding 24 copied per page
 ```
 
 #### Correct
 
 ```text
-ConfigProvider theme={poriaTheme}
-icon style={{ color: token.colorPrimary }}
-border: token.colorBorderSecondary
+import { Button } from "@/components/ui/button"
+className="text-primary"
 <PageFrame title="技能">…</PageFrame>
 `src/styles.css` hides scrollbars globally
 ```

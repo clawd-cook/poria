@@ -1,9 +1,11 @@
-import { Card, Flex, Statistic, Table, theme } from "antd";
 import { useEffect, useState } from "react";
 
-import { getPipelineStats } from "../lib/tauri";
-import { STAGE_LABELS, type ObservabilitySummary, type StageEnum } from "../lib/types";
+import { getPipelineStats } from "@/lib/tauri";
+import { STAGE_LABELS, type ObservabilitySummary, type StageEnum } from "@/lib/types";
+
 import { PageSectionTitle } from "./PageFrame";
+import { Card, CardContent } from "./ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 function formatPercent(value: number | null | undefined): string {
   if (value == null) {
@@ -33,7 +35,6 @@ function formatUsd(value: number): string {
 }
 
 export function PipelineStatsPanel({ compact = false }: { compact?: boolean }) {
-  const { token } = theme.useToken();
   const [summary, setSummary] = useState<ObservabilitySummary | null>(null);
 
   useEffect(() => {
@@ -56,77 +57,78 @@ export function PipelineStatsPanel({ compact = false }: { compact?: boolean }) {
 
   if (!summary || summary.pipeline_total === 0) {
     return compact ? null : (
-      <Card size="small">
-        <PageSectionTitle>本机流水线汇总</PageSectionTitle>
-        暂无本地流水线数据。
+      <Card>
+        <CardContent className="p-4">
+          <PageSectionTitle>本机流水线汇总</PageSectionTitle>
+          暂无本地流水线数据。
+        </CardContent>
       </Card>
     );
   }
 
   const stats = (
-    <Flex gap={token.marginLG} wrap="wrap">
-      <Statistic title="流水线" value={summary.pipeline_total} />
-      <Statistic title="成功率" value={formatPercent(summary.success_rate)} />
-      <Statistic title="人工介入" value={formatPercent(summary.hitl_rate)} />
-      <Statistic title="费用" value={formatUsd(summary.cost_usd_total)} />
-    </Flex>
+    <div className="flex flex-wrap gap-6">
+      <Stat label="流水线" value={String(summary.pipeline_total)} />
+      <Stat label="成功率" value={formatPercent(summary.success_rate)} />
+      <Stat label="人工介入" value={formatPercent(summary.hitl_rate)} />
+      <Stat label="费用" value={formatUsd(summary.cost_usd_total)} />
+    </div>
   );
 
   if (compact) {
     return (
-      <Card size="small" styles={{ body: { padding: token.paddingSM } }}>
-        {stats}
+      <Card>
+        <CardContent className="p-3">{stats}</CardContent>
       </Card>
     );
   }
 
   return (
-    <Card size="small">
-      <PageSectionTitle>本机流水线汇总</PageSectionTitle>
-      {stats}
-      <Table
-        columns={[
-          {
-            dataIndex: "stage",
-            key: "stage",
-            render: (stage: string) => STAGE_LABELS[stage as StageEnum] ?? stage,
-            title: "阶段",
-          },
-          { dataIndex: "completed", key: "completed", title: "完成" },
-          { dataIndex: "failed", key: "failed", title: "失败" },
-          { dataIndex: "blocked", key: "blocked", title: "阻断" },
-          {
-            dataIndex: "success_rate",
-            key: "success_rate",
-            render: (value: number | null) => formatPercent(value),
-            title: "成功率",
-          },
-          {
-            dataIndex: "duration_p50_ms",
-            key: "duration_p50_ms",
-            render: (value: number | null) => formatDuration(value),
-            title: "耗时 p50",
-          },
-          {
-            dataIndex: "duration_p95_ms",
-            key: "duration_p95_ms",
-            render: (value: number | null) => formatDuration(value),
-            title: "耗时 p95",
-          },
-          {
-            dataIndex: "cost_usd",
-            key: "cost_usd",
-            render: (value: number) => formatUsd(value),
-            title: "费用",
-          },
-        ]}
-        dataSource={summary.stages}
-        pagination={false}
-        rowKey="stage"
-        size="small"
-        style={{ marginTop: token.marginMD }}
-      />
+    <Card>
+      <CardContent className="p-4">
+        <PageSectionTitle>本机流水线汇总</PageSectionTitle>
+        {stats}
+        <div className="mt-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>阶段</TableHead>
+                <TableHead>完成</TableHead>
+                <TableHead>失败</TableHead>
+                <TableHead>阻断</TableHead>
+                <TableHead>成功率</TableHead>
+                <TableHead>耗时 p50</TableHead>
+                <TableHead>耗时 p95</TableHead>
+                <TableHead>费用</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {summary.stages.map((row) => (
+                <TableRow key={row.stage}>
+                  <TableCell>{STAGE_LABELS[row.stage as StageEnum] ?? row.stage}</TableCell>
+                  <TableCell>{row.completed}</TableCell>
+                  <TableCell>{row.failed}</TableCell>
+                  <TableCell>{row.blocked}</TableCell>
+                  <TableCell>{formatPercent(row.success_rate)}</TableCell>
+                  <TableCell>{formatDuration(row.duration_p50_ms)}</TableCell>
+                  <TableCell>{formatDuration(row.duration_p95_ms)}</TableCell>
+                  <TableCell>{formatUsd(row.cost_usd)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
     </Card>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="font-serif text-xl font-bold">{value}</p>
+    </div>
   );
 }
 

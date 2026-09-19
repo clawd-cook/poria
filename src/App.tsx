@@ -1,18 +1,17 @@
-import { App as AntApp, ConfigProvider } from "antd";
-import zhCN from "antd/locale/zh_CN";
+import { Toaster } from "sonner";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { Shell } from "./components/Shell";
 import { StoreProvider } from "./state/store";
-import { poriaTheme } from "./theme";
 
 export default function App() {
   return (
-    <ConfigProvider locale={zhCN} theme={poriaTheme}>
-      <AntApp>
-        <StoreProvider>
-          <Shell />
-        </StoreProvider>
-      </AntApp>
-    </ConfigProvider>
+    <TooltipProvider>
+      <StoreProvider>
+        <Shell />
+        <Toaster position="top-right" richColors />
+      </StoreProvider>
+    </TooltipProvider>
   );
 }

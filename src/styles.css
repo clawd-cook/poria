@@ -1,31 +1,150 @@
-/* Reset — Ant Design tokens own color, type, and radius */
-html,
-body,
-#root {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  overflow: hidden;
-  color-scheme: light;
+@import "tailwindcss";
+@import "@fontsource/karla/latin-400.css";
+@import "@fontsource/karla/latin-500.css";
+@import "@fontsource/karla/latin-600.css";
+@import "@fontsource/karla/latin-700.css";
+@import "@fontsource/playfair-display-sc/latin-400.css";
+@import "@fontsource/playfair-display-sc/latin-700.css";
+
+@theme inline {
+  --font-sans: "Karla", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display SC", ui-serif, Georgia, serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-button,
-[role="button"],
-a,
-.ant-btn,
-.ant-menu-item {
-  cursor: pointer;
+:root {
+  --background: #fafaf8;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --primary: #dc2626;
+  --primary-foreground: #ffffff;
+  --secondary: #ebe8e3;
+  --secondary-foreground: #1c1917;
+  --muted: #f3f1ed;
+  --muted-foreground: #57534e;
+  --accent: #a16207;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --border: #e7e3dc;
+  --input: #e7e3dc;
+  --ring: #dc2626;
+  --sidebar: #ebe8e3;
+  --success: #15803d;
+  --warning: #b45309;
+  --radius: 0.5rem;
 }
 
-* {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans text-base leading-normal antialiased;
+  }
+
+  h1,
+  h2,
+  .font-display {
+    font-family: var(--font-serif);
+  }
+
+  button,
+  [role="button"],
+  a {
+    cursor: pointer;
+  }
+
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    height: 0;
+    width: 0;
+  }
 }
 
-*::-webkit-scrollbar {
-  display: none;
-  height: 0;
-  width: 0;
+.markdown-body {
+  @apply text-foreground max-w-none text-sm leading-relaxed;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  @apply mt-4 mb-2 font-serif font-bold tracking-tight;
+}
+
+.markdown-body h1 {
+  @apply text-2xl;
+}
+
+.markdown-body h2 {
+  @apply text-xl;
+}
+
+.markdown-body h3 {
+  @apply text-lg;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol {
+  @apply mb-3;
+}
+
+.markdown-body a {
+  @apply text-primary underline-offset-2 hover:underline;
+}
+
+.markdown-body code {
+  @apply bg-muted rounded px-1 py-0.5 font-mono text-[0.85em];
+}
+
+.markdown-body pre {
+  @apply bg-muted mb-3 overflow-x-auto rounded-md p-3;
+}
+
+.markdown-body pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-body blockquote {
+  @apply border-accent text-muted-foreground mb-3 border-l-2 pl-3;
 }
 
 @media (prefers-reduced-motion: reduce) {

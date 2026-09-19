@@ -1,82 +1,65 @@
 import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ExclamationCircleOutlined,
-  ForwardOutlined,
-  LoadingOutlined,
-  MinusCircleOutlined,
-  PlayCircleOutlined,
-} from "@ant-design/icons";
-import { App, Button, Card, Space, Steps, Typography } from "antd";
-import { useState } from "react";
+  CheckCircle2,
+  Circle,
+  CircleAlert,
+  CircleMinus,
+  CircleX,
+  LoaderCircle,
+  Play,
+  SkipForward,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 
-import { invokeErrorMessage } from "../lib/errors";
-import { executeStage, skipStage } from "../lib/tauri";
-import type { StageDetail, StageStatus } from "../lib/types";
-import { STAGE_ORDER, stageLabel } from "../lib/types";
-import { useStore } from "../state/store";
+import { invokeErrorMessage } from "@/lib/errors";
+import { executeStage, skipStage } from "@/lib/tauri";
+import type { StageDetail, StageStatus } from "@/lib/types";
+import { STAGE_ORDER, stageLabel } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { useStore } from "@/state/store";
+
 import { StreamOutput } from "./StreamOutput";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
 
-const { Text } = Typography;
-
-type StepsStatus = "finish" | "process" | "wait" | "error";
-
-function mapStatus(status: StageStatus): StepsStatus {
+function stageIcon(status: StageStatus): ReactNode {
   switch (status) {
     case "completed":
-      return "finish";
+      return <CheckCircle2 aria-hidden className="text-success size-4" />;
     case "running":
-      return "process";
+      return <LoaderCircle aria-hidden className="text-primary size-4 animate-spin" />;
     case "failed":
-      return "error";
+      return <CircleX aria-hidden className="text-destructive size-4" />;
     case "blocked":
-      return "error";
+      return <CircleAlert aria-hidden className="text-warning size-4" />;
     case "skipped":
-      return "finish";
+      return <CircleMinus aria-hidden className="text-muted-foreground size-4" />;
     default:
-      return "wait";
-  }
-}
-
-function stageIcon(status: StageStatus) {
-  switch (status) {
-    case "completed":
-      return <CheckCircleOutlined />;
-    case "running":
-      return <LoadingOutlined spin />;
-    case "failed":
-      return <CloseCircleOutlined />;
-    case "blocked":
-      return <ExclamationCircleOutlined />;
-    case "skipped":
-      return <MinusCircleOutlined />;
-    default:
-      return undefined;
+      return <Circle aria-hidden className="text-muted-foreground size-4" />;
   }
 }
 
 export function StageProgress({
-  stages,
   pipelineId,
+  stages,
 }: {
-  stages?: StageDetail[];
   pipelineId?: string | null;
+  stages?: StageDetail[];
 }) {
   const { state } = useStore();
-  const { message } = App.useApp();
   const [executing, setExecuting] = useState(false);
   const orderedStages: StageDetail[] =
     stages && stages.length > 0
       ? stages
       : STAGE_ORDER.map((name) => ({
-          name,
-          status: "pending" as const,
-          retry_count: 0,
-          output_summary: null,
+          completed_at: null,
           gate_results: null,
           issue: null,
+          name,
+          output_summary: null,
+          retry_count: 0,
           started_at: null,
-          completed_at: null,
+          status: "pending" as const,
         }));
 
   const firstActionableIdx = orderedStages.findIndex(
@@ -94,76 +77,81 @@ export function StageProgress({
     try {
       await executeStage(pid);
     } catch (err) {
-      message.error(invokeErrorMessage(err, "阶段执行失败"));
+      toast.error(invokeErrorMessage(err, "阶段执行失败"));
     } finally {
       setExecuting(false);
     }
   }
 
-  const currentIdx = orderedStages.findIndex(
-    (s) => s.status === "running" || s.status === "pending" || s.status === "failed",
-  );
-
-  const items = orderedStages.map((stage, i) => ({
-    title: stageLabel(stage.name),
-    status: mapStatus(stage.status) as StepsStatus,
-    icon: stageIcon(stage.status),
-    description:
-      stage.status === "pending" || stage.status === "failed" ? (
-        i === firstActionableIdx && pid && !hasRunning ? (
-          <Space size={4} style={{ marginTop: 4 }}>
-            <Button
-              disabled={executing}
-              icon={<PlayCircleOutlined />}
-              loading={executing}
-              onClick={() => void handleExecute()}
-              size="small"
-              type="primary"
-            >
-              {stage.status === "failed" ? "重试" : "执行"}
-            </Button>
-            {stage.status === "pending" ? (
-              <Button
-                icon={<ForwardOutlined />}
-                onClick={() => {
-                  void skipStage(pid, stage.name).catch((err) => {
-                    message.error(invokeErrorMessage(err, "跳过阶段失败"));
-                  });
-                }}
-                size="small"
-              >
-                跳过
-              </Button>
-            ) : null}
-          </Space>
-        ) : undefined
-      ) : undefined,
-  }));
-
   return (
     <div>
-      <Steps
-        current={currentIdx >= 0 ? currentIdx : orderedStages.length}
-        size="small"
-        items={items}
-        style={{ padding: "16px 0" }}
-      />
-      {runningStage && pid && (
-        <Card size="small" style={{ marginTop: 8 }}>
-          {runningStage.name === "init" ? (
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              正在从 JoySpace 导出 PRD / 后端 TRD…
-            </Text>
-          ) : (
-            <>
-              <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
-                {stageLabel(runningStage.name)} - Claude 输出
-              </Text>
-              <StreamOutput pipelineId={pid} />
-            </>
-          )}
+      <ol className="flex flex-wrap gap-3 py-4">
+        {orderedStages.map((stage, i) => {
+          const actionable =
+            (stage.status === "pending" || stage.status === "failed") &&
+            i === firstActionableIdx &&
+            pid &&
+            !hasRunning;
+          return (
+            <li className="flex min-w-36 flex-1 flex-col gap-2" key={stage.name}>
+              <div className="flex items-center gap-2">
+                {stageIcon(stage.status)}
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    stage.status === "running" ? "text-primary" : "text-foreground",
+                  )}
+                >
+                  {stageLabel(stage.name)}
+                </span>
+              </div>
+              {actionable ? (
+                <div className="flex gap-1">
+                  <Button
+                    disabled={executing}
+                    loading={executing}
+                    onClick={() => void handleExecute()}
+                    size="sm"
+                  >
+                    <Play aria-hidden />
+                    {stage.status === "failed" ? "重试" : "执行"}
+                  </Button>
+                  {stage.status === "pending" ? (
+                    <Button
+                      onClick={() => {
+                        void skipStage(pid, stage.name).catch((err) => {
+                          toast.error(invokeErrorMessage(err, "跳过阶段失败"));
+                        });
+                      }}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <SkipForward aria-hidden />
+                      跳过
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+      {runningStage && pid ? (
+        <Card className="mt-2">
+          <CardContent className="p-4">
+            {runningStage.name === "init" ? (
+              <p className="text-muted-foreground text-xs">正在从 JoySpace 导出 PRD / 后端 TRD…</p>
+            ) : (
+              <>
+                <p className="text-muted-foreground mb-1 text-xs">
+                  {stageLabel(runningStage.name)} - Claude 输出
+                </p>
+                <StreamOutput pipelineId={pid} />
+              </>
+            )}
+          </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }

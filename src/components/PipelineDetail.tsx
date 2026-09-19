@@ -1,87 +1,96 @@
-import { LinkOutlined, WarningOutlined } from "@ant-design/icons";
-import {
-  Card,
-  Descriptions,
-  Divider,
-  Empty,
-  Flex,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-  theme,
-} from "antd";
+import { ExternalLink, TriangleAlert } from "lucide-react";
 
-import { usePipeline } from "../hooks/usePipeline";
-import { useStore } from "../state/store";
+import { usePipeline } from "@/hooks/usePipeline";
+import { useStore } from "@/state/store";
+
+import { EmptyState } from "./EmptyState";
 import { EventStream } from "./EventStream";
 import { GateResults } from "./GateResults";
 import { HumanLoopCard } from "./HumanLoopCard";
 import { PageFrame, PageSectionTitle } from "./PageFrame";
+import { Spinner } from "./Spinner";
 import { StageProgress } from "./StageProgress";
 import { StatusBadge } from "./StatusBadge";
-
-const { Link, Text } = Typography;
+import { Badge } from "./ui/badge";
+import { Card, CardContent } from "./ui/card";
+import { Separator } from "./ui/separator";
 
 export function PipelineDetail() {
   const { state } = useStore();
-  const { token } = theme.useToken();
   const { detail, events, humanRequest } = usePipeline();
 
   if (!state.selectedPipelineId) {
     return (
-      <Flex align="center" justify="center" style={{ height: "100%" }}>
-        <Empty description="选择一个 Pipeline 查看详情" />
-      </Flex>
+      <div className="flex h-full items-center justify-center">
+        <EmptyState description="选择一个 Pipeline 查看详情" />
+      </div>
     );
   }
 
   if (!detail) {
     return (
-      <Flex align="center" justify="center" style={{ height: "100%" }}>
-        <Spin tip="加载中..." />
-      </Flex>
+      <div className="flex h-full items-center justify-center">
+        <Spinner label="加载中..." />
+      </div>
     );
   }
 
   return (
     <PageFrame
       extra={
-        <Flex align="center" gap={token.marginSM}>
+        <div className="flex items-center gap-2">
           <StatusBadge status={detail.status} />
           {detail.has_regressed ? (
-            <Tag color="warning" icon={<WarningOutlined />}>
+            <Badge variant="warning">
+              <TriangleAlert aria-hidden className="mr-1 size-3" />
               已回退
-            </Tag>
+            </Badge>
           ) : null}
-        </Flex>
+        </div>
       }
       title={detail.demand_name}
     >
-      <Descriptions column={4} size="small" style={{ marginBottom: token.margin }}>
-        <Descriptions.Item label="需求">{detail.demand_code}</Descriptions.Item>
-        <Descriptions.Item label="操作人">{detail.operator || "-"}</Descriptions.Item>
-        <Descriptions.Item label="行云链接">
-          <Link href={detail.raw_link} rel="noreferrer" target="_blank">
-            <Space size={token.marginXXS}>
-              <LinkOutlined />
+      <dl className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4">
+        <div>
+          <dt className="text-muted-foreground">需求</dt>
+          <dd>{detail.demand_code}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">操作人</dt>
+          <dd>{detail.operator || "-"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">行云链接</dt>
+          <dd>
+            <a
+              className="text-primary inline-flex items-center gap-1 hover:underline"
+              href={detail.raw_link}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink aria-hidden className="size-3.5" />
               查看
-            </Space>
-          </Link>
-        </Descriptions.Item>
-        <Descriptions.Item label="耗时">
-          {detail.duration_ms != null ? `${Math.round(detail.duration_ms / 1000)} s` : "-"}
-        </Descriptions.Item>
-        <Descriptions.Item label="费用">
-          {detail.cost_usd != null ? `$${detail.cost_usd.toFixed(2)}` : "-"}
-        </Descriptions.Item>
-        <Descriptions.Item label="人工介入">{detail.hitl_count}</Descriptions.Item>
-      </Descriptions>
+            </a>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">耗时</dt>
+          <dd>{detail.duration_ms != null ? `${Math.round(detail.duration_ms / 1000)} s` : "-"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">费用</dt>
+          <dd>{detail.cost_usd != null ? `$${detail.cost_usd.toFixed(2)}` : "-"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">人工介入</dt>
+          <dd>{detail.hitl_count}</dd>
+        </div>
+      </dl>
 
       <StageProgress pipelineId={detail.id} stages={detail.stages} />
 
       {humanRequest && humanRequest.pipelineId === detail.id ? (
-        <div style={{ margin: `${token.margin}px 0` }}>
+        <div className="my-4">
           <HumanLoopCard
             demandCode={detail.demand_code}
             demandId={detail.demand_id}
@@ -92,7 +101,7 @@ export function PipelineDetail() {
           />
         </div>
       ) : detail.status === "waiting_merge" ? (
-        <div style={{ margin: `${token.margin}px 0` }}>
+        <div className="my-4">
           <HumanLoopCard
             demandCode={detail.demand_code}
             demandId={detail.demand_id}
@@ -104,50 +113,36 @@ export function PipelineDetail() {
         </div>
       ) : null}
 
-      <Divider />
+      <Separator className="my-6" />
 
       <PageSectionTitle>事件流</PageSectionTitle>
       <EventStream events={events} />
 
       <GateResults stages={detail.stages} />
 
-      <Divider />
+      <Separator className="my-6" />
       <PageSectionTitle>阶段详情</PageSectionTitle>
-      <Space direction="vertical" size={token.marginXS} style={{ width: "100%" }}>
+      <div className="grid gap-2">
         {detail.stages.map((stage) => (
-          <Card key={stage.name} size="small">
-            <Flex align="center" justify="space-between">
-              <Text strong>{stage.name}</Text>
-              <Space size={token.marginSM}>
-                {stage.retry_count > 0 ? (
-                  <Text type="secondary">重试 {stage.retry_count} 次</Text>
-                ) : null}
-                {stage.started_at ? (
-                  <Text type="secondary">
-                    {new Date(stage.started_at).toLocaleTimeString("zh-CN")}
-                  </Text>
-                ) : null}
-              </Space>
-            </Flex>
-            {stage.output_summary ? (
-              <Text
-                type="secondary"
-                style={{ display: "block", fontSize: token.fontSizeSM, marginTop: token.marginXXS }}
-              >
-                {stage.output_summary}
-              </Text>
-            ) : null}
-            {stage.issue ? (
-              <Text
-                type="danger"
-                style={{ display: "block", fontSize: token.fontSizeSM, marginTop: token.marginXXS }}
-              >
-                {stage.issue}
-              </Text>
-            ) : null}
+          <Card key={stage.name}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold">{stage.name}</p>
+                <div className="text-muted-foreground flex gap-3 text-xs">
+                  {stage.retry_count > 0 ? <span>重试 {stage.retry_count} 次</span> : null}
+                  {stage.started_at ? (
+                    <span>{new Date(stage.started_at).toLocaleTimeString("zh-CN")}</span>
+                  ) : null}
+                </div>
+              </div>
+              {stage.output_summary ? (
+                <p className="text-muted-foreground mt-1 text-xs">{stage.output_summary}</p>
+              ) : null}
+              {stage.issue ? <p className="text-destructive mt-1 text-xs">{stage.issue}</p> : null}
+            </CardContent>
           </Card>
         ))}
-      </Space>
+      </div>
     </PageFrame>
   );
 }

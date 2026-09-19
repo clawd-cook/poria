@@ -61,7 +61,7 @@ cargo test --workspace
 
 IPC 封装只放在 `src/lib/tauri.ts`。前端参数用 camelCase（`pipelineId`、`backendTrdUrl`），对应 Rust snake_case。`#[tauri::command]` 只写在 `src-tauri/src/commands/`，并在 `src-tauri/src/lib.rs` 的 `generate_handler!` 里注册。
 
-前端没有 ESLint / Tailwind。布局用 Ant Design 6 + `src/theme.ts` 的 `poriaTheme`，样式以 token 和 `src/styles.css` 重置为准。格式化用 `pnpm exec oxfmt .`。主题约定见 [.trellis/spec/frontend/visual-theme.md](.trellis/spec/frontend/visual-theme.md)。
+前端没有 ESLint。布局用 Tailwind CSS 4 + shadcn/ui（`src/components/ui/`），视觉 token 在 `src/styles.css`。格式化用 `pnpm exec oxfmt .`。主题约定见 [.trellis/spec/frontend/visual-theme.md](.trellis/spec/frontend/visual-theme.md)。
 
 改某一层之前读 `.trellis/spec/` 对应索引。跨层字段（需求筛选、`backendTrdUrl`、前后端 TRD）先看 [.trellis/spec/guides/cross-layer-thinking-guide.md](.trellis/spec/guides/cross-layer-thinking-guide.md)。Init 工作区 / worktree / Skill 软链见 [.trellis/spec/frontend/pipeline-workspace.md](.trellis/spec/frontend/pipeline-workspace.md)。Claude 路径见 [.trellis/spec/frontend/claude-cli.md](.trellis/spec/frontend/claude-cli.md)。
 
@@ -77,11 +77,11 @@ IPC 封装只放在 `src/lib/tauri.ts`。前端参数用 camelCase（`pipelineId
 
 合并前本地至少：
 
-| 改动范围 | 检查 |
-|---|---|
-| `src/` | `pnpm typecheck`；IPC / UI 在桌面窗口验证；`pnpm exec oxfmt .` |
+| 改动范围                  | 检查                                                                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`                    | `pnpm typecheck`；IPC / UI 在桌面窗口验证；`pnpm exec oxfmt .`                                                                                           |
 | `crates/` 或 `src-tauri/` | `cargo test -p <crate>` 或 `cargo test --workspace`；涉及 Init / worktree 时再跑 `cargo test -p poria-core -- stage_order`、`cargo test -p poria-skills` |
-| 格式 | 前端 oxfmt；Rust 用默认 `rustfmt`（仓库没有 `rustfmt.toml`） |
+| 格式                      | 前端 oxfmt；Rust 用默认 `rustfmt`（仓库没有 `rustfmt.toml`）                                                                                             |
 
 不要提交：
 
@@ -107,9 +107,9 @@ EasyCI `createChange` 只能 `SELECT` 远端已存在的分支：**先 push 再�
 
 打 tag 触发 GitHub Actions。当前 `pre-publish.yml` / `publish.yml` 只编 **`aarch64-apple-darwin`** DMG。有 `APPLE_*` secret 则公证签名，没有则 ad-hoc 签名并继续出包。行为规格见 [spec/README.md](spec/README.md)。
 
-| Tag | Workflow |
-|---|---|
+| Tag             | Workflow                                           |
+| --------------- | -------------------------------------------------- |
 | `vX.Y.Z-beta.N` | `.github/workflows/pre-publish.yml`（pre-release） |
-| `vX.Y.Z` | `.github/workflows/publish.yml`（latest） |
+| `vX.Y.Z`        | `.github/workflows/publish.yml`（latest）          |
 
 Workflow 以 **tag 所在提交** 为准。修 YAML 后需要新 tag，对旧 tag 点 Re-run 不会用到 `main` 上的新文件。CI 会在构建时把 tag 版本写入 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`。

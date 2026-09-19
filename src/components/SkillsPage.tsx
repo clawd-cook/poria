@@ -1,64 +1,41 @@
-import { ApiOutlined } from "@ant-design/icons";
-import { App, Card, Col, Drawer, Empty, Flex, Row, Spin, Typography, theme } from "antd";
+import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-import { invokeErrorMessage } from "../lib/errors";
-import { getSkill, listSkills } from "../lib/tauri";
-import type { SkillDetail, SkillInfo } from "../lib/types";
-import { useStore } from "../state/store";
+import { invokeErrorMessage } from "@/lib/errors";
+import { getSkill, listSkills } from "@/lib/tauri";
+import type { SkillDetail, SkillInfo } from "@/lib/types";
+import { useStore } from "@/state/store";
+
+import { EmptyState } from "./EmptyState";
+import { MarkdownView } from "./MarkdownView";
 import { PageFrame } from "./PageFrame";
-
-const { Paragraph, Text } = Typography;
+import { Spinner } from "./Spinner";
+import { Card, CardContent } from "./ui/card";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 
 function SkillCard({ onOpen, skill }: { onOpen: (skill: SkillInfo) => void; skill: SkillInfo }) {
-  const { token } = theme.useToken();
   return (
-    <Card hoverable onClick={() => onOpen(skill)} size="small">
-      <div
-        style={{
-          alignItems: "flex-start",
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: token.marginSM,
-        }}
-      >
-        <Text strong>
-          <ApiOutlined style={{ color: token.colorPrimary, marginRight: token.marginXS }} />
+    <Card
+      className="hover:border-primary cursor-pointer transition-colors duration-200"
+      onClick={() => onOpen(skill)}
+    >
+      <CardContent className="p-4">
+        <p className="mb-2 flex items-start gap-2 font-semibold">
+          <Sparkles aria-hidden className="text-primary mt-0.5 size-4" />
           {skill.name}
-        </Text>
-      </div>
-      <Paragraph type="secondary" style={{ marginBottom: token.marginXXS }}>
-        {skill.description || "暂无描述"}
-      </Paragraph>
-      <Text type="secondary">ID: {skill.id}</Text>
+        </p>
+        <p className="text-muted-foreground mb-1 text-sm">{skill.description || "暂无描述"}</p>
+        <p className="text-muted-foreground text-xs">ID: {skill.id}</p>
+      </CardContent>
     </Card>
   );
 }
 
 function SkillDetailDrawer({ onClose, skill }: { onClose: () => void; skill: SkillInfo | null }) {
-  const { message } = App.useApp();
-  const { token } = theme.useToken();
   const open = skill !== null;
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [Markdown, setMarkdown] = useState<
-    typeof import("@ant-design/x-markdown").XMarkdown | null
-  >(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    let cancelled = false;
-    void import("@ant-design/x-markdown").then((mod) => {
-      if (!cancelled) {
-        setMarkdown(() => mod.XMarkdown);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   useEffect(() => {
     if (!skill) {
@@ -76,7 +53,7 @@ function SkillDetailDrawer({ onClose, skill }: { onClose: () => void; skill: Ski
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          message.error(invokeErrorMessage(error, "无法读取技能详情"));
+          toast.error(invokeErrorMessage(error, "无法读取技能详情"));
         }
       })
       .finally(() => {
@@ -87,55 +64,46 @@ function SkillDetailDrawer({ onClose, skill }: { onClose: () => void; skill: Ski
     return () => {
       cancelled = true;
     };
-  }, [message, skill]);
+  }, [skill]);
 
   return (
-    <Drawer
-      destroyOnClose
-      getContainer={() => document.body}
-      onClose={onClose}
-      open={open}
-      size="large"
-      styles={{
-        body: { overflow: "auto" },
-        content: { overflow: "hidden" },
-        wrapper: { overflow: "hidden" },
+    <Sheet
+      onOpenChange={(next) => {
+        if (!next) {
+          onClose();
+        }
       }}
-      title={skill?.name ?? "技能"}
+      open={open}
     >
-      {loading ? (
-        <div style={{ padding: token.paddingXL, textAlign: "center" }}>
-          <Spin />
-        </div>
-      ) : detail ? (
-        <Flex gap={token.marginSM} vertical>
-          <Text type="secondary">{detail.id}</Text>
-          {detail.description ? (
-            <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              {detail.description}
-            </Paragraph>
-          ) : null}
-          {detail.markdown ? (
-            Markdown ? (
-              <div style={{ minWidth: 0 }}>
-                <Markdown content={detail.markdown} openLinksInNewTab />
-              </div>
-            ) : (
-              <Spin />
-            )
+      <SheetContent className="overflow-hidden">
+        <SheetHeader>
+          <SheetTitle>{skill?.name ?? "技能"}</SheetTitle>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {loading ? (
+            <Spinner />
+          ) : detail ? (
+            <div className="grid gap-3">
+              <p className="text-muted-foreground text-sm">{detail.id}</p>
+              {detail.description ? (
+                <p className="text-muted-foreground text-sm">{detail.description}</p>
+              ) : null}
+              {detail.markdown ? (
+                <MarkdownView content={detail.markdown} />
+              ) : (
+                <EmptyState description="该技能没有 SKILL.md" />
+              )}
+            </div>
           ) : (
-            <Empty description="该技能没有 SKILL.md" />
+            <EmptyState description="无法展示技能详情" />
           )}
-        </Flex>
-      ) : (
-        <Empty description="无法展示技能详情" />
-      )}
-    </Drawer>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
 export function SkillsPage() {
-  const { message } = App.useApp();
   const { dispatch, state } = useStore();
   const [viewing, setViewing] = useState<SkillInfo | null>(null);
 
@@ -144,18 +112,18 @@ export function SkillsPage() {
     listSkills()
       .then((skills) => {
         if (!cancelled) {
-          dispatch({ type: "skillsLoaded", skills });
+          dispatch({ skills, type: "skillsLoaded" });
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          message.error(invokeErrorMessage(error, "无法读取随包技能"));
+          toast.error(invokeErrorMessage(error, "无法读取随包技能"));
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [dispatch, message]);
+  }, [dispatch]);
 
   return (
     <PageFrame
@@ -163,15 +131,13 @@ export function SkillsPage() {
       title="技能"
     >
       {state.skills.length === 0 ? (
-        <Empty description="暂无随包 Claude skill" />
+        <EmptyState description="暂无随包 Claude skill" />
       ) : (
-        <Row gutter={[16, 16]}>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {state.skills.map((skill) => (
-            <Col key={skill.id} md={12} xl={8} xs={24}>
-              <SkillCard onOpen={setViewing} skill={skill} />
-            </Col>
+            <SkillCard key={skill.id} onOpen={setViewing} skill={skill} />
           ))}
-        </Row>
+        </div>
       )}
 
       <SkillDetailDrawer onClose={() => setViewing(null)} skill={viewing} />

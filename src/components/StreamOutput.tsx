@@ -1,11 +1,11 @@
-import { CheckCircleOutlined, FileTextOutlined, ToolOutlined } from "@ant-design/icons";
-import { Collapse, Spin, Typography } from "antd";
-import { useEffect, useRef } from "react";
+import { CheckCircle2, FileText, Wrench } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
-import type { StreamChunk } from "../lib/types";
-import { useStore } from "../state/store";
+import type { StreamChunk } from "@/lib/types";
+import { useStore } from "@/state/store";
 
-const { Text, Paragraph } = Typography;
+import { Spinner } from "./Spinner";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 
 export function StreamOutput({ pipelineId }: { pipelineId: string }) {
   const { state } = useStore();
@@ -17,20 +17,13 @@ export function StreamOutput({ pipelineId }: { pipelineId: string }) {
   }, [chunks.length]);
 
   if (chunks.length === 0) {
-    return (
-      <div style={{ padding: "16px 0", textAlign: "center" }}>
-        <Spin size="small" />
-        <Text type="secondary" style={{ marginLeft: 8 }}>
-          等待 Claude 输出...
-        </Text>
-      </div>
-    );
+    return <Spinner className="py-4" label="等待 Claude 输出..." />;
   }
 
   return (
-    <div style={{ maxHeight: 384, overflowY: "auto", fontFamily: "monospace", fontSize: 13 }}>
+    <div className="max-h-96 overflow-y-auto font-mono text-[13px]">
       {chunks.map((chunk, i) => (
-        <ChunkLine key={i} chunk={chunk} />
+        <ChunkLine chunk={chunk} key={i} />
       ))}
       <div ref={bottomRef} />
     </div>
@@ -38,65 +31,51 @@ export function StreamOutput({ pipelineId }: { pipelineId: string }) {
 }
 
 function ChunkLine({ chunk }: { chunk: StreamChunk }) {
+  const [open, setOpen] = useState<string>("");
+
   switch (chunk.type) {
     case "text":
-      return (
-        <Paragraph style={{ margin: "2px 0", whiteSpace: "pre-wrap" }}>{chunk.content}</Paragraph>
-      );
+      return <p className="my-0.5 whitespace-pre-wrap">{chunk.content}</p>;
     case "tool_use":
       return (
-        <Collapse
-          size="small"
-          items={[
-            {
-              key: "1",
-              label: (
-                <Text type="secondary">
-                  <ToolOutlined style={{ marginRight: 4 }} />
-                  {chunk.tool_name ?? "tool"}
-                </Text>
-              ),
-              children: (
-                <pre style={{ margin: 0, fontSize: 12, overflowX: "auto" }}>{chunk.content}</pre>
-              ),
-            },
-          ]}
-          style={{ marginBottom: 4 }}
-        />
+        <Accordion className="mb-1" onValueChange={setOpen} type="single" value={open} collapsible>
+          <AccordionItem value="tool">
+            <AccordionTrigger className="text-muted-foreground py-2">
+              <span className="flex items-center gap-1">
+                <Wrench aria-hidden className="size-3.5" />
+                {chunk.tool_name ?? "tool"}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <pre className="overflow-x-auto text-xs">{chunk.content}</pre>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       );
     case "tool_result":
       return (
-        <Collapse
-          size="small"
-          items={[
-            {
-              key: "1",
-              label: (
-                <Text type="success">
-                  <FileTextOutlined style={{ marginRight: 4 }} />
-                  Result
-                </Text>
-              ),
-              children: (
-                <pre style={{ margin: 0, fontSize: 12, overflowX: "auto" }}>{chunk.content}</pre>
-              ),
-            },
-          ]}
-          style={{ marginBottom: 4 }}
-        />
+        <Accordion className="mb-1" collapsible onValueChange={setOpen} type="single" value={open}>
+          <AccordionItem value="result">
+            <AccordionTrigger className="text-success py-2">
+              <span className="flex items-center gap-1">
+                <FileText aria-hidden className="size-3.5" />
+                Result
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <pre className="overflow-x-auto text-xs">{chunk.content}</pre>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       );
     case "result":
       return (
-        <Text type="success" strong style={{ display: "block", margin: "4px 0" }}>
-          <CheckCircleOutlined style={{ marginRight: 4 }} />
+        <p className="text-success my-1 flex items-center gap-1 font-semibold">
+          <CheckCircle2 aria-hidden className="size-3.5" />
           {chunk.content}
-        </Text>
+        </p>
       );
     default:
-      return (
-        <Text type="secondary" style={{ display: "block" }}>
-          {chunk.content}
-        </Text>
-      );
+      return <p className="text-muted-foreground">{chunk.content}</p>;
   }
 }

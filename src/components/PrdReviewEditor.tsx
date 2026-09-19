@@ -1,11 +1,16 @@
-import { Alert, App, Button, Flex, Input, Spin, Tabs, Typography, theme } from "antd";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-import { invokeErrorMessage } from "../lib/errors";
-import { readDemandProjectFile, writeDemandProjectFile } from "../lib/tauri";
-import type { PrdReviewStatus } from "../lib/types";
+import { invokeErrorMessage } from "@/lib/errors";
+import { readDemandProjectFile, writeDemandProjectFile } from "@/lib/tauri";
+import type { PrdReviewStatus } from "@/lib/types";
 
-const { Text } = Typography;
+import { MarkdownView } from "./MarkdownView";
+import { Spinner } from "./Spinner";
+import { Alert, AlertDescription } from "./ui/alert";
+import { Button } from "./ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Textarea } from "./ui/textarea";
 
 function unansweredHint(status: PrdReviewStatus | null): {
   p0: string | null;
@@ -38,29 +43,12 @@ export function PrdReviewEditor({
   demandId?: number;
   onSaved?: (status: PrdReviewStatus | null) => void;
 }) {
-  const { message } = App.useApp();
-  const { token } = theme.useToken();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [saved, setSaved] = useState("");
   const [status, setStatus] = useState<PrdReviewStatus | null>(null);
-  const [Markdown, setMarkdown] = useState<
-    typeof import("@ant-design/x-markdown").XMarkdown | null
-  >(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void import("@ant-design/x-markdown").then((mod) => {
-      if (!cancelled) {
-        setMarkdown(() => mod.XMarkdown);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!demandCode) {
@@ -113,57 +101,61 @@ export function PrdReviewEditor({
       setDraft(file.content);
       setStatus(file.review_status ?? null);
       setError(null);
-      message.success("已保存 PRD_REVIEW.md");
+      toast.success("已保存 PRD_REVIEW.md");
       onSaved?.(file.review_status ?? null);
     } catch (err) {
-      message.error(invokeErrorMessage(err, "保存失败"));
+      toast.error(invokeErrorMessage(err, "保存失败"));
     } finally {
       setSaving(false);
     }
   }
 
   if (loading) {
-    return (
-      <div style={{ padding: 48, textAlign: "center" }}>
-        <Spin />
-      </div>
-    );
+    return <Spinner />;
   }
 
   if (error && !draft) {
-    return <Text type="danger">{error}</Text>;
+    return <p className="text-destructive text-sm">{error}</p>;
   }
 
   return (
-    <Flex gap={token.marginSM} vertical>
-      {hint.p0 ? <Alert showIcon type="warning" message={hint.p0} /> : null}
-      {hint.warn ? <Alert showIcon type="info" message={hint.warn} /> : null}
-      {status?.p0_done ? <Alert showIcon type="success" message="P0 已填写，可以继续设计" /> : null}
-      <Tabs
-        items={[
-          {
-            children: (
-              <Input.TextArea
-                autoSize={{ maxRows: 28, minRows: 16 }}
-                onChange={(event) => setDraft(event.target.value)}
-                value={draft}
-              />
-            ),
-            key: "edit",
-            label: "填写答案",
-          },
-          {
-            children: Markdown ? <Markdown content={draft} openLinksInNewTab /> : <Spin />,
-            key: "preview",
-            label: "预览",
-          },
-        ]}
-      />
-      <Flex justify="flex-end">
-        <Button disabled={!dirty} loading={saving} onClick={() => void handleSave()} type="primary">
+    <div className="grid gap-3">
+      {hint.p0 ? (
+        <Alert variant="warning">
+          <AlertDescription>{hint.p0}</AlertDescription>
+        </Alert>
+      ) : null}
+      {hint.warn ? (
+        <Alert>
+          <AlertDescription>{hint.warn}</AlertDescription>
+        </Alert>
+      ) : null}
+      {status?.p0_done ? (
+        <Alert variant="success">
+          <AlertDescription>P0 已填写，可以继续设计</AlertDescription>
+        </Alert>
+      ) : null}
+      <Tabs defaultValue="edit">
+        <TabsList>
+          <TabsTrigger value="edit">填写答案</TabsTrigger>
+          <TabsTrigger value="preview">预览</TabsTrigger>
+        </TabsList>
+        <TabsContent value="edit">
+          <Textarea
+            className="min-h-80"
+            onChange={(event) => setDraft(event.target.value)}
+            value={draft}
+          />
+        </TabsContent>
+        <TabsContent value="preview">
+          <MarkdownView content={draft} />
+        </TabsContent>
+      </Tabs>
+      <div className="flex justify-end">
+        <Button disabled={!dirty} loading={saving} onClick={() => void handleSave()}>
           保存答案
         </Button>
-      </Flex>
-    </Flex>
+      </div>
+    </div>
   );
 }

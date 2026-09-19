@@ -1,17 +1,17 @@
 <div align="center">
   <img src="public/logo-transparent.png" alt="Poria" width="128" />
 
-  # Poria
+# Poria
 
-  *把行云需求变成已提交合并请求的 AI 交付桌面端。*
+_把行云需求变成已提交合并请求的 AI 交付桌面端。_
 
-  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-  [![Node](https://img.shields.io/badge/Node.js-24.20.0-3c873a.svg)](https://nodejs.org)
-  [![pnpm](https://img.shields.io/badge/pnpm-11.23.0-f69220.svg)](https://pnpm.io)
-  [![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB.svg)](https://tauri.app)
-  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/clawd-cook/poria)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/Node.js-24.20.0-3c873a.svg)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-11.23.0-f69220.svg)](https://pnpm.io)
+[![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB.svg)](https://tauri.app)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/clawd-cook/poria)
 
-  [功能](#功能) · [快速开始](#快速开始) · [使用](#使用) · [发布](#发布) · [故障排查](#故障排查) · [架构](ARCHITECTURE.md)
+[功能](#功能) · [快速开始](#快速开始) · [使用](#使用) · [发布](#发布) · [故障排查](#故障排查) · [架构](ARCHITECTURE.md)
 
 </div>
 
@@ -96,14 +96,14 @@ xattr -cr /Applications/Poria.app
 
 设置页可调门禁阈值与 Claude 路径：
 
-| 项 | 默认 | 说明 |
-|---|---|---|
-| CR 评分阈值 | `B+` | 代码审查最低通过等级 |
-| 测试覆盖率 | `80%` | 部署门禁覆盖率 |
-| 最大变更行数 | `500` | diff 规模告警 |
-| Agent 超时 | `1800000ms` | Claude 执行超时（30 分钟） |
-| 最大重试次数 | `3` | 单阶段重试上限 |
-| Claude 路径 | 空 | 留空则登录 shell `which claude`；填写必须是绝对路径 |
+| 项           | 默认        | 说明                                                |
+| ------------ | ----------- | --------------------------------------------------- |
+| CR 评分阈值  | `B+`        | 代码审查最低通过等级                                |
+| 测试覆盖率   | `80%`       | 部署门禁覆盖率                                      |
+| 最大变更行数 | `500`       | diff 规模告警                                       |
+| Agent 超时   | `1800000ms` | Claude 执行超时（30 分钟）                          |
+| 最大重试次数 | `3`         | 单阶段重试上限                                      |
+| Claude 路径  | 空          | 留空则登录 shell `which claude`；填写必须是绝对路径 |
 
 常用检查：
 
@@ -118,10 +118,10 @@ cargo test --workspace
 
 打 tag 触发 GitHub Actions。当前只编 **Apple Silicon**（`aarch64-apple-darwin`）DMG。有 `APPLE_*` secret 则公证签名，没有则 ad-hoc 签名并继续出包。工作流行为见 [spec/README.md](spec/README.md)。
 
-| 类型 | Tag | Workflow | 产物 |
-|---|---|---|---|
-| Beta | `vX.Y.Z-beta.N` | `pre-publish.yml` | GitHub pre-release |
-| 正式版 | `vX.Y.Z` | `publish.yml` | latest Release（非 pre-release） |
+| 类型   | Tag             | Workflow          | 产物                             |
+| ------ | --------------- | ----------------- | -------------------------------- |
+| Beta   | `vX.Y.Z-beta.N` | `pre-publish.yml` | GitHub pre-release               |
+| 正式版 | `vX.Y.Z`        | `publish.yml`     | latest Release（非 pre-release） |
 
 ```bash
 git tag v1.1.1-beta.1 && git push origin v1.1.1-beta.1
@@ -133,13 +133,13 @@ git tag v1.1.1 && git push origin v1.1.1
 
 ## 故障排查
 
-| 现象 | 处理 |
-|---|---|
-| 浏览器打开 `:1420` 登录 / 拉需求失败 | 这是 Vite，没有 Tauri `invoke`。用 `cargo tauri dev` 打开桌面窗口 |
-| `pnpm tauri` 报 `command not found` | 本仓库没有 `@tauri-apps/cli`。用 `cargo tauri` |
-| 看板报「请先登录」 | `~/.poria/auth.json` 里没有有效 SSO Cookie |
-| EasyCI `522721` / 找不到分支 | 远端还没有该分支。必须先 `git push` 再 SELECT 绑定 |
-| GraphQL `UnusedVariable` | EasyCI 不接受查询里未使用的变量，不要往 mutation 塞多余字段 |
-| `createChange` 失败 | `branchOperateType` 只能是 `SELECT`，且分支必须已在远端 |
-| Accessibility 找不到窗口 | 窗口标题是 `Poria`，不是端口号 |
-| Claude 阶段立刻失败 | 设置页刷新 Claude 状态；GUI 应用往往没有 Homebrew `PATH`，请填绝对路径或确认登录 shell 的 `which claude` |
+| 现象                                 | 处理                                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| 浏览器打开 `:1420` 登录 / 拉需求失败 | 这是 Vite，没有 Tauri `invoke`。用 `cargo tauri dev` 打开桌面窗口                                        |
+| `pnpm tauri` 报 `command not found`  | 本仓库没有 `@tauri-apps/cli`。用 `cargo tauri`                                                           |
+| 看板报「请先登录」                   | `~/.poria/auth.json` 里没有有效 SSO Cookie                                                               |
+| EasyCI `522721` / 找不到分支         | 远端还没有该分支。必须先 `git push` 再 SELECT 绑定                                                       |
+| GraphQL `UnusedVariable`             | EasyCI 不接受查询里未使用的变量，不要往 mutation 塞多余字段                                              |
+| `createChange` 失败                  | `branchOperateType` 只能是 `SELECT`，且分支必须已在远端                                                  |
+| Accessibility 找不到窗口             | 窗口标题是 `Poria`，不是端口号                                                                           |
+| Claude 阶段立刻失败                  | 设置页刷新 Claude 状态；GUI 应用往往没有 Homebrew `PATH`，请填绝对路径或确认登录 shell 的 `which claude` |

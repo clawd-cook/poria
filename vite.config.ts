@@ -1,12 +1,20 @@
+import { fileURLToPath, URL } from "node:url";
+
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   css: {
-    devSourcemap: true
+    devSourcemap: true,
   },
   clearScreen: false,
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   server: {
     port: 1420,
     strictPort: true,
@@ -18,6 +26,6 @@ export default defineConfig({
     sourcemap: true,
     chunkImportMap: true,
     license: true,
-    manifest: true
-  }
+    manifest: true,
+  },
 });

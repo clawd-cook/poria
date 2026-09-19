@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Poria is an AI-native delivery platform: a Tauri v2 macOS desktop app that turns a Xingyun demand into a Coding merge request. Frontend is React 19 + TypeScript + Vite + Ant Design 6 / Ant Design X. Backend is Rust, a Cargo workspace of six domain crates plus the Tauri shell (`poria-desktop`).
+Poria is an AI-native delivery platform: a Tauri v2 macOS desktop app that turns a Xingyun demand into a Coding merge request. Frontend is React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui. Backend is Rust, a Cargo workspace of six domain crates plus the Tauri shell (`poria-desktop`).
 
 This file is for coding agents. Human product docs live in `README.md`. Architecture overview lives in `ARCHITECTURE.md`. Contribution process lives in `CONTRIBUTING.md`.
 
@@ -11,12 +11,11 @@ Pinned frontend toolchain (also in `package.json` / CI `env`): Node.js **24.20.0
 ```
 poria/
 ├── src/                      # React frontend (TSX, hooks, state, components)
-│   ├── components/           # Ant Design pages and pipeline UI
+│   ├── components/           # Pages, pipeline UI, and `ui/` shadcn primitives
 │   ├── hooks/                # usePipeline, useTauriEvents
 │   ├── lib/                  # types + invoke wrappers (`tauri.ts`)
 │   ├── state/                # reducer store + actions
-│   ├── theme.ts              # poriaTheme (Swiss/Minimal tokens)
-│   └── styles.css            # reset, hide scrollbars, reduced-motion (not Tailwind)
+│   └── styles.css            # Tailwind v4 tokens, fonts, markdown, reduced-motion
 ├── src-tauri/                # Tauri v2 shell (crate name: poria-desktop)
 │   └── src/commands/         # IPC handlers (the only Tauri command layer)
 ├── crates/
@@ -235,8 +234,8 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 - Formatter: `pnpm exec oxfmt .` (`.oxfmtrc.json`: sort imports, sort object keys, sort Tailwind classes; ignores `.claude`, `.trellis`, `submodules`)
 - Strict TS: `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`; target ES2022; JSX `react-jsx` (no default React import)
 - ESM (`"type": "module"`)
-- UI: Ant Design 6 + `@ant-design/x*` + `@ant-design/icons`, locale `zh_CN`, light theme `poriaTheme` in `src/theme.ts` (Swiss/Minimal tokens, single primary `#1677FF`, no extra brand palette). Pages wrap in `PageFrame`. Use `theme.useToken()` instead of raw hex.
-- CSS: `src/styles.css` is a reset + `prefers-reduced-motion`. Layout is Ant Design props and inline token styles. **Do not add Tailwind** (it is not a dependency). The oxfmt `sortTailwindcss` flag is leftover config, not a license to introduce utility CSS.
+- UI: Tailwind CSS v4 + shadcn/ui (Radix primitives in `src/components/ui/`). Light theme only. Restaurant-warm tokens in `src/styles.css`: primary `#DC2626` for CTAs only, accent gold `#A16207`, canvas `#FAFAF8`, sidebar `#EBE8E3` (not white), cards `#FFFFFF`, foreground `#1C1917`. Do not wash the shell in red-50 or yellow cream. Headings: Playfair Display SC (`font-serif`); body: Karla (`font-sans`). Icons: `lucide-react`. Toasts: `sonner`. Markdown: `react-markdown` via `MarkdownView`. Pages wrap in `PageFrame`. Prefer semantic tokens (`bg-primary`, `text-muted-foreground`) over raw hex in components. Design source: `design-system/poria/MASTER.md`.
+- CSS: Tailwind utilities + `src/styles.css` tokens, hidden scrollbars, `prefers-reduced-motion`. Do not reintroduce Ant Design.
 - Global state: `src/state/store.tsx` reducer + `src/state/actions.ts`. Do not introduce a second store.
 - IPC: wrap `invoke` in `src/lib/tauri.ts`. Tauri v2 maps JS **camelCase** args to Rust snake_case (`pipelineId` → `pipeline_id`, `gitUrl` → `git_url`, `backendTrdUrl` → `backend_trd_url`).
 - Events (`listen` in `useTauriEvents` / `store.tsx`): `pipeline:list-changed`, `pipeline:created`, `pipeline:updated`, `stage:progress`, `sidecar:status`, `auth:status-changed`, `repo:updated`, plus stream chunks. Do not call `invoke`/`listen` from a browser tab on `:1420`.
@@ -259,7 +258,7 @@ No frontend test runner. After UI/IPC changes: `pnpm typecheck`, then exercise t
 | Hooks           | `src/hooks/`                                                                              |
 | Store           | `src/state/`                                                                              |
 | Types + IPC     | `src/lib/`                                                                                |
-| Theme           | `src/theme.ts`, `src/styles.css`                                                          |
+| Theme           | `src/styles.css`, `src/components/ui/`, `design-system/poria/MASTER.md`                   |
 | Tauri commands  | `src-tauri/src/commands/{auth,channels,config,demands,pipeline,projects,repos,skills}.rs` |
 | Capabilities    | `src-tauri/capabilities/default.json`                                                     |
 | Domain          | `crates/poria-core/`                                                                      |
@@ -311,12 +310,12 @@ Do not commit credentials, `workspace/db/`, or `~/.poria` contents.
 
 Behavior specs (source of truth for CI): [spec/README.md](spec/README.md).
 
-| Workflow                              | Trigger                              | Result                                      |
-| ------------------------------------- | ------------------------------------ | ------------------------------------------- |
-| `.github/workflows/pre-publish.yml`   | tag `vX.Y.Z-beta.N`                  | GitHub **pre-release** macOS DMG            |
-| `.github/workflows/publish.yml`       | tag `vX.Y.Z` (no `-beta`/`-rc`/`-alpha`) | **latest** GitHub Release                |
-| `.github/workflows/warm-rust-cache.yml` | push to `main` touching Rust       | Pre-warms aarch64 release cache             |
-| `.github/workflows/labeler.yml`       | PR / labels.yml on `main`            | Path labels; CODEOWNERS requests `@clawd-cook` |
+| Workflow                                | Trigger                                  | Result                                         |
+| --------------------------------------- | ---------------------------------------- | ---------------------------------------------- |
+| `.github/workflows/pre-publish.yml`     | tag `vX.Y.Z-beta.N`                      | GitHub **pre-release** macOS DMG               |
+| `.github/workflows/publish.yml`         | tag `vX.Y.Z` (no `-beta`/`-rc`/`-alpha`) | **latest** GitHub Release                      |
+| `.github/workflows/warm-rust-cache.yml` | push to `main` touching Rust             | Pre-warms aarch64 release cache                |
+| `.github/workflows/labeler.yml`         | PR / labels.yml on `main`                | Path labels; CODEOWNERS requests `@clawd-cook` |
 
 Publish jobs build **`aarch64-apple-darwin` only**. `APPLE_*` secrets are optional; missing certs must ad-hoc sign and still produce a DMG. Unsigned notes should mention `xattr -cr`. Local Intel builds are still `cargo tauri build --target x86_64-apple-darwin`.
 

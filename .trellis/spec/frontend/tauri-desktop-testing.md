@@ -63,13 +63,13 @@ macOS AX (osascript) after granting Accessibility to the calling app:
 
 | Control | AX role | AX name |
 | --- | --- | --- |
-| Board | `AXMenuItem` | `home 看板` |
+| Board | `AXButton` | `看板` |
 | Accepted-by-me | `AXCheckBox` | `由我受理` |
 | Keyword search | `AXTextField` | `搜索任务名称或编号` |
 | Link start | `AXTextField` | `粘贴行云需求链接` |
-| Repos | `AXMenuItem` | `folder 仓库列表` |
-| Settings | `AXMenuItem` | `setting 设置` |
-| Register | `AXButton` | `登 记` (antd inserts a space) |
+| Repos | `AXButton` | `仓库` |
+| Settings | `AXButton` | `设置` |
+| Register | `AXButton` | `登记` |
 | Git URL | `AXTextField` | often unnamed |
 | Clone status | `AXStaticText` | `进行中` / `成功` / `失败` |
 
@@ -173,7 +173,7 @@ Wizard last step fields (AX):
 | --- | --- | --- |
 | PRD URL | `AXTextField` | `JoySpace PRD` |
 | Backend TRD URL | `AXTextField` | `JoySpace 后端 TRD` |
-| Submit | `AXButton` | `创 建 流 水 线` (antd may insert spaces) |
+| Submit | `AXButton` | `创建并自动执行` |
 
 Rust persistence (snake_case in `pipelines.config` JSON):
 
@@ -395,6 +395,6 @@ CR writes `securityPass` from npm/pnpm/cargo audit JSON (high/critical or missin
 
 **Symptom**: `-1719` cannot get `menu 1 of group 1 of window 1`.
 
-**Cause**: WKWebView nests the antd Menu; the first group is not a native menu.
+**Cause**: WKWebView nests the sidebar; the first group is not a native menu.
 
-**Fix**: Iterate `entire contents of group 1 of window 1` and `click` the `AXMenuItem` whose name is `folder 仓库列表`.
+**Fix**: Iterate `entire contents of group 1 of window 1` and `click` the `AXButton` whose name is `仓库`.

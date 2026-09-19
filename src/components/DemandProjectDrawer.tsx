@@ -1,12 +1,15 @@
-import { Drawer, Empty, Flex, Menu, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 
-import { invokeErrorMessage } from "../lib/errors";
-import { listDemandProject, readDemandProjectFile } from "../lib/tauri";
-import type { DemandListItem, DemandProjectFile } from "../lib/types";
-import { PrdReviewEditor } from "./PrdReviewEditor";
+import { invokeErrorMessage } from "@/lib/errors";
+import { listDemandProject, readDemandProjectFile } from "@/lib/tauri";
+import type { DemandListItem, DemandProjectFile } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-const { Text, Title } = Typography;
+import { EmptyState } from "./EmptyState";
+import { MarkdownView } from "./MarkdownView";
+import { PrdReviewEditor } from "./PrdReviewEditor";
+import { Spinner } from "./Spinner";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 
 function fileLabel(name: string): string {
   switch (name) {
@@ -42,24 +45,6 @@ export function DemandProjectDrawer({
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [contentLoading, setContentLoading] = useState(false);
-  const [Markdown, setMarkdown] = useState<
-    typeof import("@ant-design/x-markdown").XMarkdown | null
-  >(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    let cancelled = false;
-    void import("@ant-design/x-markdown").then((mod) => {
-      if (!cancelled) {
-        setMarkdown(() => mod.XMarkdown);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   useEffect(() => {
     if (!open || !demandCode) {
@@ -136,57 +121,67 @@ export function DemandProjectDrawer({
   }, [activeFile, demandCode, demandId, open]);
 
   return (
-    <Drawer
-      destroyOnClose
-      onClose={onClose}
+    <Sheet
+      onOpenChange={(next) => {
+        if (!next) {
+          onClose();
+        }
+      }}
       open={open}
-      size="large"
-      title={demand ? `${demand.name} 文档` : "项目文档"}
     >
-      {loading ? (
-        <div style={{ padding: 48, textAlign: "center" }}>
-          <Spin />
+      <SheetContent className="overflow-hidden">
+        <SheetHeader>
+          <SheetTitle>{demand ? `${demand.name} 文档` : "项目文档"}</SheetTitle>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {loading ? (
+            <Spinner />
+          ) : error && files.length === 0 ? (
+            <EmptyState description={error} />
+          ) : !exists ? (
+            <EmptyState description="尚未导出文档，请先在流水线执行初始化" />
+          ) : files.length === 0 ? (
+            <EmptyState description="项目目录为空" />
+          ) : (
+            <div className="flex min-h-[360px] gap-4">
+              <nav aria-label="项目文档" className="w-40 shrink-0">
+                {files.map((file) => (
+                  <button
+                    className={cn(
+                      "mb-1 flex h-10 w-full cursor-pointer items-center rounded-md px-3 text-left text-sm transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                      activeFile === file.name
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted",
+                    )}
+                    key={file.name}
+                    onClick={() => {
+                      setError(null);
+                      setActiveFile(file.name);
+                    }}
+                    type="button"
+                  >
+                    {fileLabel(file.name)}
+                  </button>
+                ))}
+              </nav>
+              <div className="min-w-0 flex-1 overflow-auto">
+                {projectDir ? (
+                  <p className="text-muted-foreground mb-2 text-xs">{projectDir}</p>
+                ) : null}
+                {activeFile === "PRD_REVIEW.md" ? (
+                  <PrdReviewEditor demandCode={demandCode} demandId={demandId} />
+                ) : error ? (
+                  <p className="text-destructive text-sm">{error}</p>
+                ) : contentLoading ? (
+                  <Spinner />
+                ) : (
+                  <MarkdownView content={content} />
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      ) : error && files.length === 0 ? (
-        <Empty description={error} />
-      ) : !exists ? (
-        <Empty description="尚未导出文档，请先在流水线执行初始化" />
-      ) : files.length === 0 ? (
-        <Empty description="项目目录为空" />
-      ) : (
-        <Flex gap={16} style={{ minHeight: 360 }}>
-          <Menu
-            items={files.map((file) => ({
-              key: file.name,
-              label: fileLabel(file.name),
-            }))}
-            onClick={({ key }) => {
-              setError(null);
-              setActiveFile(key);
-            }}
-            selectedKeys={activeFile ? [activeFile] : []}
-            style={{ flex: "0 0 160px" }}
-          />
-          <div style={{ flex: 1, minWidth: 0, overflow: "auto" }}>
-            {projectDir ? (
-              <Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 8 }}>
-                {projectDir}
-              </Text>
-            ) : null}
-            {activeFile === "PRD_REVIEW.md" ? (
-              <PrdReviewEditor demandCode={demandCode} demandId={demandId} />
-            ) : error ? (
-              <Text type="danger">{error}</Text>
-            ) : contentLoading ? (
-              <Spin />
-            ) : Markdown ? (
-              <Markdown content={content} openLinksInNewTab />
-            ) : (
-              <Title level={5}>{activeFile}</Title>
-            )}
-          </div>
-        </Flex>
-      )}
-    </Drawer>
+      </SheetContent>
+    </Sheet>
   );
 }

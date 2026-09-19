@@ -1,42 +1,42 @@
-import { Badge, Typography, theme } from "antd";
+import { startLogin, logout } from "@/lib/tauri";
+import { useStore } from "@/state/store";
 
-import { logout, startLogin } from "../lib/tauri";
-import { useStore } from "../state/store";
-
-const { Link, Text } = Typography;
+import { Button } from "./ui/button";
 
 export function AuthStatus() {
   const { state } = useStore();
-  const { token } = theme.useToken();
   const { cookie_valid, logged_in, username } = state.auth;
-  const pad = { padding: `${token.paddingSM}px ${token.paddingMD}px` };
 
   if (!logged_in) {
     return (
-      <div style={{ alignItems: "center", display: "flex", gap: token.marginSM, ...pad }}>
-        <Badge status="error" />
-        <Link onClick={() => void startLogin()}>登录</Link>
+      <div className="flex items-center gap-2 px-4 py-3">
+        <span aria-hidden className="bg-destructive size-2 shrink-0 rounded-full" />
+        <Button onClick={() => void startLogin()} size="sm" variant="link">
+          登录
+        </Button>
       </div>
     );
   }
 
   if (!cookie_valid) {
     return (
-      <div style={{ alignItems: "center", display: "flex", gap: token.marginSM, ...pad }}>
-        <Badge status="warning" />
-        <Text type="warning">{username}</Text>
-        <Link onClick={() => void startLogin()}>重新登录</Link>
+      <div className="flex items-center gap-2 px-4 py-3">
+        <span aria-hidden className="bg-warning size-2 shrink-0 rounded-full" />
+        <span className="text-warning truncate text-sm">{username}</span>
+        <Button onClick={() => void startLogin()} size="sm" variant="link">
+          重新登录
+        </Button>
       </div>
     );
   }
 
   return (
-    <div style={{ alignItems: "center", display: "flex", gap: token.marginSM, ...pad }}>
-      <Badge status="success" />
-      <Text type="secondary">{username}</Text>
-      <Link type="secondary" onClick={() => void logout()}>
+    <div className="flex items-center gap-2 px-4 py-3">
+      <span aria-hidden className="bg-success size-2 shrink-0 rounded-full" />
+      <span className="text-muted-foreground truncate text-sm">{username}</span>
+      <Button onClick={() => void logout()} size="sm" variant="link">
         登出
-      </Link>
+      </Button>
     </div>
   );
 }

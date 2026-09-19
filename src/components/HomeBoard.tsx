@@ -1,27 +1,13 @@
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Empty,
-  Flex,
-  Input,
-  Pagination,
-  Spin,
-  Tag,
-  Typography,
-  theme,
-} from "antd";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 
-import { isAuthExpiredMessage } from "../lib/auth";
-import { invokeErrorMessage } from "../lib/errors";
-import { pipelineHitlLane, type HitlLane } from "../lib/hitlLane";
-import { issueClassLabel } from "../lib/issueClass";
-import { demandTaskKey } from "../lib/taskKey";
-import { listDemands, resolveDemandLink, startLogin } from "../lib/tauri";
+import { isAuthExpiredMessage } from "@/lib/auth";
+import { invokeErrorMessage } from "@/lib/errors";
+import { pipelineHitlLane, type HitlLane } from "@/lib/hitlLane";
+import { issueClassLabel } from "@/lib/issueClass";
+import { demandTaskKey } from "@/lib/taskKey";
+import { listDemands, resolveDemandLink, startLogin } from "@/lib/tauri";
 import {
   STAGE_LABELS,
   type DemandListItem,
@@ -29,15 +15,23 @@ import {
   type PipelineStatus,
   type PipelineSummary,
   type StageEnum,
-} from "../lib/types";
-import { useStore } from "../state/store";
+} from "@/lib/types";
+import { useStore } from "@/state/store";
+
 import { DemandProjectDrawer } from "./DemandProjectDrawer";
+import { EmptyState } from "./EmptyState";
 import { PipelineDetail } from "./PipelineDetail";
 import { PipelineStatsPanel } from "./PipelineStatsPanel";
+import { Spinner } from "./Spinner";
 import { StartPipelineWizard } from "./StartPipelineWizard";
 import { StatusBadge } from "./StatusBadge";
-
-const { Text } = Typography;
+import { Alert, AlertDescription } from "./ui/alert";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Checkbox } from "./ui/checkbox";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -125,11 +119,7 @@ function pipelineToDemand(pipeline: PipelineSummary): DemandListItem {
 function isBoardLaneInteractive(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
-    Boolean(
-      target.closest(
-        "a, button, input, textarea, .ant-alert, .ant-card, .ant-checkbox-wrapper, .ant-pagination",
-      ),
-    )
+    Boolean(target.closest("a, button, input, textarea, [data-board-interactive]"))
   );
 }
 
@@ -158,8 +148,6 @@ function pipelineToCard(pipeline: PipelineSummary): BoardCard {
 
 export function HomeBoard() {
   const { dispatch, state } = useStore();
-  const { token } = theme.useToken();
-  const { message } = App.useApp();
   const loggedIn = state.auth.logged_in && state.auth.cookie_valid;
   const boardVisible = state.ui.view === "home" || state.ui.view === "demands";
 
@@ -317,7 +305,6 @@ export function HomeBoard() {
       updatedAt: null,
     }));
 
-  // Prefer local created cards so a key collision still opens detail, not the wizard.
   const unstartedCards = [...createdCards, ...xingyunUnstarted].filter(
     (card, index, cards) => cards.findIndex((item) => item.key === card.key) === index,
   );
@@ -352,7 +339,7 @@ export function HomeBoard() {
       setStarting(demand);
       setLinkInput("");
     } catch (err) {
-      message.error(invokeErrorMessage(err, "无法从链接打开需求"));
+      toast.error(invokeErrorMessage(err, "无法从链接打开需求"));
     } finally {
       setLinkLoading(false);
     }
@@ -360,74 +347,81 @@ export function HomeBoard() {
 
   if (state.selectedPipelineId) {
     return (
-      <Flex vertical style={{ height: "100%" }}>
-        <div style={{ padding: `${token.paddingSM}px ${token.paddingMD}px 0` }}>
-          <Button
-            icon={<ArrowLeftOutlined />}
-            onClick={() => dispatch({ id: null, type: "pipelineSelected" })}
-            type="text"
-          >
+      <div className="flex h-full flex-col">
+        <div className="px-4 pt-3">
+          <Button onClick={() => dispatch({ id: null, type: "pipelineSelected" })} variant="ghost">
+            <ArrowLeft aria-hidden />
             返回看板
           </Button>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        <div className="min-h-0 flex-1 overflow-auto">
           <PipelineDetail />
         </div>
         <StartPipelineWizard demand={starting} onClose={() => setStarting(null)} />
         <DemandProjectDrawer demand={viewing} onClose={() => setViewing(null)} />
-      </Flex>
+      </div>
     );
   }
 
   return (
-    <Flex gap={token.marginMD} style={{ height: "100%", padding: token.paddingLG }} vertical>
+    <div className="flex h-full flex-col gap-4 p-6">
       <PipelineStatsPanel compact />
-      <Flex align="center" gap={token.marginMD} wrap="wrap">
-        <Input.Search
-          allowClear
-          onChange={(event) => setKeywordInput(event.target.value)}
-          onSearch={handleSearch}
-          placeholder="搜索任务名称或编号"
-          style={{ maxWidth: 320 }}
-          value={keywordInput}
-        />
-        <Checkbox
-          checked={acceptedByMe}
-          onChange={(event) => {
-            setAcceptedByMe(event.target.checked);
-            setCurrent(1);
+      <div className="flex flex-wrap items-center gap-3">
+        <form
+          className="flex max-w-80 flex-1 gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleSearch(keywordInput);
           }}
         >
-          由我受理
-        </Checkbox>
-        <Input.Search
-          allowClear
-          enterButton="从链接开始"
-          loading={linkLoading}
-          onChange={(event) => setLinkInput(event.target.value)}
-          onSearch={(value) => void handleResolveLink(value)}
-          placeholder="粘贴行云需求链接"
-          style={{ flex: 1, minWidth: 280 }}
-          value={linkInput}
-        />
-      </Flex>
-
-      <Flex gap={token.marginMD} ref={laneRef} style={{ flex: 1, minHeight: 0, overflowX: "auto" }}>
-        <BoardColumn
-          count={loggedIn ? unstartedCards.length : createdCards.length}
-          label="未开始"
-          token={token}
+          <Input
+            aria-label="搜索任务名称或编号"
+            onChange={(event) => setKeywordInput(event.target.value)}
+            placeholder="搜索任务名称或编号"
+            value={keywordInput}
+          />
+          <Button type="submit" variant="outline">
+            搜索
+          </Button>
+        </form>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={acceptedByMe}
+            id="accepted-by-me"
+            onCheckedChange={(value) => {
+              setAcceptedByMe(value === true);
+              setCurrent(1);
+            }}
+          />
+          <Label htmlFor="accepted-by-me">由我受理</Label>
+        </div>
+        <form
+          className="flex min-w-[280px] flex-1 gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleResolveLink(linkInput);
+          }}
         >
+          <Input
+            aria-label="行云需求链接"
+            onChange={(event) => setLinkInput(event.target.value)}
+            placeholder="粘贴行云需求链接"
+            value={linkInput}
+          />
+          <Button loading={linkLoading} type="submit">
+            从链接开始
+          </Button>
+        </form>
+      </div>
+
+      <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto" ref={laneRef}>
+        <BoardColumn count={loggedIn ? unstartedCards.length : createdCards.length} label="未开始">
           {!loggedIn ? (
             <>
-              <Empty
+              <EmptyState
+                action={<Button onClick={() => void startLogin()}>登录</Button>}
                 description="登录后查看行云中尚未开工的任务"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              >
-                <Button onClick={() => void startLogin()} type="primary">
-                  登录
-                </Button>
-              </Empty>
+              />
               {createdCards.map((card) => (
                 <KanbanCard
                   card={card}
@@ -440,33 +434,23 @@ export function HomeBoard() {
           ) : (
             <>
               {error ? (
-                <Alert
-                  action={
-                    <Flex gap={token.marginSM}>
+                <Alert variant="destructive">
+                  <AlertDescription className="flex flex-col gap-2">
+                    <span>{error}</span>
+                    <div className="flex gap-2">
                       {isAuthExpiredMessage(error) ? (
-                        <Button onClick={() => void startLogin()} size="small">
+                        <Button onClick={() => void startLogin()} size="sm" variant="outline">
                           登录
                         </Button>
                       ) : null}
-                      <Button
-                        onClick={() => setReloadToken((count) => count + 1)}
-                        size="small"
-                        type="primary"
-                      >
+                      <Button onClick={() => setReloadToken((count) => count + 1)} size="sm">
                         重试
                       </Button>
-                    </Flex>
-                  }
-                  message={error}
-                  showIcon
-                  type="error"
-                />
+                    </div>
+                  </AlertDescription>
+                </Alert>
               ) : null}
-              {loading ? (
-                <Flex align="center" justify="center" style={{ padding: token.paddingMD }}>
-                  <Spin size="small" />
-                </Flex>
-              ) : null}
+              {loading ? <Spinner label="加载需求..." /> : null}
               {unstartedCards.map((card) => (
                 <KanbanCard
                   card={card}
@@ -476,24 +460,39 @@ export function HomeBoard() {
                 />
               ))}
               {!loading && !error && unstartedCards.length === 0 ? (
-                <Empty
+                <EmptyState
                   description={
                     acceptedByMe ? "暂无由你受理的未开始任务" : "暂无与你相关的未开始任务"
                   }
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
                 />
               ) : null}
               {loggedIn && (page?.total ?? 0) > pageSize ? (
-                <Pagination
-                  current={page?.current ?? current}
-                  onChange={(nextPage, nextSize) => {
-                    setCurrent(nextPage);
-                    setPageSize(nextSize);
-                  }}
-                  pageSize={page?.page_size ?? pageSize}
-                  size="small"
-                  total={page?.total ?? 0}
-                />
+                <div className="flex items-center justify-between gap-2" data-board-interactive="">
+                  <Button
+                    disabled={(page?.current ?? current) <= 1}
+                    onClick={() => setCurrent((page?.current ?? current) - 1)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    上一页
+                  </Button>
+                  <span className="text-muted-foreground text-xs">
+                    {page?.current ?? current} / {Math.ceil((page?.total ?? 0) / pageSize)}
+                  </span>
+                  <Button
+                    disabled={
+                      (page?.current ?? current) >= Math.ceil((page?.total ?? 0) / pageSize)
+                    }
+                    onClick={() => {
+                      setCurrent((page?.current ?? current) + 1);
+                      setPageSize(page?.page_size ?? pageSize);
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    下一页
+                  </Button>
+                </div>
               ) : null}
             </>
           )}
@@ -502,7 +501,7 @@ export function HomeBoard() {
         {LOCAL_COLUMNS.map((column) => {
           const items = filteredPipelines.filter(column.match).map(pipelineToCard);
           return (
-            <BoardColumn count={items.length} key={column.key} label={column.label} token={token}>
+            <BoardColumn count={items.length} key={column.key} label={column.label}>
               {items.map((card) => (
                 <KanbanCard
                   card={card}
@@ -514,11 +513,11 @@ export function HomeBoard() {
             </BoardColumn>
           );
         })}
-      </Flex>
+      </div>
 
       <StartPipelineWizard demand={starting} onClose={() => setStarting(null)} />
       <DemandProjectDrawer demand={viewing} onClose={() => setViewing(null)} />
-    </Flex>
+    </div>
   );
 }
 
@@ -526,38 +525,23 @@ function BoardColumn({
   children,
   count,
   label,
-  token,
 }: {
   children: ReactNode;
   count: number;
   label: string;
-  token: ReturnType<typeof theme.useToken>["token"];
 }) {
   return (
-    <Flex
-      gap={token.marginSM}
-      style={{
-        background: token.colorBgContainer,
-        border: `1px solid ${token.colorBorderSecondary}`,
-        borderRadius: token.borderRadius,
-        flex: "0 0 260px",
-        minWidth: 260,
-        padding: token.paddingMD,
-      }}
-      vertical
-    >
-      <Text strong>
+    <section className="border-border bg-card flex w-[260px] shrink-0 flex-col gap-2 rounded-lg border p-4">
+      <h2 className="font-serif text-sm font-bold">
         {label} ({count})
-      </Text>
-      <Flex
+      </h2>
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto"
         data-board-column-scroll=""
-        gap={token.marginSM}
-        style={{ flex: 1, minHeight: 0, overflowY: "auto" }}
-        vertical
       >
         {children}
-      </Flex>
-    </Flex>
+      </div>
+    </section>
   );
 }
 
@@ -570,41 +554,46 @@ function KanbanCard({
   onOpenDocs: () => void;
   onSelect: () => void;
 }) {
-  const { token } = theme.useToken();
   const stage = stageLabel(card.currentStage);
 
   return (
-    <Card hoverable onClick={onSelect} size="small" styles={{ body: { padding: token.paddingMD } }}>
-      <Flex align="flex-start" gap={token.marginSM} justify="space-between">
-        <Text ellipsis strong style={{ flex: 1 }}>
-          {card.demand.name || card.demand.demand_code || `需求 ${card.demand.id}`}
-        </Text>
-        {card.status === "unstarted" || card.status === "created" ? (
-          <Tag style={{ margin: 0 }}>未开始</Tag>
-        ) : (
-          <StatusBadge status={card.status} />
-        )}
-      </Flex>
-      <Flex align="center" gap={token.marginSM} style={{ marginTop: token.marginSM }} wrap="wrap">
-        {card.hitlLane === "confirm" || card.hitlLane === "review" ? (
-          <Tag style={{ margin: 0 }}>{issueClassLabel(card.issueClass)}</Tag>
-        ) : null}
-        {stage ? <Tag style={{ margin: 0 }}>{stage}</Tag> : null}
-        <Text type="secondary">
-          {card.demand.demand_code || `id:${card.demand.id}`}
-          {card.updatedAt ? ` · ${timeAgo(card.updatedAt)}` : ""}
-        </Text>
-        <Button
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenDocs();
-          }}
-          size="small"
-          type="link"
-        >
-          文档
-        </Button>
-      </Flex>
+    <Card
+      className="hover:border-primary cursor-pointer transition-colors duration-200"
+      data-board-interactive=""
+      onClick={onSelect}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <p className="flex-1 truncate text-sm font-semibold">
+            {card.demand.name || card.demand.demand_code || `需求 ${card.demand.id}`}
+          </p>
+          {card.status === "unstarted" || card.status === "created" ? (
+            <Badge variant="secondary">未开始</Badge>
+          ) : (
+            <StatusBadge status={card.status} />
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {card.hitlLane === "confirm" || card.hitlLane === "review" ? (
+            <Badge variant="outline">{issueClassLabel(card.issueClass)}</Badge>
+          ) : null}
+          {stage ? <Badge variant="outline">{stage}</Badge> : null}
+          <span className="text-muted-foreground text-xs">
+            {card.demand.demand_code || `id:${card.demand.id}`}
+            {card.updatedAt ? ` · ${timeAgo(card.updatedAt)}` : ""}
+          </span>
+          <Button
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenDocs();
+            }}
+            size="sm"
+            variant="link"
+          >
+            文档
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   );
 }

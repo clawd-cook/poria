@@ -1,14 +1,26 @@
-import { Alert, App, Button, Flex, Input, Modal, Select, Steps, Typography } from "antd";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-import { invokeErrorMessage } from "../lib/errors";
-import { listPipelines, listRepoBranches, previewDemandPrd, submitPipeline } from "../lib/tauri";
-import type { DemandListItem, RegisteredRepo } from "../lib/types";
-import { useStore } from "../state/store";
+import { invokeErrorMessage } from "@/lib/errors";
+import { listPipelines, listRepoBranches, previewDemandPrd, submitPipeline } from "@/lib/tauri";
+import type { DemandListItem, RegisteredRepo } from "@/lib/types";
+import { useStore } from "@/state/store";
 
-const { Text } = Typography;
+import { Alert, AlertDescription } from "./ui/alert";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
-const STEP_ITEMS = [{ title: "前端仓库" }, { title: "后端仓库" }, { title: "文档" }];
+const STEP_ITEMS = ["前端仓库", "后端仓库", "文档"];
 
 function isJoySpaceUrl(raw: string): boolean {
   try {
@@ -31,7 +43,6 @@ export function StartPipelineWizard({
   onClose: () => void;
 }) {
   const { dispatch, state } = useStore();
-  const { message } = App.useApp();
   const open = demand !== null;
   const demandId = demand?.id ?? 0;
 
@@ -146,15 +157,15 @@ export function StartPipelineWizard({
       return;
     }
     if (!isJoySpaceUrl(trimmedPrd)) {
-      message.error("请填写 JoySpace PRD 链接");
+      toast.error("请填写 JoySpace PRD 链接");
       return;
     }
     if (!isJoySpaceUrl(trimmedBackendTrd)) {
-      message.error("请填写 JoySpace 后端 TRD 链接");
+      toast.error("请填写 JoySpace 后端 TRD 链接");
       return;
     }
     if (trimmedPrd === trimmedBackendTrd) {
-      message.error("后端 TRD 不能与 PRD 使用相同链接");
+      toast.error("后端 TRD 不能与 PRD 使用相同链接");
       return;
     }
 
@@ -174,10 +185,10 @@ export function StartPipelineWizard({
       dispatch({ pipelines, type: "hydrate" });
       dispatch({ type: "viewChanged", view: "home" });
       dispatch({ id, type: "pipelineSelected" });
-      message.success("已创建流水线并开始自动执行");
+      toast.success("已创建流水线并开始自动执行");
       onClose();
     } catch (error) {
-      message.error(invokeErrorMessage(error, "创建流水线失败"));
+      toast.error(invokeErrorMessage(error, "创建流水线失败"));
     } finally {
       setSubmitting(false);
     }
@@ -194,27 +205,186 @@ export function StartPipelineWizard({
   }
 
   return (
-    <Modal
-      destroyOnHidden
-      footer={
-        <Flex justify="space-between">
-          <Button onClick={onClose}>取消</Button>
-          <Flex gap={8}>
-            {step > 0 ? (
+    <Dialog
+      onOpenChange={(next) => {
+        if (!next) {
+          onClose();
+        }
+      }}
+      open={open}
+    >
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>
+            {demand ? `开始：${demand.name || demand.demand_code || demand.id}` : "开始"}
+          </DialogTitle>
+          <DialogDescription>提交后将按 Init → Deploy 自动连跑。</DialogDescription>
+        </DialogHeader>
+        <ol className="mb-2 flex gap-2 text-xs">
+          {STEP_ITEMS.map((item, index) => (
+            <li
+              className={
+                index === step
+                  ? "bg-primary text-primary-foreground rounded-full px-3 py-1"
+                  : "bg-muted text-muted-foreground rounded-full px-3 py-1"
+              }
+              key={item}
+            >
+              {index + 1}. {item}
+            </li>
+          ))}
+        </ol>
+        <Alert>
+          <AlertDescription>
+            提交后将按 Init → Deploy 自动连跑。失败或阻塞会停住，不会跳过门禁。
+          </AlertDescription>
+        </Alert>
+        {readyRepos.length < 2 ? (
+          <Alert variant="warning">
+            <AlertDescription className="flex items-center justify-between gap-3">
+              <span>需要至少两个已克隆成功的仓库（前端、后端各一）</span>
               <Button
                 onClick={() => {
-                  setStep((current) => Math.max(current - 1, 0));
+                  onClose();
+                  dispatch({ type: "viewChanged", view: "repos" });
                 }}
+                size="sm"
+                variant="outline"
+              >
+                去登记仓库
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {step === 0 ? (
+          <div className="grid gap-2">
+            <Label htmlFor="frontend-repo">选择前端仓库。功能分支基于该仓登记的主分支创建。</Label>
+            <Select
+              onValueChange={(value) => {
+                setFrontendRepoId(value);
+                if (value === backendRepoId) {
+                  setBackendRepoId(undefined);
+                  setBackendBranch(undefined);
+                  setBranches([]);
+                  setBranchError(null);
+                }
+              }}
+              value={frontendRepoId}
+            >
+              <SelectTrigger aria-label="前端仓库" id="frontend-repo">
+                <SelectValue placeholder="选择已克隆的前端仓库" />
+              </SelectTrigger>
+              <SelectContent>
+                {readyRepos.map((repo) => (
+                  <SelectItem key={repo.id} value={repo.id}>
+                    {repoLabel(repo)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
+        {step === 1 ? (
+          <div className="grid gap-3">
+            <p className="text-sm">选择后端仓库和分支。仅作为只读上下文，不会创建后端 MR。</p>
+            <Select
+              onValueChange={(value) => {
+                setBackendRepoId(value);
+                setBackendBranch(undefined);
+                setBranches([]);
+                setBranchError(null);
+              }}
+              value={backendRepoId}
+            >
+              <SelectTrigger aria-label="后端仓库">
+                <SelectValue placeholder="选择已克隆的后端仓库" />
+              </SelectTrigger>
+              <SelectContent>
+                {backendOptions.map((repo) => (
+                  <SelectItem key={repo.id} value={repo.id}>
+                    {repoLabel(repo)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              disabled={!backendRepoId || branchesLoading}
+              onValueChange={setBackendBranch}
+              value={backendBranch}
+            >
+              <SelectTrigger aria-label="后端分支">
+                <SelectValue placeholder={branchesLoading ? "加载分支..." : "选择后端分支"} />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((branch) => (
+                  <SelectItem key={branch} value={branch}>
+                    {branch}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {branchError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{branchError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+        ) : null}
+
+        {step === 2 ? (
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="prd-url">填写 JoySpace PRD 链接，可改自动预填结果。</Label>
+              <Input
+                aria-label="JoySpace PRD"
+                id="prd-url"
+                onChange={(event) => setPrdUrl(event.target.value)}
+                placeholder="https://joyspace.jd.com/pages/prd"
+                value={prdUrl}
+              />
+              {prdHint ? <p className="text-muted-foreground text-xs">{prdHint}</p> : null}
+              {trimmedPrd && !isJoySpaceUrl(trimmedPrd) ? (
+                <p className="text-destructive text-xs">PRD 必须是 JoySpace 链接</p>
+              ) : null}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="backend-trd-url">
+                填写 JoySpace 后端 TRD 链接。后端 TRD 只读，辅助前端设计/编码，不会改后端仓。
+              </Label>
+              <Input
+                aria-label="JoySpace 后端 TRD"
+                id="backend-trd-url"
+                onChange={(event) => setBackendTrdUrl(event.target.value)}
+                placeholder="https://joyspace.jd.com/pages/backend-trd"
+                value={backendTrdUrl}
+              />
+              {trimmedBackendTrd && !isJoySpaceUrl(trimmedBackendTrd) ? (
+                <p className="text-destructive text-xs">后端 TRD 必须是 JoySpace 链接</p>
+              ) : null}
+              {trimmedPrd && trimmedBackendTrd && trimmedPrd === trimmedBackendTrd ? (
+                <p className="text-destructive text-xs">后端 TRD 不能与 PRD 使用相同链接</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        <DialogFooter className="sm:justify-between">
+          <Button onClick={onClose} variant="outline">
+            取消
+          </Button>
+          <div className="flex gap-2">
+            {step > 0 ? (
+              <Button
+                onClick={() => setStep((current) => Math.max(current - 1, 0))}
+                variant="outline"
               >
                 上一步
               </Button>
             ) : null}
             {step < 2 ? (
-              <Button
-                disabled={step === 0 ? !canNextStep0 : !canNextStep1}
-                onClick={handleNext}
-                type="primary"
-              >
+              <Button disabled={step === 0 ? !canNextStep0 : !canNextStep1} onClick={handleNext}>
                 下一步
               </Button>
             ) : (
@@ -222,141 +392,13 @@ export function StartPipelineWizard({
                 disabled={!canSubmit}
                 loading={submitting}
                 onClick={() => void handleSubmit()}
-                type="primary"
               >
                 创建并自动执行
               </Button>
             )}
-          </Flex>
-        </Flex>
-      }
-      onCancel={onClose}
-      open={open}
-      title={demand ? `开始：${demand.name || demand.demand_code || demand.id}` : "开始"}
-      width={640}
-    >
-      <Steps current={step} items={STEP_ITEMS} size="small" style={{ marginBottom: 24 }} />
-      <Alert
-        message="提交后将按 Init → Deploy 自动连跑。失败或阻塞会停住，不会跳过门禁。"
-        showIcon
-        style={{ marginBottom: 16 }}
-        type="info"
-      />
-      {readyRepos.length < 2 ? (
-        <Alert
-          action={
-            <Button
-              onClick={() => {
-                onClose();
-                dispatch({ type: "viewChanged", view: "repos" });
-              }}
-              size="small"
-            >
-              去登记仓库
-            </Button>
-          }
-          message="需要至少两个已克隆成功的仓库（前端、后端各一）"
-          showIcon
-          style={{ marginBottom: 16 }}
-          type="warning"
-        />
-      ) : null}
-
-      {step === 0 ? (
-        <Flex gap={8} vertical>
-          <Text>选择前端仓库。功能分支基于该仓登记的主分支创建。</Text>
-          <Select
-            onChange={(value) => {
-              setFrontendRepoId(value);
-              if (value === backendRepoId) {
-                setBackendRepoId(undefined);
-                setBackendBranch(undefined);
-                setBranches([]);
-                setBranchError(null);
-              }
-            }}
-            optionFilterProp="label"
-            options={readyRepos.map((repo) => ({
-              label: repoLabel(repo),
-              value: repo.id,
-            }))}
-            placeholder="选择已克隆的前端仓库"
-            showSearch
-            value={frontendRepoId}
-          />
-        </Flex>
-      ) : null}
-
-      {step === 1 ? (
-        <Flex gap={12} vertical>
-          <Text>选择后端仓库和分支。仅作为只读上下文，不会创建后端 MR。</Text>
-          <Select
-            onChange={(value) => {
-              setBackendRepoId(value);
-              setBackendBranch(undefined);
-              setBranches([]);
-              setBranchError(null);
-            }}
-            optionFilterProp="label"
-            options={backendOptions.map((repo) => ({
-              label: repoLabel(repo),
-              value: repo.id,
-            }))}
-            placeholder="选择已克隆的后端仓库"
-            showSearch
-            value={backendRepoId}
-          />
-          <Select
-            disabled={!backendRepoId}
-            loading={branchesLoading}
-            onChange={setBackendBranch}
-            optionFilterProp="label"
-            options={branches.map((branch) => ({
-              label: branch,
-              value: branch,
-            }))}
-            placeholder="选择后端分支"
-            showSearch
-            value={backendBranch}
-          />
-          {branchError ? <Alert message={branchError} showIcon type="error" /> : null}
-        </Flex>
-      ) : null}
-
-      {step === 2 ? (
-        <Flex gap={12} vertical>
-          <Flex gap={8} vertical>
-            <Text>填写 JoySpace PRD 链接，可改自动预填结果。</Text>
-            <Input
-              aria-label="JoySpace PRD"
-              onChange={(event) => setPrdUrl(event.target.value)}
-              placeholder="https://joyspace.jd.com/pages/prd"
-              value={prdUrl}
-            />
-            {prdHint ? <Text type="secondary">{prdHint}</Text> : null}
-            {trimmedPrd && !isJoySpaceUrl(trimmedPrd) ? (
-              <Text type="danger">PRD 必须是 JoySpace 链接</Text>
-            ) : null}
-          </Flex>
-          <Flex gap={8} vertical>
-            <Text>
-              填写 JoySpace 后端 TRD 链接。后端 TRD 只读，辅助前端设计/编码，不会改后端仓。
-            </Text>
-            <Input
-              aria-label="JoySpace 后端 TRD"
-              onChange={(event) => setBackendTrdUrl(event.target.value)}
-              placeholder="https://joyspace.jd.com/pages/backend-trd"
-              value={backendTrdUrl}
-            />
-            {trimmedBackendTrd && !isJoySpaceUrl(trimmedBackendTrd) ? (
-              <Text type="danger">后端 TRD 必须是 JoySpace 链接</Text>
-            ) : null}
-            {trimmedPrd && trimmedBackendTrd && trimmedPrd === trimmedBackendTrd ? (
-              <Text type="danger">后端 TRD 不能与 PRD 使用相同链接</Text>
-            ) : null}
-          </Flex>
-        </Flex>
-      ) : null}
-    </Modal>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

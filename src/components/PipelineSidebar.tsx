@@ -1,13 +1,14 @@
-import { FilterOutlined } from "@ant-design/icons";
-import { List, Segmented, Tag, Typography, theme } from "antd";
+import { Filter } from "lucide-react";
 import { useMemo } from "react";
 
-import { pipelineHitlLane } from "../lib/hitlLane";
-import type { PipelineSummary } from "../lib/types";
-import { useStore } from "../state/store";
-import { StatusBadge } from "./StatusBadge";
+import { pipelineHitlLane } from "@/lib/hitlLane";
+import type { PipelineSummary } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { useStore } from "@/state/store";
 
-const { Text } = Typography;
+import { StatusBadge } from "./StatusBadge";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 
 const STATUS_GROUPS: {
   label: string;
@@ -46,8 +47,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export function PipelineSidebar() {
-  const { state, dispatch } = useStore();
-  const { token } = theme.useToken();
+  const { dispatch, state } = useStore();
   const { pipelines, selectedPipelineId, ui } = state;
 
   const filtered = useMemo(() => {
@@ -66,96 +66,72 @@ export function PipelineSidebar() {
   }, [filtered]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div
-        style={{
-          padding: "8px 12px",
-          borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <FilterOutlined style={{ fontSize: 12, opacity: 0.45 }} />
-        <Segmented
-          size="small"
-          value={ui.filter ?? "all"}
-          onChange={(val) =>
-            dispatch({ type: "filterChanged", filter: val === "all" ? null : (val as string) })
-          }
-          options={FILTER_OPTIONS}
-        />
+    <div className="flex h-full flex-col">
+      <div className="border-border flex items-center gap-2 border-b px-3 py-2">
+        <Filter aria-hidden className="size-3 opacity-45" />
+        <div className="flex flex-wrap gap-1">
+          {FILTER_OPTIONS.map((option) => {
+            const active = (ui.filter ?? "all") === option.value;
+            return (
+              <Button
+                aria-pressed={active}
+                key={option.value}
+                onClick={() =>
+                  dispatch({
+                    filter: option.value === "all" ? null : option.value,
+                    type: "filterChanged",
+                  })
+                }
+                size="sm"
+                variant={active ? "default" : "ghost"}
+              >
+                {option.label}
+              </Button>
+            );
+          })}
+        </div>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto" }}>
-        {grouped.length === 0 && (
-          <div style={{ padding: "32px 16px", textAlign: "center" }}>
-            <Text type="secondary">暂无 Pipeline</Text>
-          </div>
-        )}
+      <div className="flex-1 overflow-auto">
+        {grouped.length === 0 ? (
+          <p className="text-muted-foreground px-4 py-8 text-center text-sm">暂无 Pipeline</p>
+        ) : null}
         {grouped.map((group) => (
           <div key={group.label}>
-            <div
-              style={{
-                padding: "6px 16px",
-                fontSize: 12,
-                position: "sticky",
-                top: 0,
-                zIndex: 1,
-                background: token.colorBgContainer,
-              }}
-            >
-              <Text type="secondary" style={{ fontSize: 12 }}>
+            <div className="bg-card sticky top-0 z-[1] px-4 py-1.5">
+              <p className="text-muted-foreground text-xs">
                 {group.label} ({group.items.length})
-              </Text>
+              </p>
             </div>
-            <List
-              dataSource={group.items}
-              split
-              size="small"
-              renderItem={(pipeline: PipelineSummary) => (
-                <List.Item
-                  onClick={() => dispatch({ type: "pipelineSelected", id: pipeline.id })}
-                  style={{
-                    padding: "8px 16px",
-                    cursor: "pointer",
-                    background:
-                      pipeline.id === selectedPipelineId ? token.colorPrimaryBg : undefined,
-                  }}
-                >
-                  <div style={{ width: "100%" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: 8,
-                      }}
-                    >
-                      <Text ellipsis style={{ fontSize: 13, fontWeight: 500 }}>
+            <ul>
+              {group.items.map((pipeline: PipelineSummary) => (
+                <li key={pipeline.id}>
+                  <button
+                    className={cn(
+                      "flex w-full cursor-pointer flex-col gap-1 px-4 py-2 text-left transition-colors duration-200 hover:bg-muted",
+                      pipeline.id === selectedPipelineId ? "bg-primary/10" : undefined,
+                    )}
+                    onClick={() => dispatch({ id: pipeline.id, type: "pipelineSelected" })}
+                    type="button"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="truncate text-[13px] font-medium">
                         {pipeline.demand_name}
-                      </Text>
+                      </span>
                       <StatusBadge status={pipeline.status} />
                     </div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                    >
-                      {pipeline.current_stage && (
-                        <Tag style={{ fontSize: 11, margin: 0 }}>{pipeline.current_stage}</Tag>
-                      )}
-                      <Text type="secondary" style={{ fontSize: 11 }}>
+                    <div className="flex items-center gap-2">
+                      {pipeline.current_stage ? (
+                        <Badge variant="outline">{pipeline.current_stage}</Badge>
+                      ) : null}
+                      <span className="text-muted-foreground text-[11px]">
                         {timeAgo(pipeline.created_at)}
-                      </Text>
+                      </span>
                     </div>
-                  </div>
-                </List.Item>
-              )}
-            />
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         ))}
       </div>
