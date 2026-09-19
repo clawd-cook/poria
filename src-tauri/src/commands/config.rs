@@ -1,5 +1,6 @@
 use poria_infrastructure::config::{
-    get_config_file_path, load_config, normalize_claude_path, PoriaConfig,
+    get_config_file_path, load_config, normalize_claude_path, normalize_optional_string,
+    PoriaConfig,
 };
 use poria_resources::ClaudeProbeResult;
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,9 @@ pub struct AppConfig {
     /// Optional absolute `claude` CLI path. Empty/null means auto `which`.
     #[serde(default)]
     pub claude_path: Option<String>,
+    /// Newline-separated Dev verify commands. Empty/null → package.json convention.
+    #[serde(default)]
+    pub dev_verify_commands: Option<String>,
 }
 
 /// Convert a full PoriaConfig to the frontend AppConfig view.
@@ -34,6 +38,7 @@ fn poria_config_to_app_config(c: &PoriaConfig) -> AppConfig {
         max_retries: c.retry.max_stage_retries,
         db_path: c.paths.db_path.clone(),
         claude_path: c.effective_claude_path().map(str::to_string),
+        dev_verify_commands: c.effective_dev_verify_commands().map(str::to_string),
     }
 }
 
@@ -74,6 +79,7 @@ pub async fn update_config(config: AppConfig) -> Result<(), String> {
             ..base.paths
         },
         claude_path: normalize_claude_path(config.claude_path.as_deref()),
+        dev_verify_commands: normalize_optional_string(config.dev_verify_commands.as_deref()),
     };
 
     let json = serde_json::to_string_pretty(&full).map_err(|e| e.to_string())?;

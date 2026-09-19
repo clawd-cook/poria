@@ -243,6 +243,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_retry_on_local_verify_typecheck() {
+        let mut status = PipelineStatus::Running;
+        let mut stage = make_stage();
+        let result = handle_stage_error(
+            &mut status,
+            &mut stage,
+            "LocalVerifyError: tsc/typecheck failed (`pnpm typecheck`, exit 1)。不得进入 CR。",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(result.issue_class, IssueClass::CompilationError);
+        assert_eq!(result.action, ErrorAction::Retry);
+    }
+
+    #[tokio::test]
+    async fn test_retry_on_local_verify_test_fail() {
+        let mut status = PipelineStatus::Running;
+        let mut stage = make_stage();
+        let result = handle_stage_error(
+            &mut status,
+            &mut stage,
+            "LocalVerifyError: test fail (`pnpm exec vitest run`, exit 1)。不得进入 CR。",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(result.issue_class, IssueClass::TestFailure);
+        assert_eq!(result.action, ErrorAction::Retry);
+    }
+
+    #[tokio::test]
     async fn test_retry_exhausted_becomes_blocked() {
         let mut status = PipelineStatus::Running;
         let mut stage = make_stage();
@@ -301,6 +333,16 @@ mod tests {
         let outcome = stage_error_outcome("bind failed: HTTP 522721", "deploy_failed");
         assert_eq!(outcome.pipeline_status, PipelineStatus::Failed);
         assert_eq!(outcome.issue_class, "deploy_failed");
+    }
+
+    #[test]
+    fn test_stage_error_outcome_local_verify_is_not_immediate_block() {
+        let outcome = stage_error_outcome(
+            "LocalVerifyError: tsc/typecheck failed (`pnpm typecheck`, exit 1)。不得进入 CR。",
+            "dev_failed",
+        );
+        assert_eq!(outcome.pipeline_status, PipelineStatus::Failed);
+        assert_eq!(outcome.issue_class, "dev_failed");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 mod artifacts;
 mod backend_aid;
 mod claude_prompt;
+mod dev_verify;
 mod error;
 mod fixture;
 mod human_loop;

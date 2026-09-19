@@ -9,6 +9,12 @@ pub fn classify(error_message: &str) -> IssueClass {
     let msg = error_message;
     let lower = msg.to_ascii_lowercase();
 
+    if msg.contains("LocalVerifyError") {
+        if msg.contains("test fail") || lower.contains("vitest") || lower.contains("jest") {
+            return IssueClass::TestFailure;
+        }
+        return IssueClass::CompilationError;
+    }
     if msg.contains("compilation") || msg.contains("build failed") || lower.contains("tsc") {
         return IssueClass::CompilationError;
     }
@@ -115,6 +121,9 @@ pub fn is_trd_unconfirmed(error_message: &str) -> bool {
 
 /// True when Dev OutputGuard blocked out-of-scope files (or mixed Block violations).
 pub fn is_out_of_scope(error_message: &str) -> bool {
+    if error_message.contains("LocalVerifyError") {
+        return false;
+    }
     let lower = error_message.to_ascii_lowercase();
     error_message.contains("OutputGuardError")
         || lower.contains("out_of_scope")
@@ -263,6 +272,23 @@ mod tests {
             classify("blocked_dependency found"),
             IssueClass::SecurityViolation
         );
+    }
+
+    #[test]
+    fn test_classify_local_verify_does_not_steal_out_of_scope() {
+        assert_eq!(
+            classify(
+                "LocalVerifyError: tsc/typecheck failed (`pnpm typecheck`, exit 1)。不得进入 CR。"
+            ),
+            IssueClass::CompilationError
+        );
+        assert_eq!(
+            classify("LocalVerifyError: test fail (`pnpm exec vitest run`, exit 1)。不得进入 CR。"),
+            IssueClass::TestFailure
+        );
+        assert!(!is_out_of_scope(
+            "LocalVerifyError: tsc/typecheck failed (`pnpm typecheck`, exit 1)。不得进入 CR。"
+        ));
     }
 
     #[test]

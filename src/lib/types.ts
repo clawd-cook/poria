@@ -110,6 +110,8 @@ export interface AppConfig {
   claude_path: string | null;
   cr_score_threshold: string;
   db_path: string;
+  /** Newline-separated Dev verify commands. Null/empty → package.json convention. */
+  dev_verify_commands: string | null;
   max_diff_lines: number;
   max_retries: number;
   test_coverage_threshold: number;
