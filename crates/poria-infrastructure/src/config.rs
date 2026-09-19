@@ -16,6 +16,9 @@ pub struct PoriaConfig {
     /// Newline-separated Dev local-verify commands. Empty / unset → package.json convention.
     #[serde(default)]
     pub dev_verify_commands: Option<String>,
+    /// Max in-flight pipelines in the desktop worker. Default 2.
+    #[serde(default = "default_max_parallel_pipelines")]
+    pub max_parallel_pipelines: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +84,7 @@ impl Default for PoriaConfig {
             },
             claude_path: None,
             dev_verify_commands: None,
+            max_parallel_pipelines: 2,
         }
     }
 }
@@ -101,6 +105,19 @@ impl PoriaConfig {
             .map(str::trim)
             .filter(|value| !value.is_empty())
     }
+
+    /// Clamp Settings parallelism into 1..=8.
+    pub fn effective_max_parallel_pipelines(&self) -> usize {
+        clamp_max_parallel_pipelines(self.max_parallel_pipelines)
+    }
+}
+
+fn default_max_parallel_pipelines() -> i32 {
+    2
+}
+
+pub fn clamp_max_parallel_pipelines(value: i32) -> usize {
+    value.clamp(1, 8) as usize
 }
 
 pub fn load_config(overrides: Option<PoriaConfig>) -> PoriaConfig {
@@ -181,6 +198,7 @@ mod tests {
         assert_eq!(config.retry.max_stage_retries, 3);
         assert_eq!(config.claude_path, None);
         assert_eq!(config.dev_verify_commands, None);
+        assert_eq!(config.effective_max_parallel_pipelines(), 2);
     }
 
     #[test]
@@ -298,6 +316,8 @@ mod tests {
             .effective_dev_verify_commands(),
             Some("pnpm typecheck\npnpm test --run")
         );
+        assert_eq!(clamp_max_parallel_pipelines(0), 1);
+        assert_eq!(clamp_max_parallel_pipelines(99), 8);
     }
 
     #[test]

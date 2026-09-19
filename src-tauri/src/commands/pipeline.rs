@@ -791,11 +791,13 @@ pub async fn execute_stage(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    if let Some(current) = state.current_run.lock().map_err(|e| e.to_string())?.clone() {
-        if current == pipeline_id {
-            return Err("流水线正在自动执行".into());
-        }
-        return Err("请等待当前流水线自动执行完成".into());
+    if state
+        .current_run
+        .lock()
+        .map_err(|e| e.to_string())?
+        .contains(&pipeline_id)
+    {
+        return Err("流水线正在自动执行".into());
     }
     if state
         .pipeline_queue

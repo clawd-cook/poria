@@ -1,8 +1,9 @@
 use poria_core::pipeline::{transition_pipeline, PipelineEvent};
 use poria_core::types::{Pipeline, PipelineStatus, StageEnum};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::JoinSet;
 
 use crate::traits::{
     CodingChannel, FileLock, HumanLoop, PipelineRun, PipelineStore, Queue, Recovery,
@@ -19,10 +20,12 @@ where
 {
     pub store: S,
     pub queue: Box<dyn Queue>,
-    pub runner: Box<dyn PipelineRun>,
+    pub runner: Arc<dyn PipelineRun>,
     pub recovery: Box<dyn Recovery>,
     pub coding_channel: Option<Box<dyn CodingChannel>>,
     pub human_loop: Option<Box<dyn HumanLoop>>,
+    /// Live cap of in-flight pipelines. Blocked / failed / waiting_merge must not hold a slot.
+    pub max_parallel: Arc<dyn Fn() -> usize + Send + Sync>,
 }
 
 /// The background pipeline worker that consumes a queue and polls MR status.
@@ -87,16 +90,33 @@ where
     }
 
     async fn consume_queue(&self) {
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let mut tasks: JoinSet<()> = JoinSet::new();
         loop {
             if self.stopped.load(Ordering::SeqCst) {
                 break;
             }
+            while tasks.try_join_next().is_some() {}
+
+            let max_parallel = (self.deps.max_parallel)().max(1);
+            if in_flight.load(Ordering::SeqCst) >= max_parallel {
+                let _ = tasks.join_next().await;
+                continue;
+            }
+
             if let Some(pipeline_id) = self.deps.queue.dequeue() {
-                let _ = self.deps.runner.run_pipeline(&pipeline_id).await;
+                let runner = Arc::clone(&self.deps.runner);
+                let in_flight = Arc::clone(&in_flight);
+                in_flight.fetch_add(1, Ordering::SeqCst);
+                tasks.spawn(async move {
+                    let _ = runner.run_pipeline(&pipeline_id).await;
+                    in_flight.fetch_sub(1, Ordering::SeqCst);
+                });
             } else {
                 tokio::time::sleep(QUEUE_POLL_INTERVAL).await;
             }
         }
+        while tasks.join_next().await.is_some() {}
     }
 
     async fn poll_merge_requests_loop(&self) {
@@ -280,7 +300,7 @@ mod tests {
                 queue: Box::new(MemQueue {
                     items: Mutex::new(vec![]),
                 }),
-                runner: Box::new(RecordingRunner {
+                runner: Arc::new(RecordingRunner {
                     ran: Mutex::new(Vec::new()),
                 }),
                 recovery: Box::new(FlagRecovery {
@@ -288,6 +308,7 @@ mod tests {
                 }),
                 coding_channel: None,
                 human_loop: None,
+                max_parallel: Arc::new(|| 2),
             },
             Box::new(MemLock { deny: true }),
             Arc::new(AtomicBool::new(true)),
@@ -299,9 +320,9 @@ mod tests {
 
     #[tokio::test]
     async fn recover_then_drain_runs_queued_ids() {
-        let runner = RecordingRunner {
+        let runner: Arc<dyn PipelineRun> = Arc::new(RecordingRunner {
             ran: Mutex::new(Vec::new()),
-        };
+        });
         let recovery = FlagRecovery {
             called: Mutex::new(false),
         };
@@ -311,10 +332,11 @@ mod tests {
                 queue: Box::new(MemQueue {
                     items: Mutex::new(vec!["p1".into(), "p2".into()]),
                 }),
-                runner: Box::new(runner),
+                runner,
                 recovery: Box::new(recovery),
                 coding_channel: None,
                 human_loop: None,
+                max_parallel: Arc::new(|| 2),
             },
             Box::new(MemLock { deny: false }),
             Arc::new(AtomicBool::new(true)),
@@ -328,5 +350,64 @@ mod tests {
             ran.push(id);
         }
         assert_eq!(ran, vec!["p1".to_string(), "p2".to_string()]);
+    }
+
+    struct SlowRunner {
+        started: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl PipelineRun for SlowRunner {
+        async fn run_pipeline(
+            &self,
+            pipeline_id: &str,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.started.lock().unwrap().push(pipeline_id.to_string());
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn consume_queue_runs_two_pipelines_in_parallel() {
+        let started = Arc::new(Mutex::new(Vec::new()));
+        let stopped = Arc::new(AtomicBool::new(false));
+        let worker = PipelineWorker::new(
+            WorkerDeps {
+                store: EmptyStore,
+                queue: Box::new(MemQueue {
+                    items: Mutex::new(vec!["p1".into(), "p2".into()]),
+                }),
+                runner: Arc::new(SlowRunner {
+                    started: Arc::clone(&started),
+                }),
+                recovery: Box::new(FlagRecovery {
+                    called: Mutex::new(false),
+                }),
+                coding_channel: None,
+                human_loop: None,
+                max_parallel: Arc::new(|| 2),
+            },
+            Box::new(MemLock { deny: false }),
+            Arc::clone(&stopped),
+        )
+        .without_mr_poll();
+
+        let handle = tokio::spawn(async move { worker.start().await });
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(500);
+        let mut in_flight = 0;
+        while tokio::time::Instant::now() < deadline {
+            in_flight = started.lock().unwrap().len();
+            if in_flight >= 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        stopped.store(true, Ordering::SeqCst);
+        handle.await.unwrap().unwrap();
+        assert!(
+            in_flight >= 2,
+            "expected two pipelines in flight, got {in_flight}"
+        );
     }
 }

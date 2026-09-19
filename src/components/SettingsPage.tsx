@@ -126,6 +126,13 @@ export function SettingsPage() {
         <Form.Item label="最大重试次数" name="max_retries">
           <InputNumber style={{ width: "100%" }} />
         </Form.Item>
+        <Form.Item
+          extra="Blocked / 失败 / 待合并不占槽。同一 worktree 不会被两条流水线同时写。"
+          label="并行流水线数"
+          name="max_parallel_pipelines"
+        >
+          <InputNumber max={8} min={1} style={{ width: "100%" }} />
+        </Form.Item>
         <Form.Item label="数据目录" name="db_path">
           <Input />
         </Form.Item>

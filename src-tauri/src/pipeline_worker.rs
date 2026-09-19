@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -38,7 +39,7 @@ async fn run_pipeline_worker(
         WorkerDeps {
             store: DesktopStore(state.store.clone()),
             queue: Box::new(DesktopQueue(state.pipeline_queue.clone())),
-            runner: Box::new(DesktopRunner {
+            runner: Arc::new(DesktopRunner {
                 app: app.clone(),
                 current_run: state.current_run.clone(),
                 runtime: AutoRunRuntime::from_state(&state),
@@ -49,6 +50,9 @@ async fn run_pipeline_worker(
             }),
             coding_channel: None::<Box<dyn CodingChannel>>,
             human_loop: None::<Box<dyn HumanLoop>>,
+            max_parallel: Arc::new(|| {
+                poria_infrastructure::config::load_config(None).effective_max_parallel_pipelines()
+            }),
         },
         Box::new(DesktopLock(state.worker_lock.clone())),
         state.worker_stopped.clone(),
@@ -122,7 +126,7 @@ impl FileLock for DesktopLock {
 
 struct DesktopRunner {
     app: AppHandle,
-    current_run: Arc<Mutex<Option<String>>>,
+    current_run: Arc<Mutex<HashSet<String>>>,
     runtime: AutoRunRuntime,
 }
 
@@ -133,7 +137,7 @@ impl PipelineRun for DesktopRunner {
         pipeline_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Ok(mut current) = self.current_run.lock() {
-            *current = Some(pipeline_id.to_string());
+            current.insert(pipeline_id.to_string());
         }
         run_auto_loop(
             self.app.clone(),
@@ -142,7 +146,7 @@ impl PipelineRun for DesktopRunner {
         )
         .await;
         if let Ok(mut current) = self.current_run.lock() {
-            *current = None;
+            current.remove(pipeline_id);
         }
         Ok(())
     }
