@@ -112,6 +112,8 @@ export interface AppConfig {
   db_path: string;
   /** Newline-separated Dev verify commands. Null/empty → package.json convention. */
   dev_verify_commands: string | null;
+  /** Max in-flight pipelines (1–8). Default 2. */
+  max_parallel_pipelines: number;
   max_diff_lines: number;
   max_retries: number;
   test_coverage_threshold: number;

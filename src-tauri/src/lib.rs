@@ -8,7 +8,7 @@ mod pipeline_worker;
 
 pub struct AppState {
     pub agent_pool: Arc<poria_resources::ClaudeAgentPool>,
-    pub current_run: Arc<Mutex<Option<String>>>,
+    pub current_run: Arc<Mutex<HashSet<String>>>,
     pub event_store: Arc<poria_infrastructure::store::EventStore>,
     pub human_reply_inflight: Arc<Mutex<HashSet<String>>>,
     pub pipeline_queue: Arc<poria_infrastructure::store::PipelineQueue>,
@@ -78,7 +78,7 @@ pub fn run() {
 
             app.manage(AppState {
                 agent_pool,
-                current_run: Arc::new(Mutex::new(None)),
+                current_run: Arc::new(Mutex::new(HashSet::new())),
                 event_store,
                 human_reply_inflight: Arc::new(Mutex::new(HashSet::new())),
                 pipeline_queue,

@@ -26,6 +26,13 @@ pub struct AppConfig {
     /// Newline-separated Dev verify commands. Empty/null → package.json convention.
     #[serde(default)]
     pub dev_verify_commands: Option<String>,
+    /// Max in-flight pipelines (1..=8). Default 2.
+    #[serde(default = "default_app_max_parallel")]
+    pub max_parallel_pipelines: i32,
+}
+
+fn default_app_max_parallel() -> i32 {
+    2
 }
 
 /// Convert a full PoriaConfig to the frontend AppConfig view.
@@ -39,6 +46,7 @@ fn poria_config_to_app_config(c: &PoriaConfig) -> AppConfig {
         db_path: c.paths.db_path.clone(),
         claude_path: c.effective_claude_path().map(str::to_string),
         dev_verify_commands: c.effective_dev_verify_commands().map(str::to_string),
+        max_parallel_pipelines: c.effective_max_parallel_pipelines() as i32,
     }
 }
 
@@ -80,6 +88,9 @@ pub async fn update_config(config: AppConfig) -> Result<(), String> {
         },
         claude_path: normalize_claude_path(config.claude_path.as_deref()),
         dev_verify_commands: normalize_optional_string(config.dev_verify_commands.as_deref()),
+        max_parallel_pipelines: poria_infrastructure::config::clamp_max_parallel_pipelines(
+            config.max_parallel_pipelines,
+        ) as i32,
     };
 
     let json = serde_json::to_string_pretty(&full).map_err(|e| e.to_string())?;
