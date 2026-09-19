@@ -13,6 +13,9 @@ pub struct PoriaConfig {
     /// Optional absolute path to the `claude` CLI. Empty / whitespace is unset.
     #[serde(default)]
     pub claude_path: Option<String>,
+    /// Newline-separated Dev local-verify commands. Empty / unset → package.json convention.
+    #[serde(default)]
+    pub dev_verify_commands: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +80,7 @@ impl Default for PoriaConfig {
                 log_dir: "workspace/logs".into(),
             },
             claude_path: None,
+            dev_verify_commands: None,
         }
     }
 }
@@ -85,6 +89,14 @@ impl PoriaConfig {
     /// Trimmed override path, or `None` when unset / blank.
     pub fn effective_claude_path(&self) -> Option<&str> {
         self.claude_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    /// Trimmed verify override, or `None` when unset / blank (auto-detect).
+    pub fn effective_dev_verify_commands(&self) -> Option<&str> {
+        self.dev_verify_commands
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -145,6 +157,10 @@ fn apply_env_overrides(config: &mut PoriaConfig) {
 }
 
 pub fn normalize_claude_path(value: Option<&str>) -> Option<String> {
+    normalize_optional_string(value)
+}
+
+pub fn normalize_optional_string(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -164,6 +180,7 @@ mod tests {
         assert_eq!(config.gates.test_coverage_threshold, 80.0);
         assert_eq!(config.retry.max_stage_retries, 3);
         assert_eq!(config.claude_path, None);
+        assert_eq!(config.dev_verify_commands, None);
     }
 
     #[test]
@@ -176,6 +193,7 @@ mod tests {
         let config = load_config_from(missing_user, missing_cwd, None);
         assert_eq!(config.gates.cr_score_threshold, "B+");
         assert_eq!(config.claude_path, None);
+        assert_eq!(config.dev_verify_commands, None);
     }
 
     #[test]
@@ -257,6 +275,28 @@ mod tests {
         assert_eq!(
             loaded.effective_claude_path(),
             Some("/usr/local/bin/claude")
+        );
+    }
+
+    #[test]
+    fn test_config_dev_verify_commands_default_and_blank() {
+        let mut value = serde_json::to_value(PoriaConfig::default()).unwrap();
+        value.as_object_mut().unwrap().remove("dev_verify_commands");
+        let parsed: PoriaConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.effective_dev_verify_commands(), None);
+
+        let blank = PoriaConfig {
+            dev_verify_commands: Some("  \n".into()),
+            ..PoriaConfig::default()
+        };
+        assert_eq!(blank.effective_dev_verify_commands(), None);
+        assert_eq!(
+            PoriaConfig {
+                dev_verify_commands: Some("pnpm typecheck\npnpm test --run".into()),
+                ..PoriaConfig::default()
+            }
+            .effective_dev_verify_commands(),
+            Some("pnpm typecheck\npnpm test --run")
         );
     }
 

@@ -212,6 +212,12 @@ impl Skill for GenCodeSkill {
             return Err(guard.block_error_message().into());
         }
 
+        crate::dev_verify::run_frontend_verify(
+            Path::new(&frontend_worktree),
+            extra_nonempty(&input, "dev_verify_commands"),
+        )
+        .await?;
+
         Ok(SkillOutput {
             output: json!({
                 "taskPath": feature_ctx.artifact_path(ARTIFACT_TASK),
@@ -222,6 +228,7 @@ impl Skill for GenCodeSkill {
                 "addedDependencies": agent_output.added_dependencies,
                 "trdScope": config.allowed_paths,
                 "guardPass": guard.pass,
+                "localVerifyPass": true,
                 "guardViolations": guard.violations,
                 "agentSessionId": result.session_id,
                 "costUsd": result.cost_usd,

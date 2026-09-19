@@ -51,6 +51,7 @@ export function SettingsPage() {
     form.setFieldsValue({
       ...config,
       claude_path: config.claude_path ?? "",
+      dev_verify_commands: config.dev_verify_commands ?? "",
     });
   }, [config, form]);
 
@@ -81,6 +82,7 @@ export function SettingsPage() {
       const payload: AppConfig = {
         ...values,
         claude_path: emptyToNull(values.claude_path),
+        dev_verify_commands: emptyToNull(values.dev_verify_commands),
       };
       setSaving(true);
       await updateConfig(payload);
@@ -133,6 +135,17 @@ export function SettingsPage() {
           name="claude_path"
         >
           <Input allowClear placeholder={probe?.resolvedPath ?? "/opt/homebrew/bin/claude"} />
+        </Form.Item>
+        <Form.Item
+          extra="每行一条，在前端 worktree 里跑。留空则按 package.json 约定（至少 typecheck；有非 watch 测试脚本则跑测试）。"
+          label="Dev 本地验证命令"
+          name="dev_verify_commands"
+        >
+          <Input.TextArea
+            allowClear
+            autoSize={{ maxRows: 6, minRows: 3 }}
+            placeholder={"pnpm typecheck\npnpm exec vitest run"}
+          />
         </Form.Item>
         <Form.Item>
           <Flex gap={token.marginXS} wrap="wrap">

@@ -2538,6 +2538,14 @@ async fn run_dev_stage(
         "worktree_path".into(),
         serde_json::Value::String(worktree_str),
     );
+    if let Some(commands) =
+        poria_infrastructure::config::load_config(None).effective_dev_verify_commands()
+    {
+        extra.insert(
+            "dev_verify_commands".into(),
+            serde_json::Value::String(commands.to_string()),
+        );
+    }
 
     let ctx = SkillContext {
         pipeline_id: pipeline.id.clone(),
