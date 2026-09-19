@@ -13,8 +13,13 @@ use crate::claude_prompt::{
     backend_dir, backend_trd_url, build_claude_skill_prompt, extra_nonempty, frontend_base_branch,
     resolve_feature_dir, resolve_workspace_cwd, SKILL_CODE_REVIEW,
 };
+use crate::cr_findings::mr_notes_from_cr;
 use crate::error::SkillError;
 use crate::fixture::is_fixture_mode;
+
+/// Short reviewer identity for `claude --system-prompt`. Procedure stays in SKILL.md.
+pub const CR_REVIEWER_SYSTEM_PROMPT: &str =
+    "你是独立代码评审者，不是本次变更的作者。禁止沿用 gen-code 会话。不要改业务代码。安全与覆盖率以扫描报告为准，禁止自打分。";
 
 pub struct CodeReviewSkill {
     metadata: CapabilityMetadata,
@@ -52,6 +57,8 @@ fn fixture_output() -> SkillOutput {
             "crReportPath": "/tmp/poria-fixture/project/CR_REPORT.md",
             "crScore": "A",
             "findings": [],
+            "mrNotes": [],
+            "independentReviewer": true,
             "securityPass": true,
             "securitySource": "npm_audit",
             "securityScanPassed": true
@@ -145,8 +152,8 @@ impl Skill for CodeReviewSkill {
         let agent_input = AgentTaskInput {
             prompt,
             worktree_path: workspace_path,
-            system_prompt: None,
-            model: None,
+            system_prompt: Some(CR_REVIEWER_SYSTEM_PROMPT.into()),
+            model: extra_nonempty(&input, "cr_model").map(str::to_string),
             max_budget_usd: Some(5.0),
             max_turns: Some(30),
             timeout_ms: Some(15 * 60_000),
@@ -176,6 +183,7 @@ impl Skill for CodeReviewSkill {
         let cr_score = extract_cr_score(&cr_body)
             .or_else(|| result.result.as_deref().and_then(extract_cr_score))
             .unwrap_or_else(|| "B+".into());
+        let mr_notes = mr_notes_from_cr(&cr_body);
 
         let security =
             crate::quality_gates::collect_security_scan(Path::new(&frontend_worktree)).await;
@@ -189,6 +197,8 @@ impl Skill for CodeReviewSkill {
                 "crReportPath": feature_ctx.artifact_path(ARTIFACT_CR),
                 "crExists": true,
                 "crScore": cr_score,
+                "mrNotes": mr_notes,
+                "independentReviewer": true,
                 "securityPass": security.pass,
                 "securitySource": security.source,
                 "securityHigh": security.high,
@@ -204,11 +214,18 @@ impl Skill for CodeReviewSkill {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_cr_score;
+    use super::*;
 
     #[test]
     fn extract_cr_score_prefers_b_plus_before_b() {
         assert_eq!(extract_cr_score("建议: B+").as_deref(), Some("B+"));
         assert_eq!(extract_cr_score("评分：A").as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn reviewer_system_prompt_is_independent() {
+        assert!(CR_REVIEWER_SYSTEM_PROMPT.contains("独立"));
+        assert!(CR_REVIEWER_SYSTEM_PROMPT.contains("gen-code"));
+        assert!(CR_REVIEWER_SYSTEM_PROMPT.contains("禁止自打分"));
     }
 }

@@ -66,6 +66,16 @@ fn build_cli_args(prompt: &str, options: &AgentQueryOptions) -> Vec<String> {
         args.push(sys_prompt.clone());
     }
 
+    if let Some(model) = options
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        args.push("--model".into());
+        args.push(model.to_string());
+    }
+
     if !options.allowed_tools.is_empty() {
         let tools = options.allowed_tools.join(",");
         args.push("--tools".into());
@@ -273,6 +283,11 @@ mod tests {
         assert!(args.contains(&"Agent,Task,Bash,Glob,WebFetch,WebSearch".to_string()));
         assert!(args.contains(&"--max-turns".to_string()));
         assert!(args.contains(&"20".to_string()));
+        assert!(args.contains(&"--model".to_string()));
+        assert!(args.contains(&"sonnet".to_string()));
+        assert!(!args
+            .iter()
+            .any(|arg| arg == "--resume" || arg == "--continue"));
     }
 
     #[test]

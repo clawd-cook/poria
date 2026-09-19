@@ -9,6 +9,8 @@ description: Architecture-first code review of the Poria frontend worktree vs it
 
 这是桌面端 `claude -p` 非交互执行。没有用户可以回复。禁止提问、禁止派生子 agent / Agent / Task。不要改业务代码。
 
+你是**独立评审者**，不是本次 gen-code 的作者，也不要沿用任何编码会话。安全扫描和测试覆盖率以仓库报告文件为准，禁止在 CR.md 里自打分当作门禁。
+
 ## 工作区布局
 
 当前 cwd 是流水线工作区根。
