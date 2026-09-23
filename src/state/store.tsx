@@ -8,6 +8,7 @@ import {
   type Dispatch,
 } from "react";
 
+import { loadHitlAutoNavigate } from "../lib/hitlPrefs";
 import { getAuthStatus, getConfig, listPipelines, listRepos } from "../lib/tauri";
 import type {
   PipelineSummary,
@@ -20,8 +21,18 @@ import type {
   StreamChunk,
   ViewType,
   RegisteredRepo,
+  UiSurface,
+  WorkbenchTab,
 } from "../lib/types";
 import type { Action } from "./actions";
+
+export interface AppUiState {
+  filter: string | null;
+  hitlAutoNavigate: boolean;
+  surface: UiSurface;
+  view: ViewType;
+  workbenchTab: WorkbenchTab;
+}
 
 export interface AppState {
   pipelines: PipelineSummary[];
@@ -41,7 +52,14 @@ export interface AppState {
   channels: ChannelInfo[];
   streamOutput: Record<string, StreamChunk[]>;
   repos: RegisteredRepo[];
-  ui: { filter: string | null; view: ViewType };
+  ui: AppUiState;
+}
+
+function coerceView(view: string): ViewType {
+  if (view === "repos" || view === "settings") {
+    return view;
+  }
+  return "home";
 }
 
 const initialState: AppState = {
@@ -57,8 +75,30 @@ const initialState: AppState = {
   channels: [],
   streamOutput: {},
   repos: [],
-  ui: { filter: null, view: "home" },
+  ui: {
+    filter: null,
+    hitlAutoNavigate: loadHitlAutoNavigate(),
+    surface: "list",
+    view: "home",
+    workbenchTab: "trajectory",
+  },
 };
+
+function retainHumanRequest(
+  state: AppState,
+  nextPipelineId: string | null,
+): AppState["humanRequest"] {
+  if (!state.humanRequest) {
+    return null;
+  }
+  if (nextPipelineId === null) {
+    return state.humanRequest;
+  }
+  if (state.humanRequest.pipelineId === nextPipelineId) {
+    return state.humanRequest;
+  }
+  return null;
+}
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -95,17 +135,29 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       };
 
-    case "pipelineSelected":
+    case "pipelineSelected": {
       if (action.id === state.selectedPipelineId) {
-        return { ...state, humanRequest: null };
+        return {
+          ...state,
+          ui: {
+            ...state.ui,
+            surface: action.id ? "workbench" : "list",
+          },
+        };
       }
       return {
         ...state,
         events: [],
-        humanRequest: null,
+        humanRequest: retainHumanRequest(state, action.id),
         pipelineDetail: null,
         selectedPipelineId: action.id,
+        ui: {
+          ...state.ui,
+          surface: action.id ? "workbench" : "list",
+          workbenchTab: action.id ? state.ui.workbenchTab : state.ui.workbenchTab,
+        },
       };
+    }
 
     case "detailLoaded":
       return { ...state, pipelineDetail: action.detail };
@@ -131,6 +183,21 @@ function reducer(state: AppState, action: Action): AppState {
               }
             : pipeline,
         ),
+      };
+
+    case "openHitlWorkbench":
+      return {
+        ...state,
+        events: action.pipelineId === state.selectedPipelineId ? state.events : [],
+        pipelineDetail:
+          action.pipelineId === state.selectedPipelineId ? state.pipelineDetail : null,
+        selectedPipelineId: action.pipelineId,
+        ui: {
+          ...state.ui,
+          surface: "workbench",
+          view: "home",
+          workbenchTab: "confirm",
+        },
       };
 
     case "humanRequestDismissed":
@@ -164,7 +231,25 @@ function reducer(state: AppState, action: Action): AppState {
     case "viewChanged":
       return {
         ...state,
-        ui: { ...state.ui, view: action.view === "demands" ? "home" : action.view },
+        ui: { ...state.ui, view: coerceView(action.view) },
+      };
+
+    case "surfaceChanged":
+      return {
+        ...state,
+        ui: { ...state.ui, surface: action.surface },
+      };
+
+    case "workbenchTabChanged":
+      return {
+        ...state,
+        ui: { ...state.ui, workbenchTab: action.tab },
+      };
+
+    case "hitlAutoNavigateChanged":
+      return {
+        ...state,
+        ui: { ...state.ui, hitlAutoNavigate: action.enabled },
       };
 
     case "reposHydrated":
@@ -248,6 +333,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         detail: string;
       }>("human:request", (e) => {
         dispatch({ type: "humanRequest", ...e.payload });
+        if (loadHitlAutoNavigate()) {
+          dispatch({ pipelineId: e.payload.pipelineId, type: "openHitlWorkbench" });
+        }
       }),
       listen<{ running: boolean; error?: string }>("sidecar:status", (e) => {
         dispatch({ type: "sidecarStatus", ...e.payload });

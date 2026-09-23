@@ -185,6 +185,7 @@ export function StartPipelineWizard({
       dispatch({ pipelines, type: "hydrate" });
       dispatch({ type: "viewChanged", view: "home" });
       dispatch({ id, type: "pipelineSelected" });
+      dispatch({ tab: "trajectory", type: "workbenchTabChanged" });
       toast.success("已创建流水线并开始自动执行");
       onClose();
     } catch (error) {

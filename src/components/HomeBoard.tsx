@@ -1,4 +1,3 @@
-import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -6,6 +5,7 @@ import { isAuthExpiredMessage } from "@/lib/auth";
 import { invokeErrorMessage } from "@/lib/errors";
 import { pipelineHitlLane, type HitlLane } from "@/lib/hitlLane";
 import { issueClassLabel } from "@/lib/issueClass";
+import { countAttentionPipelines } from "@/lib/pipelineViewModel";
 import { demandTaskKey } from "@/lib/taskKey";
 import { listDemands, resolveDemandLink, startLogin } from "@/lib/tauri";
 import {
@@ -19,8 +19,8 @@ import {
 import { useStore } from "@/state/store";
 
 import { DemandProjectDrawer } from "./DemandProjectDrawer";
+import { DemandWorkbench } from "./DemandWorkbench";
 import { EmptyState } from "./EmptyState";
-import { PipelineDetail } from "./PipelineDetail";
 import { PipelineStatsPanel } from "./PipelineStatsPanel";
 import { Spinner } from "./Spinner";
 import { StartPipelineWizard } from "./StartPipelineWizard";
@@ -149,7 +149,7 @@ function pipelineToCard(pipeline: PipelineSummary): BoardCard {
 export function HomeBoard() {
   const { dispatch, state } = useStore();
   const loggedIn = state.auth.logged_in && state.auth.cookie_valid;
-  const boardVisible = state.ui.view === "home" || state.ui.view === "demands";
+  const boardVisible = state.ui.view === "home";
 
   const [keywordInput, setKeywordInput] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -165,7 +165,12 @@ export function HomeBoard() {
   const [linkInput, setLinkInput] = useState("");
   const [linkLoading, setLinkLoading] = useState(false);
   const laneRef = useRef<HTMLDivElement>(null);
-  const showLane = !state.selectedPipelineId;
+  const showLane = state.ui.surface === "list";
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const attentionCount = countAttentionPipelines(
+    state.pipelines,
+    state.humanRequest?.pipelineId ?? null,
+  );
 
   useEffect(() => {
     if (!showLane) {
@@ -345,17 +350,11 @@ export function HomeBoard() {
     }
   }
 
-  if (state.selectedPipelineId) {
+  if (state.ui.surface === "workbench" && state.selectedPipelineId) {
     return (
       <div className="flex h-full flex-col">
-        <div className="px-4 pt-3">
-          <Button onClick={() => dispatch({ id: null, type: "pipelineSelected" })} variant="ghost">
-            <ArrowLeft aria-hidden />
-            返回看板
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto">
-          <PipelineDetail />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <DemandWorkbench />
         </div>
         <StartPipelineWizard demand={starting} onClose={() => setStarting(null)} />
         <DemandProjectDrawer demand={viewing} onClose={() => setViewing(null)} />
@@ -395,6 +394,21 @@ export function HomeBoard() {
           />
           <Label htmlFor="accepted-by-me">由我受理</Label>
         </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={attentionOnly}
+            id="attention-only"
+            onCheckedChange={(value) => setAttentionOnly(value === true)}
+          />
+          <Label htmlFor="attention-only">
+            待我处理
+            {attentionCount > 0 ? (
+              <Badge className="ml-1" variant="destructive">
+                {attentionCount}
+              </Badge>
+            ) : null}
+          </Label>
+        </div>
         <form
           className="flex min-w-[280px] flex-1 gap-2"
           onSubmit={(event) => {
@@ -415,90 +429,102 @@ export function HomeBoard() {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto" ref={laneRef}>
-        <BoardColumn count={loggedIn ? unstartedCards.length : createdCards.length} label="未开始">
-          {!loggedIn ? (
-            <>
-              <EmptyState
-                action={<Button onClick={() => void startLogin()}>登录</Button>}
-                description="登录后查看行云中尚未开工的任务"
-              />
-              {createdCards.map((card) => (
-                <KanbanCard
-                  card={card}
-                  key={card.key}
-                  onOpenDocs={() => setViewing(card.demand)}
-                  onSelect={() => openCard(card)}
-                />
-              ))}
-            </>
-          ) : (
-            <>
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertDescription className="flex flex-col gap-2">
-                    <span>{error}</span>
-                    <div className="flex gap-2">
-                      {isAuthExpiredMessage(error) ? (
-                        <Button onClick={() => void startLogin()} size="sm" variant="outline">
-                          登录
-                        </Button>
-                      ) : null}
-                      <Button onClick={() => setReloadToken((count) => count + 1)} size="sm">
-                        重试
-                      </Button>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-              {loading ? <Spinner label="加载需求..." /> : null}
-              {unstartedCards.map((card) => (
-                <KanbanCard
-                  card={card}
-                  key={card.key}
-                  onOpenDocs={() => setViewing(card.demand)}
-                  onSelect={() => openCard(card)}
-                />
-              ))}
-              {!loading && !error && unstartedCards.length === 0 ? (
+        {!attentionOnly ? (
+          <BoardColumn
+            count={loggedIn ? unstartedCards.length : createdCards.length}
+            label="未开始"
+          >
+            {!loggedIn ? (
+              <>
                 <EmptyState
-                  description={
-                    acceptedByMe ? "暂无由你受理的未开始任务" : "暂无与你相关的未开始任务"
-                  }
+                  action={<Button onClick={() => void startLogin()}>登录</Button>}
+                  description="登录后查看行云中尚未开工的任务"
                 />
-              ) : null}
-              {loggedIn && (page?.total ?? 0) > pageSize ? (
-                <div className="flex items-center justify-between gap-2" data-board-interactive="">
-                  <Button
-                    disabled={(page?.current ?? current) <= 1}
-                    onClick={() => setCurrent((page?.current ?? current) - 1)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    上一页
-                  </Button>
-                  <span className="text-muted-foreground text-xs">
-                    {page?.current ?? current} / {Math.ceil((page?.total ?? 0) / pageSize)}
-                  </span>
-                  <Button
-                    disabled={
-                      (page?.current ?? current) >= Math.ceil((page?.total ?? 0) / pageSize)
+                {createdCards.map((card) => (
+                  <KanbanCard
+                    card={card}
+                    key={card.key}
+                    onOpenDocs={() => setViewing(card.demand)}
+                    onSelect={() => openCard(card)}
+                  />
+                ))}
+              </>
+            ) : (
+              <>
+                {error ? (
+                  <Alert variant="destructive">
+                    <AlertDescription className="flex flex-col gap-2">
+                      <span>{error}</span>
+                      <div className="flex gap-2">
+                        {isAuthExpiredMessage(error) ? (
+                          <Button onClick={() => void startLogin()} size="sm" variant="outline">
+                            登录
+                          </Button>
+                        ) : null}
+                        <Button onClick={() => setReloadToken((count) => count + 1)} size="sm">
+                          重试
+                        </Button>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                {loading ? <Spinner label="加载需求..." /> : null}
+                {unstartedCards.map((card) => (
+                  <KanbanCard
+                    card={card}
+                    key={card.key}
+                    onOpenDocs={() => setViewing(card.demand)}
+                    onSelect={() => openCard(card)}
+                  />
+                ))}
+                {!loading && !error && unstartedCards.length === 0 ? (
+                  <EmptyState
+                    description={
+                      acceptedByMe ? "暂无由你受理的未开始任务" : "暂无与你相关的未开始任务"
                     }
-                    onClick={() => {
-                      setCurrent((page?.current ?? current) + 1);
-                      setPageSize(page?.page_size ?? pageSize);
-                    }}
-                    size="sm"
-                    variant="outline"
+                  />
+                ) : null}
+                {loggedIn && (page?.total ?? 0) > pageSize ? (
+                  <div
+                    className="flex items-center justify-between gap-2"
+                    data-board-interactive=""
                   >
-                    下一页
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          )}
-        </BoardColumn>
+                    <Button
+                      disabled={(page?.current ?? current) <= 1}
+                      onClick={() => setCurrent((page?.current ?? current) - 1)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      上一页
+                    </Button>
+                    <span className="text-muted-foreground text-xs">
+                      {page?.current ?? current} / {Math.ceil((page?.total ?? 0) / pageSize)}
+                    </span>
+                    <Button
+                      disabled={
+                        (page?.current ?? current) >= Math.ceil((page?.total ?? 0) / pageSize)
+                      }
+                      onClick={() => {
+                        setCurrent((page?.current ?? current) + 1);
+                        setPageSize(page?.page_size ?? pageSize);
+                      }}
+                      size="sm"
+                      variant="outline"
+                    >
+                      下一页
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </BoardColumn>
+        ) : null}
 
-        {LOCAL_COLUMNS.map((column) => {
+        {LOCAL_COLUMNS.filter((column) =>
+          attentionOnly
+            ? column.key === "confirm" || column.key === "review" || column.key === "blocked"
+            : true,
+        ).map((column) => {
           const items = filteredPipelines.filter(column.match).map(pipelineToCard);
           return (
             <BoardColumn count={items.length} key={column.key} label={column.label}>
@@ -510,6 +536,9 @@ export function HomeBoard() {
                   onSelect={() => openCard(card)}
                 />
               ))}
+              {attentionOnly && items.length === 0 ? (
+                <EmptyState description="该列暂无待处理项" />
+              ) : null}
             </BoardColumn>
           );
         })}

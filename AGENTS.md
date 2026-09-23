@@ -32,7 +32,7 @@ poria/
 
 Frontend alias: `@/*` → `./src/*` (`tsconfig.json`; Vite does not need a special alias beyond this).
 
-Shell views (`src/components/Shell.tsx`): 看板 `home`, 渠道 `channels`, 技能 `skills`, 仓库 `repos`, 工作区 `workspace`, 设置 `settings`. There is no separate 需求 tab. Tabs stay mounted via `PersistentTab`.
+Shell views (`src/components/Shell.tsx`): 需求 `home`（列表 ↔ 需求工作台）、仓库 `repos`、设置 `settings`. 渠道 / 技能 / 独立工作区已移出主航道（工作区并入工作台切面）. Tabs stay mounted via `PersistentTab`.
 
 ### Crate dependency direction (do not invert)
 

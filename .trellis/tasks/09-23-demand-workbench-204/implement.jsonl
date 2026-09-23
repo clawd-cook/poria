@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend checklist and delivery contracts"}
+{"file": ".trellis/spec/frontend/visual-theme.md", "reason": "Shell chrome PageFrame tokens"}
+{"file": ".trellis/spec/frontend/pipeline-workspace.md", "reason": "workspacePath vs worktree and project docs"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "Must verify in poria-desktop window"}
+{"file": "docs/versions/2.0.4/PRD.md", "reason": "Product PRD for 2.0.4 workbench"}

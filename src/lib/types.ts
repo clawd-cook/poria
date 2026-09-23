@@ -155,14 +155,15 @@ export interface ChannelInfo {
   version: string;
 }
 
-export type ViewType =
-  | "channels"
-  | "demands"
-  | "home"
-  | "repos"
-  | "settings"
-  | "skills"
-  | "workspace";
+/** Shell primary views. Legacy keys coerce in the reducer. */
+export type ViewType = "home" | "repos" | "settings";
+
+/** Legacy view keys still accepted from older sessions / deep links. */
+export type LegacyViewType = ViewType | "channels" | "demands" | "skills" | "workspace";
+
+export type WorkbenchTab = "confirm" | "docs" | "trajectory" | "workspace";
+
+export type UiSurface = "list" | "workbench";
 
 export type CloneStatus = "cloning" | "failed" | "ready";
 
