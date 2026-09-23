@@ -1,0 +1,35 @@
+{
+  "_doc": "workflow-engine 项目级配置：项目类型 + 默认 profile + 测试目标环境 + 全局单测开关。project_type ∈ backend | frontend，由 init 按脚手架类型写死（模板缺省 backend），是项目级固定属性、与 task 无关，供 AI 查 `cli.py project-type` 判前后端血统。编排 profile 定义拆分到同目录 profile/<名>.json（每文件一份，profile 名=文件名 stem）。字段语义见 docs/test-knowledge/测试物料获取指南.md。init 读 default_profile 当默认编排，--profile <名> 对单个任务临时切换；tty 下进自助向导选 profile + 收集环境（范围/HTTP域名/JSF别名/eone），落 state.json 的 pipeline（冻结）+ roles（冻结）+ env 块。选中的 profile 在 init 时冻结进 state.json，后续引擎升级不影响进行中任务。test_env.has_dedicated=false 时向导跳过环境提问钉 gamma，且 --env test/local 被拒。",
+  "test_env": {
+    "has_dedicated": true,
+    "target": "test",
+    "note": "写物料/部署/回归必须在命令里显式钉死的环境。无独立测试环境的应用填 gamma（预发即测试环境）并把 has_dedicated 设 false（此时 init 向导跳过环境提问、拒绝 --env test/local）。target ∈ test | gamma。读请求不受此约束（任何环境都绿）。"
+  },
+  "_doc_profiles": "profiles 定义拆分到同目录 profile/<名>.json——每文件一份完全独立的编排，profile 名 = 文件名 stem（standard-openspec.json → standard-openspec）。profiles 全部来自项目级 .workflow/profile/；用户自写 profile 直接放该目录即可（文件名即 profile 名，无需前缀），`lb init` 只覆盖框架自带的几份、保留用户自写文件（且保留用户对框架自带 profile 的 enabled 开关调整）。列全部可用模式跑 /workflow-engine list-profiles。单份 profile 对象字段 {desc, start_node, roles, nodes, has_e2etest, enabled}，节点集/顺序/闸门互不推导、零共享。default_profile（本文件）指定 init 不带 --profile 时用哪份，须指向存在且 enabled 的 profile。引擎只读节点声明字段、不认节点名，故可自由定义节点集/顺序/闸门编排出不同开发模式。profile 对象字段：desc（该模式是什么、含哪些环节、意图；声明能力不判适用人群，供 onboarding/向导展示，引擎不消费）；start_node（该模式的起步/触发节点名，如 feature 流用 workflow-explore、bug 流用 workflow-bugfix；这是状态机外、init 之前跑的一道需求/问题澄清节点，刻意不加载编排细节保上下文干净，谈清后由人手动 init 进流程；单个节点名字符串，不进 state、不门禁，由 onboarding/init 守卫读它导航；可省）；roles（产物区域语义名 → 落盘路径，路径含 <task> 占位，init 时替换真实任务名冻进 state.roles，供 `roles <task>` 命令按需查、各节点只引用 role 名不复述路径）；nodes（必填，有序节点对象数组，走引擎节点编排）；has_e2etest（可选布尔，缺省 true——该模式是否含端到端自动化测试。false 时 init 向导跳过全部环境收集、env 钉 target=local；deploy 据此只做 commit/push 不触发真部署（local 语义 = 代码照常提交、只关「要不要触发部署」这一个开关，不再是「不提交」）；因为无自动化测试、无需触发部署，测试环境坐标（范围/域名/别名/eone）无处消费。显式 --env/--scope 等 flag 仍尊重覆盖）；enabled（可选布尔，缺省 true——该模式是否对用户可见可选。false 时不出现在 list-profiles / workflow-start 选单里（用户拉不到），但 init --profile <名> 显式指定仍可用；仅作展示层过滤，引擎/校验层照常认所有已定义 profile；冻结进 state.json 后不参与运行时）。单节点字段：node（必填，kebab-case，唯一）；skill（该节点跑的 skill，单串或数组按序，缺省=[node]）；exit_gate/entry_gate（闸门档 auto/confirm/confirm-locked 三档，exit_gate 缺省 confirm-locked、entry_gate 缺省 auto；confirm-locked 为锁定人工闸，不可被 run-loop 自驱降级）；autopilot（该节点能否被 run-loop 自驱连跑，缺省 false=停人只能人驱动；只有机械节点才显式标 true；execution=external-window 不能标 autopilot:true，否则报错）；execution（inline/subagent/external-window，缺省 inline）；hooks（{enter,exit} skill 引用，任意节点可挂）；feedback（{can_report 能否报 issue, reroute_options 本节点问题可定向回退到哪些节点（空=只能原地修）, rerouteable 能否作回退目标缺省 true}，整块可省）。校验只拦引用错误（reroute_options 指向不存在/不可回退节点、闸门/execution 非法值、external-window 标了 autopilot:true、profile 是旧节点数组结构、roles 类型错、start_node 类型错），不做拓扑合理性假设。坏配置 loud fail。废弃旧顶层键 pipeline/defaults/node_gates/node_hooks（检测到即报错提示迁移）；profile 旧数组结构（值是 list）也 loud fail 提示升级为对象。",
+  "_doc_unittest": "项目级团队约定：本项目要不要为需求交付生成全局单元测试（true=生成，false=不生成，缺省视为 false）。",
+  "unittest": false,
+  "auto_upgrade": true,
+  "upgrade_channel": "stable",
+  "default_profile": "develop-mode-openspec",
+  "project_type": "frontend",
+  "_doc_agents": "本项目要铺哪些 AI agent 的入口（skill 池目录 + 顶层常驻指令文档）。claude 恒在——框架必选项，任何 flag 都摘不掉，对应 .claude/skills/ + .claude/CLAUDE.md；codex 是候选项，对应 .agents/skills/ + 根 AGENTS.md（Codex 不读 .claude/，故须独立铺一份；SKILL.md 内容两边零差异）。本字段是记忆：`lb init --with-codex` 加入、`lb init --without-codex` 移除，之后 init 不带 flag 时按本字段铺——包括引擎自动刷模板走的 `lb init --yes`，所以开过一次就会一直跟着更新。非法值（非数组/未知名/空）自动退化为 [\"claude\"]，不报错。移除 codex 只停止后续跟随更新，已铺的 .agents/skills 与 AGENTS.md 不会被删。",
+  "agents": [
+    "claude"
+  ],
+  "_doc_lb_version": "lb_version 每次init后更新",
+  "lb_version": "1.3.1",
+  "_doc_app_info": "JDOS 应用信息，项目级、一次性低频采集。落盘 key 统一 snake_case（自有状态一律 snake_case；外部接口的驼峰在采集边界翻译，不原样存）。采集流程：① 问用户应用名（appName；经验：真实应用名是裸名如 `wx-strategy-platform`，但有的场景/日志/用户口头会说成带 `jdos_` 前缀的形式如 `jdos_wx-strategy-platform`——那不是应用名本身、是拼出来的展示形式）；② 跑 `lbcli xingyun app-info --app <裸名> -f json`；③ 把返回值按 key 映射填入下方——接口返回的驼峰 key 翻成 snake_case 落盘：app→app、appId→app_id、nickname→nickname、systemName→system_name、systemCnName→system_cn_name、appType→app_type、level→level、description→description，policy 保持不动。app 字段只存裸名。policy 三态控采集强度：required（后端基本 100% 有，init 未采时硬阻断）/ suggested（前端不一定有，init 未采只提示不阻断）/ off（纯库/工具项目无 JDOS 应用，永久免采）。policy 由系统默认写入，或者用户自己手动修改，是唯一事实源——采集时保持这个值不动，只有确认本项目无 JDOS 应用时才显式改成 off；不要手动清空，清空或写非法值会让任务级 init 直接 loud fail 并提示重新跑一次 `lb init`。失败处理（区分「暂时拿不到」vs「本来就没有」，任何失败都不许编造字段）：调用失败/无权限（网络/未登录/超时/浏览器起不来/账号看不了）=信息有但此刻拿不到→报明原因让用户处理后重试，确拿不到用 `init --skip-app-info` 逃生（留痕告警、下游退化为询问），使用--skip-app-info一定要获得用户同意才可以，不静默填空；appName 不存在=输入错或本项目无 JDOS 应用→拼写错误让用户核对重试。下游判定「是否已采集」要求 app + app_id 同时非空（app 允许兜底回显裸输入、app_id 只来自接口真实返回，半失败也不会被误判成已采）；除这两个字段外其余为背景信息，采到什么填什么、缺失留空，下游读取须容忍缺失并退回原有交互。",
+  "app_info": {
+    "policy": "suggested",
+    "app": "",
+    "app_id": "",
+    "nickname": "",
+    "system_name": "",
+    "system_cn_name": "",
+    "app_type": "",
+    "level": "",
+    "description": ""
+  },
+  "_doc_remote_config_files": "三态。null/unknown=未确认（缺省，问一次后 --set）；true=配置在行云，远程优先；false=全在本地，不再问。查/改：`python3 .workflow/engine/cli.py remote-config-files` [`--set unknown|true|false`]。",
+  "remote_config_files": null
+}
