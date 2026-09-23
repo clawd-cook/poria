@@ -13,6 +13,12 @@
       "skillPath": "plugins/backend-development/skills/architecture-patterns/SKILL.md",
       "computedHash": "a66aaa5aa49b75bec12b6270dcde8794b1f0cc75fbb9ecb999e43f8b723b461f"
     },
+    "create-prd": {
+      "source": "phuryn/pm-skills",
+      "sourceType": "github",
+      "skillPath": "pm-execution/skills/create-prd/SKILL.md",
+      "computedHash": "5c242d3abb9508f59021ed22936230e555971feab690cbf2a90142e06d10e7ae"
+    },
     "gracker-writing": {
       "source": "Gracker/gracker-writing",
       "sourceType": "github",
