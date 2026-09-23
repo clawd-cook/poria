@@ -12,6 +12,7 @@ import {
   confirmMergeReady,
   confirmTrd,
   humanLoopRespond,
+  pipelineAdvance,
   readDemandProjectFile,
   startLogin,
 } from "@/lib/tauri";
@@ -49,6 +50,8 @@ export function HumanLoopCard({
   const [trdOpen, setTrdOpen] = useState(false);
   const [trdContent, setTrdContent] = useState("");
   const [trdLoading, setTrdLoading] = useState(false);
+  const [annotateNote, setAnnotateNote] = useState("");
+  const [skipForce, setSkipForce] = useState(false);
   const authExpired = isAuthExpiredIssue(issueClass) || isAuthExpiredMessage(detail);
   const p0Blocked = isRequirementAmbiguousIssue(issueClass) || isP0UnansweredMessage(detail);
   const trdBlocked = isTrdUnconfirmedIssue(issueClass) || isTrdUnconfirmedMessage(detail);
@@ -61,6 +64,7 @@ export function HumanLoopCard({
     isQualityGateBlock(issueClass, detail);
   const waitingMerge =
     issueClassKey(issueClass) === "waiting_merge" || detail.includes("不会自动点合并");
+  const awaitingAdvance = issueClassKey(issueClass) === "awaiting_advance";
   const routedTitle = issueClassTitle(issueClass, detail);
 
   async function handleAction(action: string) {
@@ -70,6 +74,23 @@ export function HumanLoopCard({
       dispatch({ pipelineId, type: "humanRequestDismissed" });
     } catch (error) {
       toast.error(invokeErrorMessage(error, "处理协助请求失败"));
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function handleAdvance(action: string, force = false) {
+    setLoading(action);
+    try {
+      await pipelineAdvance(pipelineId, action, action === "annotate" ? annotateNote : null, force);
+      if (action !== "annotate") {
+        dispatch({ pipelineId, type: "humanRequestDismissed" });
+      } else {
+        toast.success("已记录补充上下文，确认后点「继续」进入下一阶段");
+        setAnnotateNote("");
+      }
+    } catch (error) {
+      toast.error(invokeErrorMessage(error, "阶段推进失败"));
     } finally {
       setLoading(null);
     }
@@ -140,17 +161,19 @@ export function HumanLoopCard({
 
   const title = authExpired
     ? "SSO 已过期，流水线已挂起"
-    : p0Blocked
-      ? "P0 未答，无法进入设计"
-      : trdBlocked
-        ? "请确认前端 TRD 后再进入开发"
-        : outputGuardBlocked
-          ? "代码超出 TRD 允许范围，无法进入 CR"
-          : qualityGateBlocked
-            ? qualityGateTitle(issueClass, detail)
-            : waitingMerge
-              ? "MR 待审查人确认后合入"
-              : (routedTitle ?? "Pipeline 需要协助");
+    : awaitingAdvance
+      ? "阶段已完成，请确认后继续"
+      : p0Blocked
+        ? "P0 未答，无法进入设计"
+        : trdBlocked
+          ? "请确认前端 TRD 后再进入开发"
+          : outputGuardBlocked
+            ? "代码超出 TRD 允许范围，无法进入 CR"
+            : qualityGateBlocked
+              ? qualityGateTitle(issueClass, detail)
+              : waitingMerge
+                ? "MR 待审查人确认后合入"
+                : (routedTitle ?? "Pipeline 需要协助");
 
   return (
     <>
@@ -176,9 +199,67 @@ export function HumanLoopCard({
               <p className="text-muted-foreground text-xs">
                 {waitingMerge
                   ? detail
-                  : `${detail} 已同时通过京ME 通知；桌面或京ME 回复只处理一次。`}
+                  : awaitingAdvance
+                    ? detail
+                    : `${detail} 已同时通过京ME 通知；桌面或京ME 回复只处理一次。`}
               </p>
+              {awaitingAdvance ? (
+                <div className="grid gap-2">
+                  <textarea
+                    className="border-input bg-background min-h-16 w-full rounded-md border px-3 py-2 text-sm"
+                    onChange={(e) => setAnnotateNote(e.target.value)}
+                    placeholder="可选：补充上下文（写入下一阶段 prompt）"
+                    value={annotateNote}
+                  />
+                  <label className="text-muted-foreground flex items-center gap-2 text-xs">
+                    <input
+                      checked={skipForce}
+                      onChange={(e) => setSkipForce(e.target.checked)}
+                      type="checkbox"
+                    />
+                    跳过锁闸阶段（高风险，需勾选）
+                  </label>
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2">
+                {awaitingAdvance ? (
+                  <>
+                    <Button
+                      disabled={loading !== null}
+                      loading={loading === "continue"}
+                      onClick={() => void handleAdvance("continue")}
+                    >
+                      <Check aria-hidden />
+                      继续
+                    </Button>
+                    <Button
+                      disabled={loading !== null}
+                      loading={loading === "redo"}
+                      onClick={() => void handleAdvance("redo")}
+                      variant="outline"
+                    >
+                      <RotateCcw aria-hidden />
+                      重做
+                    </Button>
+                    <Button
+                      disabled={loading !== null || !annotateNote.trim()}
+                      loading={loading === "annotate"}
+                      onClick={() => void handleAdvance("annotate")}
+                      variant="outline"
+                    >
+                      补充上下文
+                    </Button>
+                    <Button
+                      disabled={loading !== null}
+                      loading={loading === "skip"}
+                      onClick={() => void handleAdvance("skip", skipForce)}
+                      variant="outline"
+                    >
+                      <SkipForward aria-hidden />
+                      跳过
+                    </Button>
+                  </>
+                ) : null}
                 {authExpired ? (
                   <Button
                     disabled={loading !== null}
@@ -225,7 +306,7 @@ export function HumanLoopCard({
                     确认可合并
                   </Button>
                 ) : null}
-                {waitingMerge ? null : (
+                {waitingMerge || awaitingAdvance ? null : (
                   <Button
                     disabled={loading !== null}
                     loading={loading === "resume"}
@@ -254,7 +335,7 @@ export function HumanLoopCard({
                               : "修复并重试"}
                   </Button>
                 )}
-                {waitingMerge ? null : (
+                {waitingMerge || awaitingAdvance ? null : (
                   <Button
                     disabled={loading !== null}
                     loading={loading === "skip" || loading === "skip-confirm"}

@@ -1,0 +1,34 @@
+{
+  "desc": "【vibe】基于claude原生plan模式驱动的最轻量工作流：聊清楚就干活，不写 TRD、不做代码评审/部署/转测/端到端自动化测试。思考深度不及头脑风暴，更轻量、问题少，适合 vibe coding 这种小改动、热修的场景。代码提交由开发者自行完成（archive 收尾会兜底提交）。",
+  "has_e2etest": false,
+  "start_node": "workflow-planmode",
+  "roles": {
+    "trd": "~/.claude/plans/",
+    "schema-draft": "delivery/<task>/schema/"
+  },
+  "nodes": [
+    {
+      "node": "workflow-implement",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-lint",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-unittest",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-archive",
+      "entry_gate": "confirm-locked",
+      "exit_gate": "confirm-locked",
+      "feedback": {
+        "rerouteable": false
+      }
+    }
+  ]
+}

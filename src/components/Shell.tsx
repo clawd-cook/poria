@@ -1,28 +1,21 @@
-import { FolderGit2, Home, Plug, Settings, Sparkles, SquareTerminal } from "lucide-react";
+import { FolderGit2, Home, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { countAttentionPipelines } from "@/lib/pipelineViewModel";
 import type { ViewType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 
 import { AuthStatus } from "./AuthStatus";
-import { ChannelsPage } from "./ChannelsPage";
 import { HomeBoard } from "./HomeBoard";
 import { RepoListPage } from "./RepoListPage";
 import { SettingsPage } from "./SettingsPage";
-import { SkillsPage } from "./SkillsPage";
-import { WorkspacePage } from "./WorkspacePage";
 
-const VIEW_KEYS: ViewType[] = ["channels", "home", "repos", "settings", "skills", "workspace"];
+const VIEW_KEYS: ViewType[] = ["home", "repos", "settings"];
 
-const PRIMARY_NAV = [{ icon: Home, key: "home" as const, label: "看板" }];
+const PRIMARY_NAV = [{ icon: Home, key: "home" as const, label: "需求" }];
 
-const RESOURCE_NAV = [
-  { icon: Plug, key: "channels" as const, label: "渠道" },
-  { icon: Sparkles, key: "skills" as const, label: "技能" },
-  { icon: FolderGit2, key: "repos" as const, label: "仓库" },
-  { icon: SquareTerminal, key: "workspace" as const, label: "工作区" },
-];
+const RESOURCE_NAV = [{ icon: FolderGit2, key: "repos" as const, label: "仓库" }];
 
 function isViewType(key: string): key is ViewType {
   return VIEW_KEYS.includes(key as ViewType);
@@ -43,11 +36,13 @@ function PersistentTab({ active, children }: { active: boolean; children: ReactN
 
 function NavButton({
   active,
+  badge,
   icon: Icon,
   label,
   onSelect,
 }: {
   active: boolean;
+  badge?: number;
   icon: typeof Home;
   label: string;
   onSelect: () => void;
@@ -57,22 +52,29 @@ function NavButton({
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-sm transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        active
-          ? "text-primary bg-primary/15 font-medium"
-          : "text-foreground hover:bg-black/5",
+        active ? "text-primary bg-primary/15 font-medium" : "text-foreground hover:bg-black/5",
       )}
       onClick={onSelect}
       type="button"
     >
       <Icon aria-hidden className="size-4 shrink-0" />
-      {label}
+      <span className="min-w-0 flex-1 text-left">{label}</span>
+      {badge != null && badge > 0 ? (
+        <span className="bg-primary text-primary-foreground rounded-md px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+          {badge}
+        </span>
+      ) : null}
     </button>
   );
 }
 
 export function Shell() {
   const { dispatch, state } = useStore();
-  const currentView = state.ui.view === "demands" ? "home" : state.ui.view;
+  const currentView = state.ui.view;
+  const attentionCount = countAttentionPipelines(
+    state.pipelines,
+    state.humanRequest?.pipelineId ?? null,
+  );
 
   function selectView(key: string) {
     if (isViewType(key)) {
@@ -97,6 +99,7 @@ export function Shell() {
           {PRIMARY_NAV.map((item) => (
             <NavButton
               active={currentView === item.key}
+              badge={item.key === "home" ? attentionCount : undefined}
               icon={item.icon}
               key={item.key}
               label={item.label}
@@ -132,17 +135,8 @@ export function Shell() {
         <PersistentTab active={currentView === "home"}>
           <HomeBoard />
         </PersistentTab>
-        <PersistentTab active={currentView === "channels"}>
-          <ChannelsPage />
-        </PersistentTab>
-        <PersistentTab active={currentView === "skills"}>
-          <SkillsPage />
-        </PersistentTab>
         <PersistentTab active={currentView === "repos"}>
           <RepoListPage />
-        </PersistentTab>
-        <PersistentTab active={currentView === "workspace"}>
-          <WorkspacePage />
         </PersistentTab>
         <PersistentTab active={currentView === "settings"}>
           <SettingsPage />

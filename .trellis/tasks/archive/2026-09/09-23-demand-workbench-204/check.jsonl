@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "AC against frontend contracts"}
+{"file": ".trellis/spec/frontend/tauri-desktop-testing.md", "reason": "Desktop-only IPC acceptance"}
+{"file": ".trellis/spec/frontend/visual-theme.md", "reason": "Theme regression on shell rewrite"}
+{"file": "docs/versions/2.0.4/PRD.md", "reason": "Product acceptance KR alignment"}

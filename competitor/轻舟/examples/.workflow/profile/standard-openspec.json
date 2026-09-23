@@ -1,0 +1,89 @@
+{
+  "desc": "【前端·全链路】基于openspec底层驱动的前端全流程：TRD + 编码 + CR + E2E 测试 + 转测，无部署节点（前端本地跑测试即可）。",
+  "start_node": "workflow-explore",
+  "roles": {
+    "trd": "openspec/changes/<task>/",
+    "test-plan": "delivery/<task>/test/test-plan.md",
+    "materials": "delivery/<task>/test/materials.md",
+    "schema-draft": "delivery/<task>/schema/"
+  },
+  "nodes": [
+    {
+      "node": "workflow-propose",
+      "exit_gate": "confirm-locked"
+    },
+    {
+      "node": "workflow-test-plan",
+      "exit_gate": "confirm-locked",
+      "execution": "external-window",
+      "feedback": {
+        "can_report": true,
+        "reroute_options": []
+      }
+    },
+    {
+      "node": "workflow-implement",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-lint",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-code-review",
+      "exit_gate": "auto",
+      "autopilot": true,
+      "execution": "subagent",
+      "feedback": {
+        "can_report": true,
+        "reroute_options": [
+          "workflow-implement"
+        ]
+      }
+    },
+    {
+      "node": "workflow-test-cases",
+      "exit_gate": "auto",
+      "autopilot": true,
+      "execution": "subagent",
+      "feedback": {
+        "can_report": true,
+        "reroute_options": [
+          "workflow-implement"
+        ]
+      }
+    },
+    {
+      "node": "workflow-run-autotest",
+      "exit_gate": "confirm-locked",
+      "autopilot": true,
+      "feedback": {
+        "can_report": true,
+        "reroute_options": [
+          "workflow-implement",
+          "workflow-test-cases"
+        ]
+      }
+    },
+    {
+      "node": "workflow-handoff-qa",
+      "exit_gate": "confirm-locked",
+      "feedback": {
+        "can_report": true,
+        "reroute_options": [
+          "workflow-implement"
+        ]
+      }
+    },
+    {
+      "node": "workflow-archive",
+      "entry_gate": "confirm-locked",
+      "exit_gate": "confirm-locked",
+      "feedback": {
+        "rerouteable": false
+      }
+    }
+  ]
+}

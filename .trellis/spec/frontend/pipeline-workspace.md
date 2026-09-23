@@ -12,7 +12,7 @@ Do **not** put the backend repo in `pipeline.repos`. Do **not** commit project d
 
 Rust:
 
-- `STAGE_ORDER`: `Init`, `ReviewPrd`, `Design`, `Dev`, `Cr`, `Deploy` (no `Workspace`)
+- `STAGE_ORDER`: `Init`, `ReviewPrd`/`clarify`, `Design`/`propose`, `TestPlan`, `Dev`/`implement`, `Lint`, `Cr`/`code_review`, `TestCases`, `RunAutotest`, `HandoffQa`, `Deploy`, `Archive` (12 nodes; no `Workspace`). After each success the executor stops for `awaiting_advance` until `pipeline_advance`.
 - Workspace root: `~/.poria/workspaces/<pipeline_id>/`
 - `WorktreeResource::create` — frontend `feature_<demand_code>` from `origin/<default_branch>` at `workspaces/<pipeline_id>/<frontend_name>`
 - `WorktreeResource::create_detached` — backend `git worktree add --detach` at `workspaces/<pipeline_id>/<backend_name>`

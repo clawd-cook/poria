@@ -1,0 +1,555 @@
+name: fe-spec-driven
+version: 1
+description: Frontend spec workflow — proposal → specs → design (11-chapter TRD) → tasks
+
+explore:
+  instruction: |
+    ## 前端探索额外能力
+
+    ### 需求解析
+    解析 PRD，提取前端要实现的内容（跟前端无关的不用考虑），圈定需求范围，避免做无关工作。
+    同时审视前端需求的完整性和合理性：是否有遗漏的场景、缺失的状态、矛盾的描述等，有问题向用户澄清。
+
+    ### 需求形态判定（迭代协议·粗判）
+
+    判一下这是 **greenfield（新建独立页面/模块）** 还是 **iterative（在既有页面/组件/接口上做增量）**——判据：新东西是否挂进/改动既有代码 vs 从零新建。启发式（PRD 是否引用既有页面名/既有接口/既有组件；代码库是否已有宿主）+ 存疑问用户。
+
+    **迭代**时，`context.md` 记**一行**：
+    ```
+    需求形态：iterative｜大致宿主：<改动落在哪个既有页面/功能>
+    ```
+    greenfield 记「需求形态：greenfield」一行即可。
+
+    > explore 只做**粗判 + 大致宿主**——精确的兄弟模块、寄生字段路径、挂载点**够不到**（要读代码/设计稿），留给 propose 建全「迭代协议」（见 design artifact instruction）。这里别展开。
+
+    ### 设计稿解析（有设计稿必做）—— 两拍输入机制
+
+    先拿到设计稿链接（获取优先级见下），然后走「两拍」：**拍1 轻勘察产候选清单 → 拍2 定向确认锚点**，再 spawn 取料。核心：把用户从"填空题"降级成"判断题"——工具先探、用户点头，别让用户填 nodeId。产出定义与六步流程见 `relay-design-analysis.md`。
+
+    **设计稿获取**（按优先级）：
+    1. 用户已提供地址 → 直接使用
+    2. 从 PRD/上下文提取：`relay.jd.com/file/design?...` 直链；`https://3.cn/...` 短链先 `lbcli browser resolve-url '<短链>'`；紧跟「视觉稿/设计稿」字样的链接
+    3. 均未找到 → **主动向用户索取**："未在 PRD 中找到设计稿链接，请提供 Relay 设计稿地址"
+
+    **拍1 · 轻勘察**（spawn 勘察 subagent，走 `relay-design-analysis.md` 全页解析的 勘察 + 分区）：
+    从 URL 提取 fileKey、pageId（`page_id`）、nodeId（`node_id`，可能无）传入；iterative 另传需求形态 + 已知模块锚点。subagent `maxDepth=1` 画地形（拓扑/交互稿甄别/版本歧义）+ 分区，返回**带候选答案的【待确认清单】**（候选：范围锚点 / 宿主 host / 陈列区 / 版本歧义）。
+    > **iterative 常态**：用户已给种子（代表帧 + 宿主，下方拍2 **必填门**）→ 域已圈定 → **拍1 整体勘察跳过**，直接 spawn 取料 subagent 走**模块解析**（在种子域内发现模块其余变体，**不扫全画布/不整体解析**）。拍1 只在 greenfield、或 iterative 种子不足以定位域时才需要。
+
+    **拍2 · 定向确认**（主 agent 拿清单向用户**一轮问齐**，确认式）：
+
+    | 槽位 | 触发条件 | 问法（确认式，附候选） | 兜底 |
+    |---|---|---|---|
+    | 设计稿链接 | 永远（阻塞） | 缺→索取直链（含 fileKey） | 无=停 |
+    | 种子帧（**iterative 必填门·阻塞**） | iterative 恒问 | 「这几张**代表帧**对吗？宿主页是这张吗？**若设计稿有『状态陈列区/矩阵』，优先给它的代表帧**（陈列区种子我能在同区便宜补齐其余变体）；只给整页里的模块 instance 也行，但其余状态可能得你再点」 | **缺 → 先给种子再 spawn**（工具需种子做指纹+定位）；陈列区种子→域内补齐；整页/散落种子→只认这几个态、其余靠六·收口自检列出问你、**不硬扫全画布** |
+    | 范围主帧（greenfield） | 全新页根不明 | 「主帧是这块吗？」 | 勘察·定锚点 兜底选主帧，标低置信 |
+    | 宿主帧 | 仅 iterative | 「宿主页是这张吗？(截图)」——它是下游量楼层顺序/间距的唯一真源、workflow-visual-check 的 pageNodeId | 定 host 时反向找；再找不到才索取，**不得用模块单帧顶替、不得跳过**（踩坑：楼层插反/间距贴死） |
+    | 陈列区 | 疑似有矩阵但边界不清 | 「状态都在这片吗？还有别处？」 | 全页解析枚举，六·收口自检补 |
+    | 版本 | 勘察撞见多同构 board/多方案标签 | 「用『定稿』这块吗？」 | 列各版差异辅助判 |
+
+    **四原则**：① 只问用户知道的（意图/边界），不问用户不知道的（nodeId/拓扑=工具的活）；② 确认式 > 填空式；③ 三级递进（勘察能定→不问 / 拿到候选→确认 / 拿不到→索取 / 索不到→标低置信+六·收口自检兜）；④ 一轮问齐（悬问闸友好）。
+
+    锚点确认后 → spawn 取料 subagent → 收**图层语义映射表 + 设计稿基准宽度**落 `context.md`。**全页解析**走 relay-design-analysis 取料 → 标语义 → 六 收口；**iterative（用户给了种子）**走 五 模块解析（种子域内发现其余变体）→ 六 收口，**跳全局勘察/分区、不扫全画布**。
+
+    **产出落盘**（nodeId 必须 `\d+:\d+`、禁占位；禁止主 agent 绕过 subagent 自行组装）：
+    ```markdown
+    | 序号 | 状态名称 | nodeId | 分组 | 置信度 |
+    |------|----------|--------|------|--------|
+    ```
+    未落盘或 nodeId 不合规 → 不算完成。**完整性**：映射表须枚举所有状态/数量/边界帧（含数量变体、极值/空/异常态），它是下游 `relay-component-analysis` 变体自检（闸门零）的分母，漏帧则自检也漏——宁多列待判、不静默省略（详见 relay-design-analysis 全页解析·分区 陈列区 + 六 收口自检）。
+
+    **UI 确认项**（同步写 `context.md`，仅 UI 需求必做）：
+    - **CDN 图片导出倍率**：`export_image(scale=?)`，默认 **2**（覆盖主流 2x；与 CSS px 无关，独立维度）；与用户确认
+    - **小程序渲染模式**：小程序项目确认 webview/skyline；非小程序跳过
+
+    `context.md` UI 参数落盘格式：
+    ```markdown
+    ## UI 参数
+    - 设计稿链接：https://relay.jd.com/file/design?id=<fileKey>&page_id=<pageId>&node_id=<nodeId>
+    - 设计稿基准宽度：375
+    - CDN 图片导出倍率：2
+    - 小程序渲染模式：webview
+    ```
+    > **设计稿链接必写**（含 `id=<fileKey>`）：下游 relay-component-analysis / workflow-implement（含静态集成视觉校验 runner）/ `relay-schema-gen.py` 取 `designId`（= fileKey）的唯一真源——它们独立上下文跑，缺了无从调任何 relay MCP。
+    > 设计稿基准宽度由 subagent 随映射表返回（自动识别，无需用户确认）；导出倍率/渲染模式与映射表互不依赖可并行。
+
+    **⛔ 设计稿处理禁止项**：
+    - ❌ 主 agent 直接调 `get_screenshot` / `get_design_metadata` / `get_design_context` —— 必须 subagent（**拍1 勘察也是 subagent**）
+    - ❌ 主 agent 基于截图/metadata 自行组装映射表 —— 只能 subagent 按 `relay-design-analysis.md` 产出
+    - ❌ 跳过映射表落盘直接进后续 —— 未写入 `context.md` 不算完成
+    - ❌ 用截图替代映射表（"我看了截图"≠"映射表已产出"）
+
+    ### 接口识别
+
+    需求涉及后端数据交互时，从 PRD + 用户提供的接口信息中识别依赖的接口列表 -> 记录到`context.md` 。
+    - 列出接口名称/用途
+    - **用户给的往往只是入口接口**：同一业务流的上下游接口通常也要一起对接。若有 appCode（或从 japi 链接经 `lbcli japi get-by-url` 拿到），用 `lbcli japi list-methods <appCode>` 列出同应用接口，**结合 PRD 判断哪些属于当前业务流的上下游**（如「查列表 → 查详情 → 提交」是一组），一并列入清单——但只取需求相关的，别把整个应用的接口无脑拉进来。
+    - 与用户确认列表是否完整（可能遗漏）
+
+    ### 埋点文档
+
+    **埋点文档获取**：如果用户有提供埋点文档，则以用户提供的为准，否则尝试从需求文档中提取，识别结果记录到`context.md`。无埋点需求不阻塞。
+
+    ### 组件识别
+
+    PRD 提及需接入的组件（UI 组件、业务组件、第三方库等）→ 识别结果记录到`context.md`。
+
+    ### 输入源完整性确认
+
+    进入交叉校验前逐项确认：
+    - PRD 已读
+    - 设计稿已处理（帧映射表落盘且 nodeId 合规，或用户明确确认无设计稿）
+    - 接口列表已确认
+    - 埋点已确认
+
+    任一未处理 → 先补齐。C 端项目无设计稿需用户**明确确认**才可跳过。
+    帧映射表 nodeId 不合规 → 重新 spawn subagent 从 Relay 获取，不得手动填充。
+
+    ### 交叉校验（有设计稿时必做）
+
+    PRD + 帧映射表就绪后：
+    - PRD 场景是否都有对应帧？
+    - 设计稿帧是否都有 PRD 说明？
+    - 不一致 → 向用户澄清
+    - 交叉分析结果记录到 `context.md`
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Initial proposal document outlining the change
+    template: proposal.md
+    instruction: |
+      Create the proposal document that establishes WHY this change is needed.
+
+      Sections:
+      - **Why**: 1-2 sentences on the problem or opportunity.
+      - **What Changes**: Bullet list of changes. Mark breaking changes with **BREAKING**.
+      - **Capabilities**: Identify which specs will be created or modified:
+        - **New Capabilities**: List capabilities being introduced. Each becomes a new `specs/<name>/spec.md`. Use kebab-case names.
+        - **Modified Capabilities**: List existing capabilities whose REQUIREMENTS are changing. Check `openspec/specs/` for existing spec names.
+      - **Impact**: Affected code, APIs, dependencies, or systems.
+
+      Keep it concise (1-2 pages). Focus on the "why" not the "how".
+    requires: []
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: Detailed specifications for the change
+    template: spec.md
+    instruction: |
+      Create specification files that define WHAT the system should do.
+
+      Create one spec file per capability listed in the proposal's Capabilities section.
+      - New capabilities: use the exact kebab-case name from the proposal (specs/<capability>/spec.md).
+      - Modified capabilities: use the existing spec folder name.
+
+      Delta operations (use ## headers):
+      - **ADDED Requirements**: New capabilities
+      - **MODIFIED Requirements**: Changed behavior - MUST include full updated content
+      - **REMOVED Requirements**: Deprecated features - MUST include **Reason** and **Migration**
+      - **RENAMED Requirements**: Name changes only - use FROM:/TO: format
+
+      Format requirements:
+      - Each requirement: `### Requirement: <name>` followed by description
+      - Use SHALL/MUST for normative requirements
+      - Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+      - Every requirement MUST have at least one scenario.
+
+      MODIFIED requirements: locate existing in openspec/specs/<capability>/spec.md, copy entire block, paste under MODIFIED, edit.
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: Frontend Technical Design (11-chapter TRD)
+    template: design.md
+    instruction: |
+      生成前端技术方案（TRD）
+
+      ## 核心约束
+      技术方案是整个需求实现的基础，一定要准确，下面任何一项执行不到位，都会导致最后的实现有问题，一定被打回返工，直到完全遵守：
+      - **遵守设计稿设计**必须从设计稿读取NodeId、布局、样式等内容，不得猜测样式值。
+      - **遵守接口schema**必须从 JAPI/接口文档解析接口信息，不得猜测字段。
+      - **遵守组件协议**必须从源码/类型定义/文档解析出组件正确的协议，不得假设 Props。
+
+      宁可当场向用户确认，也不能写入未经验证的猜测值。
+
+      前置依赖：先读取 explore 阶段产出的 `delivery/<task>/context.md` 中的结论
+
+      ## 输入源
+
+      | 输入 | 必要性 | 缺失策略 |
+      |---|---|---|
+      | PRD | 必须 | — |
+      | 设计稿 | C端必须 / B端可选 | 标记"无设计稿，基于 PRD 文字描述" |
+      | 接口文档 | 按状态 | 已上线/开发中→用户提供J-API/joyspace；待开发→标记待确认 |
+      | 埋点文档 | 可选 | 按功能推断标记 `[埋点待确认]` |
+
+      ## 现有代码探测
+
+      用 `codegraph_search` 探测是否已有相关模块/组件：
+      - 有 → 在第 1 章技术概览中简要提及影响范围
+      - 无 → 跳过
+
+      ## 迭代协议（仅 iterative 模式，读 context.md 需求形态判定）
+
+      context.md 记「需求形态：iterative」时，propose 是**把迭代协议填实**的阶段（explore 只给了粗判 + 大致宿主）——读既有代码/类型/设计稿，把「新东西 ↔ 既有系统」的衔接**织进 TRD 既有章节**（不另起独立块）：
+
+      | 维度 | 探法 | 织进 |
+      |---|---|---|
+      | **host / mount**（挂进哪个既有文件/组件、精确插入点） | 读既有宿主代码（codegraph/Read） | §2.0 组件树标 `[host]`/`[sibling]` 锚点行（只读不改） |
+      | **siblings + 衔接视觉**（并列既有模块、与之的间距/对齐/层叠/共享背景） | §2 设计稿分析额外**捞一张宿主帧**（新模块 + 相邻既有兄弟**同框**的页面级帧） | §4 新增「衔接约束」小节（间距/对齐等，带帧 nodeId） |
+      | **data-graft**（新字段寄生于哪个既有结构） | codegraph 读既有类型 | §5 增量契约（既有结构 + 增补字段 + 寄生路径，非全新接口） |
+      | **reuse**（复用的既有组件/工具/类型） | codegraph | §2.5 组件接入 |
+      | **regression**（改动可能影响的既有行为） | 全流程 | §11 或交 test-plan |
+
+      记的是「衔接被识别并 own」，不是把间距值等**症状**枚举——间距只是 siblings 的一个表现。greenfield 模式跳过本节。
+
+      ## 目录
+
+      | 章 | 标题 | 核心数据来源 |
+      |---|---|---|
+      | 1 | 技术概览 | project-overview |
+      | 2 | 组件设计 | PRD + 设计稿 + explore 帧映射表 |
+      | 3 | 状态设计 | PRD 状态流转 |
+      | 4 | 业务规则 | PRD + 设计稿 + 第 2/3 章产出 |
+      | 5 | 接口分析 | JAPI（`lbcli japi`） |
+      | 6 | 异常流设计 | PRD + 接口 |
+      | 7 | 埋点方案 | EasyTrack |
+      | 8 | 性能策略 | 技术判断 |
+      | 9 | 前端监控 | PRD + 接口 |
+      | 10 | 兼容性约束 | project-overview |
+      | 11 | 本迭代排除项 | 全流程收集 |
+
+      ## 各章细节要求
+
+      **第 2 章**（组件设计）：
+      **有设计稿必做，无设计稿忽略**
+      - 本章目标：分析页面的组件构成(组件树)、需要新开发或者修改哪些组件、依赖了哪些组件(公共或者第三方组件)、组件的入参是什么、组件怎么做数据绑定、组件所在设计稿节点位置(**视觉结构→nodeId 对照表**)
+      - 设计稿分析：spawn 一个 subagent 按 `relay-component-analysis.md` 执行，产出**视觉结构→nodeId 对照表（按组件聚合、只贴语义无 parentId） + 三张变体分表（数量布局①/状态变体②/内容渲染③，如有） + 变体完整性自检结论 + 组件合并候选（如有，随返回上报）**，并落盘 **parentmap.json（唯一拓扑真源）**。注意:所有帧共用同一个 subagent，从前置依赖的帧映射表中**按分组选代表帧**展开（默认每组选结构最完整的帧；组内结构差异显著时可选多个代表帧——组内其他帧的差异在第 4 章状态视图矩阵体现）。**组件树不由 subagent 手搭**——见下方主 agent 步骤的 `tree` 生成。
+      - 主 agent 收到 subagent 产物后：
+        - 组件类型识别：结合 PRD 组件识别 + codegraph/node_modules/公共组件知识库，识别哪些是可复用的组件、哪些是新增的组件、哪些是要修改的组件
+        - **合成组件处置（subagent 上报「合成组件·无容器」时必做）**：subagent 检出成员散落、无单一容器的组件（header/banner/散落 badge）会上报而非自选 root——这是设计稿数据质量缺陷。**向用户暴露**（列出组件名 + 成员 nodeId + 共同祖先=帧），签收两路：① **改稿合并**——请设计师把成员套进一个 frame，改完**重跑 analysis**（它就变回有真实容器根的普通组件、零特殊处理，推荐）；② **接受占位**——成员照常各自作对照表行（真实 nodeId），在 §11 记占位条目（固定格式，供追溯）：`- 合成组件占位：<组件名>｜成员 <nodeId,nodeId,…>｜主 agent 内联自建 wrapper 降级`。占位时：成员 nodeId **进 skipInternalNodeIds、映射到该组件名**（骨架据此收拢成一个 `<Comp/>` 标签、跳过成员，骨架不感知合成）；组件本体**不走双 subagent 流**（无单根 static draft），由**主 agent 内联自建**——`get_node_data` 各成员、组装成 `<Comp>` wrapper 分组它们（同 `ui-protocol.md`「极简组件主 agent 内联」路径）。**禁止**未暴露就替用户拍板（静默挑 root → 出口守卫阻断，见 exit-rules）。
+        - 可复用组件参数确认：对于可复用组件，需要分析其参数和事件，并向用户确认重要参数(如无默认值的必填参数)的值，结论记为**组件接入**；组件协议未能确认的，需要让用户提供组件文档，然后你再解析
+        - **组件合并候选处置（subagent 上报「组件合并候选」时做）**：propose 检测上报的同构兄弟组件候选，按档处置——**Tier 1（同 componentSet，设计已声明为一个组件的变体）→ 自动采纳合并**（自动的只是「进入合并尝试」，仍须过下述退回闸；建不出干净模型照样退回独立）；**Tier 2（不同 componentId 但槽位同构 + 关键列对齐）→ 向用户确认后再合并**；Tier 3 不合并。采纳合并的，设计**统一逻辑模型**并落 §2.6 + §2.2/§2.4/§3/§4.1：① 各来源状态集**并成一套枚举 + 配置**；② 各来源绑定字段**并成一个 Props**（来源独有字段设可选）；③ 加**判别字段**（如 `taskType`）作 §2.2 状态变体表的一个 `stateDim`；④ §4.1 按（类型 × 状态）出条件渲染分支；⑤ **视觉基底 + nodeId 保真**：取**结构最完整的来源**作视觉基底 root（生成共享骨架），把各来源那套变体表**折进合并组件的一套 §2.2**（以 `taskType` 为 stateDim），**各来源行连其代表帧 nodeId + targetId 一并搬入——尤其非基底来源的独有元素（如气泡），其 nodeId 必须随行进 §2.2**（nodeId 本就在 subagent 产的各来源变体表里，折表时带过来即可），否则 implement 取不到该元素的切图/样式。**退回闸**：若并集「字段大量互斥 / 状态几乎不重叠 / 通篇按类型 if-else」（逻辑统一不出干净模型）→ **放弃合并、各自独立**（视觉同构 ≠ 该合并），§2.6 记「逻辑不可统一→退回独立」。**漏报自检（本链路最弱环，无机检兜底）**：§2.6 与 task 合并（见下方「合并规则」）全靠此处判断，一旦漏报候选即退化为多个 bespoke（#2 状态列不对齐复发）。定稿前扫一遍 §2.2——若多个 rootNodeId 的状态变体表 stateDim/槽位高度重合，而 §2.6 对这组**既无合并、也无「退回独立」记录**（= 根本没被处置过），回看 subagent 是否漏报、补判后再 advance。
+        - 新增组件的参数设计及数据绑定规则：对于新增组件，需要设计组件的参数，并构建**数据绑定表**，结论记录下来；数据绑定表需等待第 5 章接口解析完成之后才能填充，此表本质是是说明 **哪个组件/元素消费哪个字段**
+        - 修改组件的调整点：对于要修改的组件，需要说明白修改的地方，包括参数和数据绑定，需记录下来
+        - 组件变体矩阵编写：当 subagent 产出中包含「三张变体分表」时，须原样转化为 §2.2 组件变体矩阵（三张分表）写入本章（格式见下方 §2.2 说明），变体完整性自检结论写入 §2.3
+        - **对照表落 schema 层（不进 design.md 正文）**：把 subagent 产出的视觉结构→nodeId 对照表（组件 heading + 层级/名称/nodeId/reuse/备注 表 + 跨状态差异小表）写入 `delivery/<task>/schema/component-table.md`（纯机读，与 parentmap.json 同层）。design.md §2.1 只留一行指针指向该文件——正文不再塞整表。
+        - **组件树生成（脚本 join，不手搭）**：对照表落盘后，跑 `python3 .workflow/node/workflow-implement/relay-schema-gen.py tree --parentmap delivery/<task>/schema/parentmap.json --table delivery/<task>/schema/component-table.md --out <§2.0 片段>`，从 parentmap(拓扑) + 对照表(语义，含 reuse/备注) join 出 §2.0 组件树写入 design.md——拓扑正确 by construction，无需再手搭/手核父子。**§2.0 树是人审主视图**（节点自带 `[reuse:...]` + `— 备注`），评审看树即可；对照表(schema 层)是**机器锚点**（供 verify-tree/emit-projections 消费，人不读）。
+      - 本章约束：新组件必须来源于设计稿；组件的重要参数必须由用户提供或者确认；**对照表只记 nodeId 锚点 + 定性描述，禁止抄具体色值/尺寸/坐标**（精确值由 implement 的 normalize/export_image 取，抄了即漂移源），**对照表按组件聚合、不按帧平铺、只贴语义不含 parentId**（父子拓扑来自 parentmap）；对照表的 **reuse/备注 列会被 join 进 §2.0 树标注**，故备注写定性坑点（非显然约束）而非流水；**每个组件用固定 heading `### 组件：<name> (rootNodeId: X)`**（rootNodeId = 该组件根 nodeId）——这是 implement `--emit-projections` 枚举组件、装配组件规格投影的锚，格式不可变更。
+
+      **§2.2 组件变体矩阵（三张分表）**（subagent 产出中有「三张变体分表」时必做）：
+
+      当 relay-component-analysis subagent 产出中包含「三张变体分表」时，主 agent 须**原样转化为三张分表**写入本节——**不再用单一「维度」列混装**（三层机制不同：分别建模、分别落地、**不建 `数量×状态×内容` 组合树**）：
+
+      **数量布局表（层①，数量→布局）**：
+      ```
+      | rootNodeId | 组件 | countFrom | case(数量) | presentation | item尺寸 | overflow | peek | 代表帧 nodeId |
+      ```
+
+      **状态变体表（层②，状态→生命周期）**：
+      ```
+      | rootNodeId | 组件 | stateDim | 态 | 改哪个元素(targetId) | 改什么 | 代表帧 nodeId |
+      ```
+      - **状态枚举集必须与第 3 章状态枚举、第 4.1 状态视图矩阵列一致**（闸门一查）。
+
+      **内容渲染表（层③，内容→渲染）**：
+      ```
+      | rootNodeId | 元素 | 数据种类 | segments/差异 | 代表帧 nodeId |
+      ```
+
+      > **`rootNodeId`（三表首列，机器抽取键）**：该行所属组件的根 nodeId，须与 §2.1 对照表 `### 组件：<name> (rootNodeId: X)` 一致（层③按元素聚合，其 rootNodeId = 元素所属组件根）。implement 的 `build-ui-component-prompt.py` 据此把三层行按组件装配成「组件规格投影」，故此列不可省。
+      > 三张表的列填写规范（逐档枚举、锚点不抄值、segments 字号取法、badge-image 归层等）以 subagent 产出为准，主 agent 原样搬入、只补上面的 TRD 跨章约束。
+
+      下游消费：
+      - 第 3 章状态设计从**状态变体表**提取组件级状态枚举
+      - 第 4 章业务规则从**状态变体表**构建状态视图矩阵的列定义
+      - tasks.md UI 组件 task 引用三张分表中该组件的行决定条件渲染分支（数量走 length 分支、状态走条件渲染、内容走数据驱动 segments）
+      - tasks.md UI 组件 task 的 `export_image` 列表 = **状态变体表②列出的非默认状态 badge/背景 nodeId**；是否真导出取决于 **static-draft 对该 badge 的切图判定**（判 CSS 则各状态用 CSS、无需导出）
+
+      **第 3 章**（状态设计）：
+      - 本章目标：回答"有哪些状态、怎么流转"
+      - 本章约束：此处定义的所有状态 = 第 4.1 节矩阵纵轴的来源——状态名须与帧映射表"状态名称"列一致
+
+      **第 4 章**（业务规则）：
+      - 本章目标：讲清楚整体业务规则，如状态视图矩阵、页面参数定义、交互清单表、重点交互流程明细等。
+      - 表达方式：复杂规则优先用伪代码/算法描述；简单规则用表格或一行条件表达式
+      - 本章约束：禁止写真实代码。
+
+      **第 5 章**（接口分析）：
+      - 本章目标：识别依赖的接口、解析接口信息并理解各字段含义、确认其mock方式，为后面的implement阶段做准备
+      - 接口识别：基于 explore 识别的接口列表，按需补充遗漏（写 TRD 过程中发现新接口、或用户补充）
+
+      - **接口文档解析**（必做，不得跳过）：
+        从 `delivery/<task>/context.md` 接口列表 + PRD + 用户补充中，收集所有接口信息，逐个解析：
+
+        - 涉及 JAPI 的接口（j-api.jd.com 链接 / methodId / appCode 等）→ **必须**按 `japi-interface-analysis.md` 流程解析（跑 `lbcli japi` 命令），不得仅凭链接文字猜测跳过。若同应用有本业务流的关联接口（同「接口识别」的语义扩展），用 `lbcli japi list-methods <appCode>` 补齐后一并解析
+        - Joyspace 文档 → `lbcli joyspace read <URL>`
+        - 其他格式 → 按文档内容直接提取字段级 schema
+
+        **强制规则**：
+        - 接口数 ≥ 1 就必须有本章产出，不得以"接口待开发"为由整章跳过（待开发的记入 §11，但其他已有接口仍需解析）
+        - 解析完成的标志：每个接口都有入参表 + 出参表 + mock 策略，缺一不可
+        - **接口形态（直连 vs 网关）**：同一接口在 japi 常有两份登记——直连（链接 `interfaceType=1`，入参顶层直接是业务对象）与网关（`interfaceType=2`，入参顶层是 `functionId` + `body`，业务对象序列化进 `body`）。两者业务契约（字段、className、出参）完全一致，仅传输外壳不同。**本项目实际接入统一走网关 functionId 形态**（即便拿到的是 `interfaceType=1` 链接）。因此契约表只记业务字段，并标注该接口走网关形态（`functionId` = 接口 `methodCode`）；`functionId`/`body` 外壳不展开为业务字段
+
+      - **Mock 策略确认**——向用户确认采用哪种方式，结论写入 TRD：
+        - `real`：直接访问线上，无需mock
+        - `local-route`：代码中写死 mock 数据（最简单，适合字段少/临时验证）
+        - `local-mock`：代码按照接口协议正常实现调用，并按照协议生成mock 数据写在本地独立文件，本地起 whistle 代理访问（数据与代码分离）
+        - `easymock-http`：代码按照接口协议正常实现调用；mock 数据由远程 Mock 平台提供（团队共享、前后端联调）
+      - 未提供接口文档的接口，记入第 11 章排除
+      - 出参可以用来回填第 2 章的数据绑定表
+      - **图片字段渲染标注**：出参中类型为图片 URL 的字段（字段名含 image/img/url/png/pic 等），须在出参表增加 `图片渲染` 列，标注该图片在前端的渲染方式：
+        - `铺满容器`：该图片是整个组件/卡片的背景图，前端以 background 或绝对定位铺满实现，组件内部不再拆分子元素布局
+        - `独立元素`：该图片是组件内的一个固定位置/固定尺寸图片元素，前端用 Image 组件渲染
+        - `待确认`：无法从文档判断，标记后在定稿前向用户确认（走 §11 未决项签收流程）
+
+        判断依据（按优先级）：
+        1. 接口文档字段描述明确说明（如"广告图片，运营配置整图"→铺满容器）
+        2. 字段对应的组件在设计稿中只有一张图占满整个区域（无独立文案/按钮拆分）→铺满容器
+        3. 字段对应的组件在设计稿中图片只占局部（旁边有独立文案/按钮）→独立元素
+        4. 无法判断→待确认
+
+      **第 6 章**须展开：接口异常矩阵、网络异常策略、交互防护、操作中断与状态恢复、数据边界兜底。
+      - **边界强制成行**：每个数据驱动组件须有 **空态 / 加载态 / 极值 / 错误兜底** 四类行（某类不适用则显式写「不适用」+ 一句理由，不许整类静默漏）；**每行须标该组件 `rootNodeId`**（与 §2.1 对照表一致，供 implement 按组件装配进「组件规格投影」）；**极值行须引对应边界帧 nodeId**（帧来自帧映射表边界帧 / 三张分表标注的极值帧）——供 implement 覆盖对账（闸门二）与像素核对定位。极值须落实 min-width:0 / 文案截断等容器不撑破保护。
+        - **列表溢出**：数组容器的 overflow 处理是 craft 规则、归 ui-protocol，§6 不复述。**§6 仅当设计定义了有界滚动区时**才增「列表溢出」行，记具体值 + 滚动区帧 nodeId（如 `max-height 320@帧X` / 横滑 `peek 30%`；横滑值与 §2.2① `overflow`/`peek` 同源）。配套纪律：§2.2 数量布局表**勿只看代表帧就断言「定长」**——数组条数可变，有界滚动是必答项（有设计记值、无则交 ui-protocol 兜底）。
+        - 建议成表：`| rootNodeId | 组件 | 边界类型(空/加载/极值/错误) | 兜底策略 | 边界帧 nodeId |`（极值行填帧；列表溢出仅设计有滚动区时增行、引帧）。
+
+      **第 7 章**（埋点方案）：
+      - 检查 explore 阶段是否获取到埋点文档
+        - 已获取 → 基于文档确认埋点范围（页面/组件/交互级），逐项写入：事件名、触发时机、携带参数
+        - 未获取 → 标记"无埋点文档，本章跳过"
+      - **触发时机精确化**：触发时机须精确到代码级条件（如 `useEffect 监听 advList.length > 0 时触发`、`点击回调内同步上报`），不要写模糊业务事件（如"广告列表变更时"）
+      - **SPM 位号规则**：埋点文档中已分配的位号直接写入；未分配的位号必须使用标准格式 `[待确认: SPM位号-<用途说明>]`，进入定稿前强制签收流程
+
+      **第 8 章**（性能策略）：
+      - 策略 ≤2 条时允许内联到相关章节（状态机/接口/组件处），第 8 章写"见各章内联标注"
+      - 策略 ≥3 条时在第 8 章集中写
+
+      **第 9 章**须展开：JS 错误监控、接口监控。
+
+      **第 11 章**（本迭代排除项）：
+      - 定稿前所有未决项（功能问题 + 待确认参数）必须逐项向用户签收，只允许两种结论：
+        - ✅ resolved：用户给出答案/值 → 回填对应章节
+        - ⏭️ 排除/延后：用户明确排除或确认延后 → 记录在本章
+      - 禁止存在用户未过目的未决项直接定稿
+
+      **定稿前①：生成组件规格投影（评审视图，作闸门一输入）**——跑 `python3 .workflow/node/workflow-implement/build-ui-component-prompt.py --emit-projections --task <task>`：脚本按 §2.1 对照表逐组件、以 rootNodeId 从三张变体表 + §2.4 数据绑定 + §4.2 交互 + §6 边界装配出 per-component「组件规格投影」（数量①/状态②/内容③/数据绑定/交互/边界 六段 co-located），落 `delivery/<task>/review/component-projections/<组件名>_<rootNodeId>.md`。投影是**生成物**，主题章仍是 source of truth，勿双写；改问题回主题章改源、重跑本步。
+
+      **定稿前②：按 `exit-rules.md` 执行完整校验**（含格式校验 + reviewer 语义审核），全部通过后方可 advance。其中闸门一的语义自洽核对**以上一步的组件规格投影为输入**：reviewer 逐份读投影、单视角核对该组件故事是否自洽（如「已领态」是否与 §4.2「本券不可领」矛盾）——co-located 视图让跨章矛盾无处躲。
+
+      ## 质量要求
+
+      - PRD 每个前端功能点都有对应章节
+      - 不越界描述后端实现
+      - 第 11 章定稿时不得存在未决项，只允许用户明确排除的功能
+      - 状态机每条路径可从入口走到出口
+      - **表达倾向**：逻辑密度高的表格/伪代码优先，散文叙述最小化——理想形态是"一套表 + 一套伪代码"
+
+      ## 增量 TRD
+
+      对已有 TRD 的增量补充：文件头用 `<!-- extends: <prior-change-name> -->` 引用，只写增量章节。
+    requires:
+      - proposal
+
+  - id: tasks
+    generates: tasks.md
+    description: Implementation checklist with trackable tasks
+    template: tasks.md
+    instruction: |
+      Create the task list that breaks down the implementation work.
+
+      Guidelines:
+      - Group related tasks under ## numbered headings
+      - Each task MUST be a checkbox: `- [ ] X.Y Task description`
+      - Tasks should be small enough to complete in one session
+      - Order tasks by dependency
+
+      Reference specs for what needs to be built, design for how to build it.
+
+      ## Task Kind 标签与执行方式
+
+      UI 类任务必须标注 kind，用于 apply 阶段识别并走特殊执行流程。非 UI 任务无需标注。
+
+      | Kind | 含义 | 执行方 | 产出 | 依赖 |
+      |------|------|--------|------|------|
+      | `ui-skeleton` | UI 骨架层 | spawn subagent 独立闭环 | 页面 JSX + scss | 无 |
+      | `ui-static` | UI 组件静态稿（仅还原设计稿、不接数据） | 主 agent 调 relay-schema 生成静态稿 → spawn 静态稿 subagent | 各组件 tsx + css（静态） | ui-skeleton |
+      | `ui-static-integrate` | 静态集成 + 还原度视觉闸（A） | 主 agent 拼静态页 + 设计稿占位 + 跑 runner 视觉校验 | 可跑静态页 + 视觉报告 | 所有 ui-static |
+      | `ui-rewrite` | UI 组件改写（接数据/Props/交互/多态） | spawn 改写 subagent | 各组件业务版 tsx | ui-static-integrate |
+      | `ui-rewrite-integrate` | 页面级装配（接线 + 数据收口） | 主 agent 站整页视角装配 | 可运行页面 | 所有 ui-rewrite |
+
+      标注格式（每条 UI task 单独标注 kind）：
+      - `- [ ] 4.1 编写页面骨架 (rootNodeId: 页面根ID) <!-- kind: ui-skeleton -->`
+      - `- [ ] 5.1 编写 HeaderBanner 静态稿 (nodeId: 96:290) <!-- kind: ui-static -->`
+      - `- [ ] 6.1 静态集成 + 视觉校验 <!-- kind: ui-static-integrate -->`
+      - `- [ ] 7.1 改写 HeaderBanner (nodeId: 96:290) <!-- kind: ui-rewrite -->`
+      - `- [ ] 8.1 页面集成装配 <!-- kind: ui-rewrite-integrate -->`
+
+      每条 UI task 必须单独标注，不可省略。非 UI 任务不标注。
+      **阶段依赖（分组标题加 `<!-- depends: <kind> -->`）**：ui-static 依赖 ui-skeleton；ui-static-integrate 依赖全部 ui-static；ui-rewrite 依赖 ui-static-integrate；ui-rewrite-integrate 依赖全部 ui-rewrite。**还原度视觉闸卡在 ui-static-integrate——它不过，不得进 ui-rewrite。**（同一组件的静态稿与改写此前是一个 task 内连续两步，现拆到 ui-static / ui-rewrite 两阶段，中间隔一道静态集成视觉闸。）
+
+      ## UI 组件拆分粒度
+
+      拆分的参考输入是 design.md §2.0 组件树和对照表（`delivery/<task>/schema/component-table.md`），但组件粒度按实现复杂度决定——**一个组件产一条 `ui-static` + 一条 `ui-rewrite`**（静态稿一次 + 改写一次的工作量），两者 nodeId/名称对应、分属静态与改写两阶段。
+
+      判断标准（三条全满足才独立成 task）：
+      1. **复杂度可控**：该节点的视觉复杂度适中（经验值：对照表中该节点及其子节点不超过 ~30 行），过于复杂的节点静态稿生成质量会下降
+      2. **视觉自包含**：节点是有明确边界的视觉单元（卡片、楼层、模块），不是零散元素（单个按钮、单行文字）
+      3. **接口独立**：与兄弟节点的交互仅通过 Props / 回调，不共享内部状态
+
+      合并规则：
+      - 子组件结构简单且无独立交互逻辑 → 合并到父组件 task，减少集成成本
+      - 列表中的 item 组件 → 与列表容器合并为一个 task（如 MoreCoupons + SmallCouponCard 合一）
+      - **design.md §2.6 标「组件合并」的组件 → 合并为一个 task**（一次 relay-schema + 一次改写，产出**一个可复用组件 + 变体**，各来源实例的差异走三张变体分表的条件渲染），而非每个来源实例各拆一个 task——否则同版式拆成多个 bespoke，跨组件的对齐/字重/间距会发散（#2 状态列不对齐即此）
+
+      ## 骨架层任务格式
+
+      骨架层由 **subagent 独立完成**，详细执行规则见 ui-protocol.md。tasks 阶段只需生成如下格式的 task 条目：
+
+      ```
+      - [ ] X.1 编写页面骨架 (rootNodeId: 页面根节点ID) <!-- kind: ui-skeleton -->
+        - [ ] 执行: `python3 .workflow/node/workflow-implement/build-skeleton-prompt.py --task <task> --skeleton-id X.1` 构建骨架 subagent 的上下文（prompt 落盘，stdout 只回 `prompt_file` 路径）
+        - [ ] 读上一步返回的 `prompt_file`，spawn subagent 时 prompt 只写「Read <prompt_file> 并严格照其执行」——**不要把文件内容读进主 agent 上下文、不改写**
+        - subagent 上下文（骨架编写指令）:
+          - [required-tool] get_design_context(rootNodeId) → 保存到临时文件
+          - 从临时文件按缩进/nodeId 读取外层 2-3 层容器的 className
+            - excludeNodeIds=[reuse列为公共/第三方的nodeId列表]（整段跳过）
+            - skipInternalNodeIds=[本次新增子组件的nodeId列表]（只读根行 className，跳过子行；**合成组件占位的散落成员也进此列、多个成员映射同一组件名 → 骨架收拢成一个 `<Comp/>` 标签**，见下）
+          - [required-tool] export_image(背景节点ID, scale=CDN图片导出倍率) 获取背景图 CDN URL（如背景为图片/渐变图）
+          - 基于读取到的容器结构和 className，编写页面骨架 JSX + 样式文件
+      ```
+
+      `excludeNodeIds` 生成规则：遍历对照表（`delivery/<task>/schema/component-table.md`），收集 `reuse` 列为公共/第三方组件标识的节点 nodeId；**迭代模式下 `reuse` 列为「既有·只读」的既有兄弟锚点行 nodeId 也并入此列**（既有代码只读不重写，见下「迭代模式」）。
+      `skipInternalNodeIds` 生成规则：遍历对照表（同上），收集 `reuse` 列为本次新增组件名（如 UplinkJumpOrder、UplinkJumpWelfareZone）的节点 nodeId；**§11 占位签收的合成组件，其散落成员 nodeId 也全部并入此列、映射到该合成组件名**——骨架按组件名收拢成一个 `<Comp/>`、跳过成员（骨架不感知合成）；wrapper 本体由主 agent 内联自建（见「合成组件处置」），非骨架。
+
+      **迭代模式（迭代协议·布局衔接归骨架）**：需求形态为 iterative 时——
+      - 骨架 task 的 **`rootNodeId` 取 宿主帧**（§2.0 组件树 `[host]` 锚点行的 nodeId，含相邻既有兄弟），**不是新组件自己的帧**——只有 root 到宿主帧，骨架才看得见既有兄弟、才能对齐间距（见 ui-protocol「新增模块参考同容器已有兄弟」+ 迭代补充）。
+      - 骨架直接改**既有宿主文件**（context.md host），把新模块标签插进去、间距对账 §4「衔接约束」；既有兄弟 nodeId 进 `excludeNodeIds`（只读不重写）。
+      - 数据衔接（props 寄生/事件）不在骨架，走组件改写 + 集成 task。
+
+      ## ui-static 任务格式（静态稿，仅还原设计稿、不接数据）
+
+      主 agent 用 `relay-schema-gen.py build` 一步生成精简 schema（脚本内部直连 relay MCP，无需 agent 逐个手调），再 spawn 静态稿 subagent 还原为静态组件（不接数据）。详细执行规则见 ui-protocol.md。
+
+      ```
+      - [ ] X.Y 编写 ComponentName 静态稿 (nodeId: 组件根节点ID) <!-- kind: ui-static -->
+        - [ ] 执行: `python3 .workflow/node/workflow-implement/relay-schema-gen.py build --task <task> --node-id <nodeId> --out <组件目录>/schema.json` 一步生成精简 schema——脚本**内部直连 relay MCP**（读 ~/.claude.json 的 zero-design 配置），跑完 get_node_data(root) → 母版预取（box/几何补拉，含降级切图）→ normalize，主 agent 无需逐个 `[required-tool]` 调 MCP。返回摘要含 `node_count`（复杂度分档用）；`schema.json` 落盘、大 layerData 不进上下文
+          - 若输出 `status: fallback`（relay MCP 不可达/鉴权失败）：**鉴权失败**先按 relay-mcp.md 跑 `lbcli relay get-token` 刷新 token 后重跑 build；**其余情况**照回退里的 `manual_steps` 用 agent 自己的 MCP 逐步执行（prepare → get_node_data → list-masters → 母版 get_node_data → normalize，即分步旧流程）
+        - [ ] 执行: `python3 .workflow/node/workflow-implement/build-static-draft-prompt.py --task <task> --component-id X.Y --schema-file "<组件目录>/schema.json" --static-file "<组件目录>"` 构建静态稿 subagent 的上下文（prompt 落盘，stdout 只回 `prompt_file` 路径）
+        - [ ] 读上一步返回的 `prompt_file`，spawn 静态稿 subagent 时 prompt 只写「Read <prompt_file> 并严格照其执行」——**不要把文件内容读进主 agent 上下文、不改写**（产出 index.tsx + index.module.scss）
+      ```
+
+      ## ui-static-integrate 任务格式（静态集成 + 还原度视觉闸 A）
+
+      **一条 task，排在全部 ui-static 之后、全部 ui-rewrite 之前。** 把骨架 + 各静态稿拼成可跑静态页、设计稿占位数据到位，跑 runner 做还原度视觉校验（页面级 `_page` + 按 selector 截各组件区域）。**视觉闸不过、不得进 ui-rewrite。** 详细执行规则见 ui-protocol.md「静态集成 + 视觉闸」。
+
+      ```
+      - [ ] X.1 静态集成 + 视觉校验 <!-- kind: ui-static-integrate -->
+        - [ ] 确保骨架已 import 各静态稿组件、静态页可整页渲染；设计稿占位数据到位（文案/图/条数取设计稿占位，与 export_image 基准同源）
+        - [ ] 承载环境：greenfield 直接跑静态页；iterative（只做部分楼层）承载在真实宿主页——走代理 + 真实 URL + 登录态（context.md 视觉校验配置 proxy/storageState），视觉对比用 pageSelector/组件 selector 收敛到被测部分 + 衔接区
+        - [ ] 构建/类型/lint 闸（跑 runner 前）：过项目整包 `build`（或 `tsc --noEmit`）+ lint——dev 能渲染≠能构建；不过则**把报错抛给用户裁定**（本任务引入的必修，宿主仓既有无关错交用户定），不自行降级/跳过（详见 ui-protocol「静态集成 + 视觉闸」）
+        - [ ] 执行: `cd .workflow/node/workflow-visual-check/scripts && npx ts-node runner.ts --context=<相对路径>/context.md` 跑还原度视觉校验；按报告 + 目视七维核对，偏差**原地修静态稿/scss** 后重跑（详见 ui-protocol）
+        - [ ] 视觉闸通过（相似度达标 + 无显著偏差块 + 七维一致）才 advance 到 ui-rewrite
+      ```
+
+      ## ui-rewrite 任务格式（改写：接数据/Props/交互/多态）
+
+      静态稿经视觉闸后，spawn 改写 subagent 接入业务。详细执行规则见 ui-protocol.md「组件 subagent 改写规则」。
+
+      ```
+      - [ ] X.Y 改写 ComponentName (nodeId: 组件根节点ID) <!-- kind: ui-rewrite -->
+        - [ ] 执行: `python3 .workflow/node/workflow-implement/build-ui-component-prompt.py --task <task> --component-id X.Y --static-file "<静态稿产出路径>" --skeleton-file "<骨架JSX路径>"` 构建改写 subagent 的上下文（prompt 落盘，stdout 只回 `prompt_file` 路径）
+        - [ ] 读上一步返回的 `prompt_file`，spawn 改写 subagent 时 prompt 只写「Read <prompt_file> 并严格照其执行」——**不要把文件内容读进主 agent 上下文、不改写**
+        - subagent 上下文（改写输入）:
+          - 静态稿文件: <静态稿 subagent 产出的文件路径>
+          - 实现上下文: Props={列出Props字段}, 数据绑定={列出对应TRD§2.4字段}, 业务规则={引用TRD§4.x}, 事件={回调列表}, children={嵌套子组件}, 变体={引用TRD§2.2 三张分表中该组件的行}, 健壮性={引用TRD§6 该组件的边界行}
+          - 变体差异图片（该 badge/背景被 static-draft 判为切图时）:
+            - [required-tool] export_image: <非默认状态的 badge/背景 nodeId 列表>（来自状态变体表②）
+      ```
+
+      脚本会自动提取 `subagent 上下文` 段注入改写 prompt，同时注入改写规则全文 + CDN 倍率 + design.md 路径及解引用指令。因此 `实现上下文` 中的 Props / 数据绑定 / 业务规则**保留 `{TRD§x.x}` 引用形式即可**，无需在 tasks.md 内联展开。
+
+      `实现上下文` 各字段来源：
+      - **Props**：从 design.md §2.4 数据绑定表 + §2.5 组件接入提取该组件消费字段与参数（本 TRD 无独立 Props 章节，Props 即「消费字段 + 接入参数」）
+      - **数据绑定**：从 design.md §2.4 提取该组件消费的字段路径
+      - **业务规则**：引用 design.md §4.x 中与该组件相关的规则（如状态视图矩阵中该组件对应的列）
+      - **事件**：该组件触发的回调（onPay/onRefresh/onClick 等）及其触发时机
+      - **变体**（有变体矩阵时必填）：引用 design.md §2.2 三张分表中该组件的行，作为 implement 覆盖对账 checklist，按层标注需条件渲染的维度：
+        - 层① 数量布局表 → 布局切换逻辑（算 length 选 branch）+ 各数量下卡片尺寸/内部结构差异
+        - 层② 状态变体表 → 按钮文案/badge/disabled 条件渲染分支（作用域限本组件）
+        - 层③ 内容渲染表 → 数据驱动 segments/富文本分支；badge 若被 static-draft 判为切图 → 列出各状态 badge nodeId，subagent 需 `export_image` 每个导出 CDN 图片（仅非默认状态，默认状态图片已在静态稿中）
+        > 此字段**保留引用即可、不必内联搬三表行**：`build-ui-component-prompt.py` 会按该 task 标题的 rootNodeId 从 design.md 三表自动装配「组件规格投影」注入改写 prompt。
+      - **健壮性**（有 §6 边界行时必填）：引用 design.md §6 中该组件相关的 空态/加载/极值/错误兜底 行，作为覆盖对账 checklist（极值行须落实 min-width:0/文案截断等保护）。同上，脚本按 rootNodeId 自动装配，保留引用即可。
+      - **children**（有嵌套时必填）：标注该组件内部渲染的子组件，区分类型：
+        - 第三方/公共组件：标注组件标签名 + props + events（subagent 只写标签，不实现内部）
+        - 本次新增子组件：标注组件名 + 透传的 props（subagent 写 import + 渲染标签，组件本身由另一个 subagent 实现）
+        - 嵌套信息从 design.md §2.0 组件树中提取：父组件节点下的直接子组件即为 children
+
+      ## 集成任务生成（页面级，kind: ui-rewrite-integrate）
+
+      **生成 `## N. 集成` 章节（编号动态填），标 `<!-- kind: ui-rewrite-integrate -->`，排在全部 ui-rewrite（及 store/service task）之后。① / ② 任一命中即生成、全不命中则省——新增 UI 组件、改工具函数/store/service、或只改现有组件而牵动跨组件装配时同样命中。**（与 ui-static-integrate 区分：那是静态阶段的还原度视觉闸；本节点是改写后的功能装配，此处才接真实/mock 数据、跨组件接线、碰登录态。）
+
+      > 定位：把各自开发完的组件/store/service，站在整页视角装配成可运行页面——全流程唯一对"整个页面"负责的一步；只做**装配**（接线 + 补数据）。
+      > ① 是**派生规则**（最小集打底 + 通读 TRD 自主识别，措辞随页面而定，非固定模板）；② 是**固定模板**（照抄）。装配（①）在前、mock 收口（②）收尾。
+
+      ### ① 页面级装配（最小集 + 自主识别）
+
+      **判据**：一件事没有任何单个组件/store/service task 能独立 own、须站在整页视角协调 → 集成 task；组件内部就能完成 → 归组件 task。（边界随之而定：页面级埋点/路由懒加载/全局兜底进集成；单组件内的埋点/性能/交互归组件。）
+
+      **最小集**（逐条核对、命中才产）：
+
+      | 集成条目 | 源 | 产出 |
+      |---|---|---|
+      | 页面入口/入参 | §4.3 | URL/路由参数 → 初始 state |
+      | 跨组件状态 | §3 / §4.1 | store/context/上提 + 订阅 |
+      | 跨组件交互联动 | §4.2 跨组件行 | 联动接线（一个组件行为驱动另一个） |
+      | 页面级数据编排 | §5 / §6 | 首屏/后续拉取时机、加载态、异常兜底 |
+
+      **自主识别**：通读 TRD（§3–§9），按判据挑出最小集之外的页面级活补为 task，命中才补、无则省。粒度按「联动/状态单元」归组、可多条；命中以 §4.2/§4.3 已填全为前提。
+
+      ### ② mock 数据收口（仅 local-route / local-mock，收尾）
+
+      ```
+      - [ ] N.x mock 数据收口
+        - 字段对齐：对照 design.md §2.4 数据绑定表逐字段——绑定表有、mock 缺 → 补；字段名不一致 → 统一为绑定表字段名
+        - 图片回填：扫 mock 图片字段（名含 image/img/url/pic）——空/非 CDN 地址 → 查 `delivery/<task>/schema/component-table.md` 对照表找 nodeId → [required-tool] export_image(nodeId, scale=<CDN倍率>) 导出回填；找不到 nodeId → 保持空串，不造假
+      ```
+
+      ## 通用规则
+
+      - `nodeId` 从 `delivery/<task>/schema/component-table.md` 对照表取（§2.0 组件树也带 nodeId 可查），格式为 `\d+:\d+`
+      - **export_image 精简**：静态稿阶段已对默认状态图片调 `export_image` 得到正式 CDN 地址，改写步的 `export_image` 仅对 **static-draft 判为切图**的**非默认状态** badge/背景 nodeId 调用——每种非默认状态导出一张图片，implement 时按状态枚举切换 src
+        - **怎么知道 static-draft 判了切图**：看静态稿里**默认态**该 badge/背景怎么渲染的——默认态是切图（`<img>`/CSS background 引 CDN 图）则非默认态同样要 `export_image` 换图；默认态是 CSS（椭圆背景 + 文本等）则非默认态也走 CSS（改色值/文案即可）、**无需导出**。tasks.md 列的 nodeId 是候选清单，是否真调由此反推决定
+      - 非 UI 任务（接口、工具函数、埋点逻辑、验证）无需内嵌子步骤
+      - **`[required-tool]` 标记含义**：标注在 subagent 上下文中，表示 subagent 必须实际执行对应工具调用，不得跳过或用经验值替代
+    requires:
+      - specs
+      - design
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+  instruction: |
+    ## 执行协议
+
+    进入 UI 任务前先 Read `.workflow/node/workflow-implement/ui-protocol.md`。
+
+    ### 分流
+
+    **阶段顺序**：ui-skeleton → 全部 ui-static → ui-static-integrate（视觉闸）→ 全部 ui-rewrite → ui-rewrite-integrate。**视觉闸不过、不得进 ui-rewrite。**
+
+    - task 含 `<!-- kind: ui-skeleton -->` → 按条目步骤执行 build-skeleton-prompt.py + spawn 骨架 subagent
+    - task 含 `<!-- kind: ui-static -->` → 按条目执行 relay-schema 工具链 + spawn **静态稿** subagent（不接数据）
+    - task 含 `<!-- kind: ui-static-integrate -->` → 拼静态页 + 占位数据到位 + **过 build/类型/lint 闸** + 跑 runner 还原度视觉校验（详见 ui-protocol「静态集成 + 视觉闸」），过闸才继续
+    - task 含 `<!-- kind: ui-rewrite -->` → build-ui-component-prompt.py + spawn **改写** subagent（接数据/Props/交互/多态）
+    - task 含 `<!-- kind: ui-rewrite-integrate -->` → 站整页视角装配（接线 + 数据收口）
+    - `<!-- depends: <kind> -->` 标注的分组必须等被依赖阶段完成后才能开始
+    - 其余 task → 直接实现代码，完成后打勾
+
+    ### 通用规则
+
+    - 遇到 `执行:` 前缀 → 必须实际跑该命令，用其 stdout
+    - 遇到 `[required-tool]` → 必须实际调用该 MCP 工具
+    - 每个 UI task 独立 spawn 一个 subagent，禁止合并
+    - subagent prompt 由 build-*-prompt.py **落盘**（stdout 只回 `prompt_file` 路径）；spawn 时 prompt 只写「Read <prompt_file> 并严格照其执行」——**禁止把 prompt 文件内容读进主 agent 上下文，禁止手写/改写 prompt**（脚本产出已是 subagent 作用域的完整 prompt，主 agent 只当路径转发的管道）

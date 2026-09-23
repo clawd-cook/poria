@@ -1,0 +1,45 @@
+{
+  "desc": "【研发·推荐】基于openspec底层驱动的研发核心流程：写 TRD + 代码评审，不含部署/转测/端到端自动化测试。覆盖大多数日常开发需求，拿不准选它。代码提交由开发者自行完成（archive 收尾会兜底提交）。",
+  "has_e2etest": false,
+  "start_node": "workflow-explore",
+  "roles": {
+    "trd": "openspec/changes/<task>/",
+    "schema-draft": "delivery/<task>/schema/"
+  },
+  "nodes": [
+    {
+      "node": "workflow-propose",
+      "exit_gate": "confirm-locked"
+    },
+    {
+      "node": "workflow-implement",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-lint",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-code-review",
+      "exit_gate": "auto",
+      "autopilot": true,
+      "execution": "subagent",
+      "feedback": {
+        "can_report": true,
+        "reroute_options": [
+          "workflow-implement"
+        ]
+      }
+    },
+    {
+      "node": "workflow-archive",
+      "entry_gate": "confirm-locked",
+      "exit_gate": "confirm-locked",
+      "feedback": {
+        "rerouteable": false
+      }
+    }
+  ]
+}

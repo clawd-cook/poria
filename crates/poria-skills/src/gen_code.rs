@@ -14,7 +14,8 @@ use poria_resources::{
 };
 
 use crate::claude_prompt::{
-    backend_dir, backend_trd_url, build_claude_skill_prompt, extra_nonempty, frontend_base_branch,
+    advance_note_from_input, backend_dir, backend_trd_url, build_claude_skill_prompt_with_note,
+    extra_nonempty, frontend_base_branch,
     resolve_feature_dir, resolve_workspace_cwd, SKILL_GEN_CODE,
 };
 use crate::error::SkillError;
@@ -146,7 +147,7 @@ impl Skill for GenCodeSkill {
             .filter(|content| !content.trim().is_empty())
             .ok_or("TRD.md not found")?;
 
-        let prompt = build_claude_skill_prompt(
+        let prompt = build_claude_skill_prompt_with_note(
             SKILL_GEN_CODE,
             &input.pipeline.demand_code,
             &workspace_path,
@@ -154,6 +155,7 @@ impl Skill for GenCodeSkill {
             &backend,
             backend_trd_url(&input),
             &frontend_base_branch(&input),
+            advance_note_from_input(&input),
         );
 
         let agent_input = AgentTaskInput {

@@ -323,9 +323,9 @@ mod tests {
         .unwrap();
         conn.execute(
             "INSERT INTO stages (pipeline_id, name, status, output, started_at, completed_at) VALUES
-             ('p1', 'dev', 'completed', '{\"costUsd\": 1.5}', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'),
-             ('p2', 'dev', 'failed', '{\"costUsd\": 0.5}', '2026-01-01T00:00:00Z', '2026-01-01T00:02:00Z'),
-             ('p3', 'design', 'blocked', NULL, '2026-01-01T00:00:00Z', NULL)",
+             ('p1', 'implement', 'completed', '{\"costUsd\": 1.5}', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'),
+             ('p2', 'implement', 'failed', '{\"costUsd\": 0.5}', '2026-01-01T00:00:00Z', '2026-01-01T00:02:00Z'),
+             ('p3', 'propose', 'blocked', NULL, '2026-01-01T00:00:00Z', NULL)",
             [],
         )
         .unwrap();
@@ -345,7 +345,11 @@ mod tests {
         assert_eq!(summary.hitl_pipelines, 1);
         assert!((summary.cost_usd_total - 2.0).abs() < f64::EPSILON);
 
-        let dev = summary.stages.iter().find(|s| s.stage == "dev").unwrap();
+        let dev = summary
+            .stages
+            .iter()
+            .find(|s| s.stage == "implement")
+            .unwrap();
         assert_eq!(dev.completed, 1);
         assert_eq!(dev.failed, 1);
         assert_eq!(dev.duration_p50_ms, Some(600_000));

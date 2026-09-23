@@ -4,43 +4,99 @@ use super::gate::GateRule;
 use super::repo::RepoConfig;
 use super::rollback::RollbackInstruction;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Full-chain delivery profile (轻舟 standard-openspec + Poria Init/Deploy/Archive).
+///
+/// Legacy six-stage JSON ids deserialize via serde aliases:
+/// `review_prd`→clarify, `design`→propose, `dev`→implement, `cr`→code_review.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StageEnum {
     Init,
+    #[serde(rename = "clarify", alias = "review_prd")]
     ReviewPrd,
+    #[serde(rename = "propose", alias = "design")]
     Design,
+    TestPlan,
+    #[serde(rename = "implement", alias = "dev")]
     Dev,
+    Lint,
+    #[serde(rename = "code_review", alias = "cr")]
     Cr,
+    TestCases,
+    RunAutotest,
+    HandoffQa,
     Deploy,
+    Archive,
 }
 
 pub const STAGE_ORDER: &[StageEnum] = &[
     StageEnum::Init,
     StageEnum::ReviewPrd,
     StageEnum::Design,
+    StageEnum::TestPlan,
     StageEnum::Dev,
+    StageEnum::Lint,
     StageEnum::Cr,
+    StageEnum::TestCases,
+    StageEnum::RunAutotest,
+    StageEnum::HandoffQa,
     StageEnum::Deploy,
+    StageEnum::Archive,
 ];
 
 impl StageEnum {
     pub fn as_str(self) -> &'static str {
         match self {
             StageEnum::Init => "init",
-            StageEnum::ReviewPrd => "review_prd",
-            StageEnum::Design => "design",
-            StageEnum::Dev => "dev",
-            StageEnum::Cr => "cr",
+            StageEnum::ReviewPrd => "clarify",
+            StageEnum::Design => "propose",
+            StageEnum::TestPlan => "test_plan",
+            StageEnum::Dev => "implement",
+            StageEnum::Lint => "lint",
+            StageEnum::Cr => "code_review",
+            StageEnum::TestCases => "test_cases",
+            StageEnum::RunAutotest => "run_autotest",
+            StageEnum::HandoffQa => "handoff_qa",
             StageEnum::Deploy => "deploy",
+            StageEnum::Archive => "archive",
         }
     }
 
+    /// Accepts canonical full-profile ids and legacy six-stage aliases.
     pub fn from_job_id(id: &str) -> Option<Self> {
-        STAGE_ORDER
-            .iter()
-            .copied()
-            .find(|stage| stage.as_str() == id)
+        match id {
+            "init" => Some(Self::Init),
+            "clarify" | "review_prd" => Some(Self::ReviewPrd),
+            "propose" | "design" => Some(Self::Design),
+            "test_plan" => Some(Self::TestPlan),
+            "implement" | "dev" => Some(Self::Dev),
+            "lint" => Some(Self::Lint),
+            "code_review" | "cr" => Some(Self::Cr),
+            "test_cases" => Some(Self::TestCases),
+            "run_autotest" => Some(Self::RunAutotest),
+            "handoff_qa" => Some(Self::HandoffQa),
+            "deploy" => Some(Self::Deploy),
+            "archive" => Some(Self::Archive),
+            _ => None,
+        }
+    }
+
+    /// Display label for desktop UI (Chinese).
+    pub fn label(self) -> &'static str {
+        match self {
+            StageEnum::Init => "初始化",
+            StageEnum::ReviewPrd => "需求澄清",
+            StageEnum::Design => "技术方案",
+            StageEnum::TestPlan => "测试计划",
+            StageEnum::Dev => "编码实现",
+            StageEnum::Lint => "静态检查",
+            StageEnum::Cr => "代码审查",
+            StageEnum::TestCases => "测试用例",
+            StageEnum::RunAutotest => "自动化测试",
+            StageEnum::HandoffQa => "转测交接",
+            StageEnum::Deploy => "部署推送",
+            StageEnum::Archive => "归档",
+        }
     }
 }
 
@@ -136,6 +192,9 @@ pub struct PipelineConfig {
     /// Materialized jobs from the workflow YAML (order = serial ready preference).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jobs: Vec<crate::workflow::MaterializedJob>,
+    /// Free-text note from stage-boundary dialogue; injected into the next stage prompt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advance_note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -250,30 +309,51 @@ mod tests {
     }
 
     #[test]
-    fn stage_order_is_init_through_deploy_without_workspace() {
+    fn stage_order_is_full_chain_without_workspace() {
         assert_eq!(
             STAGE_ORDER,
             &[
                 StageEnum::Init,
                 StageEnum::ReviewPrd,
                 StageEnum::Design,
+                StageEnum::TestPlan,
                 StageEnum::Dev,
+                StageEnum::Lint,
                 StageEnum::Cr,
+                StageEnum::TestCases,
+                StageEnum::RunAutotest,
+                StageEnum::HandoffQa,
                 StageEnum::Deploy,
+                StageEnum::Archive,
             ]
         );
-        assert_eq!(STAGE_ORDER.len(), 6);
+        assert_eq!(STAGE_ORDER.len(), 12);
         assert!(!STAGE_ORDER
             .iter()
             .any(|stage| format!("{stage:?}") == "Workspace"));
     }
 
     #[test]
-    fn stage_enum_job_id_round_trips() {
+    fn stage_enum_job_id_round_trips_and_accepts_legacy_aliases() {
         for stage in STAGE_ORDER {
             assert_eq!(StageEnum::from_job_id(stage.as_str()), Some(*stage));
         }
+        assert_eq!(StageEnum::from_job_id("review_prd"), Some(StageEnum::ReviewPrd));
+        assert_eq!(StageEnum::from_job_id("design"), Some(StageEnum::Design));
+        assert_eq!(StageEnum::from_job_id("dev"), Some(StageEnum::Dev));
+        assert_eq!(StageEnum::from_job_id("cr"), Some(StageEnum::Cr));
         assert_eq!(StageEnum::from_job_id("workspace"), None);
+    }
+
+    #[test]
+    fn stage_enum_deserializes_legacy_json_ids() {
+        let clarify: StageEnum = serde_json::from_str(r#""review_prd""#).unwrap();
+        assert_eq!(clarify, StageEnum::ReviewPrd);
+        assert_eq!(serde_json::to_string(&clarify).unwrap(), r#""clarify""#);
+
+        let implement: StageEnum = serde_json::from_str(r#""dev""#).unwrap();
+        assert_eq!(implement, StageEnum::Dev);
+        assert_eq!(serde_json::to_string(&implement).unwrap(), r#""implement""#);
     }
 
     #[test]

@@ -11,7 +11,8 @@ use poria_resources::ClaudeAgentPool;
 
 use crate::artifacts::adopt_and_remove_from_worktree;
 use crate::claude_prompt::{
-    backend_dir, backend_trd_url, build_claude_skill_prompt, extra_nonempty, frontend_base_branch,
+    advance_note_from_input, backend_dir, backend_trd_url, build_claude_skill_prompt_with_note,
+    extra_nonempty, frontend_base_branch,
     resolve_feature_dir, resolve_workspace_cwd, SKILL_GEN_TRD,
 };
 use crate::error::SkillError;
@@ -95,7 +96,7 @@ impl Skill for GenTrdSkill {
             return Err("PRD.md not found".into());
         }
 
-        let prompt = build_claude_skill_prompt(
+        let prompt = build_claude_skill_prompt_with_note(
             SKILL_GEN_TRD,
             &input.pipeline.demand_code,
             &workspace_path,
@@ -103,6 +104,7 @@ impl Skill for GenTrdSkill {
             &backend,
             backend_trd_url(&input),
             &frontend_base_branch(&input),
+            advance_note_from_input(&input),
         );
 
         let agent_input = AgentTaskInput {

@@ -1,0 +1,33 @@
+{
+  "desc": "【精简】基于openspec-explore需求探讨底层驱动的轻量工作流：聊清楚就干活，不写 TRD、不做代码评审/部署/转测/端到端自动化测试。适合小改动 / 热修 / 需求边界清晰的场景。代码提交由开发者自行完成（archive 收尾会兜底提交）。",
+  "has_e2etest": false,
+  "start_node": "workflow-explore",
+  "roles": {
+    "schema-draft": "delivery/<task>/schema/"
+  },
+  "nodes": [
+    {
+      "node": "workflow-implement",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-lint",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-unittest",
+      "exit_gate": "auto",
+      "autopilot": true
+    },
+    {
+      "node": "workflow-archive",
+      "entry_gate": "confirm-locked",
+      "exit_gate": "confirm-locked",
+      "feedback": {
+        "rerouteable": false
+      }
+    }
+  ]
+}

@@ -10,7 +10,8 @@ use poria_core::types::{AgentTaskInput, SkillInput, SkillOutput};
 use poria_resources::ClaudeAgentPool;
 
 use crate::claude_prompt::{
-    backend_dir, backend_trd_url, build_claude_skill_prompt, extra_nonempty, frontend_base_branch,
+    advance_note_from_input, backend_dir, backend_trd_url, build_claude_skill_prompt_with_note,
+    extra_nonempty, frontend_base_branch,
     resolve_feature_dir, resolve_workspace_cwd, SKILL_CODE_REVIEW,
 };
 use crate::cr_findings::mr_notes_from_cr;
@@ -139,7 +140,7 @@ impl Skill for CodeReviewSkill {
         let feature_ctx = FeatureContext::from_root(Path::new(&feature_dir))
             .ok_or("feature context not found")?;
 
-        let prompt = build_claude_skill_prompt(
+        let prompt = build_claude_skill_prompt_with_note(
             SKILL_CODE_REVIEW,
             &input.pipeline.demand_code,
             &workspace_path,
@@ -147,6 +148,7 @@ impl Skill for CodeReviewSkill {
             &backend,
             backend_trd_url(&input),
             &frontend_base_branch(&input),
+            advance_note_from_input(&input),
         );
 
         let agent_input = AgentTaskInput {
