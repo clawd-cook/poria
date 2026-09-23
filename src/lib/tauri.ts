@@ -52,6 +52,20 @@ export async function humanLoopRespond(pipelineId: string, action: string): Prom
   return invoke<void>("human_loop_respond", { pipelineId, action });
 }
 
+export async function pipelineAdvance(
+  pipelineId: string,
+  action: string,
+  note?: string | null,
+  force = false,
+): Promise<void> {
+  return invoke<void>("pipeline_advance", {
+    action,
+    force,
+    note: note ?? null,
+    pipelineId,
+  });
+}
+
 export async function confirmTrd(pipelineId: string, skipped = false): Promise<void> {
   return invoke<void>("confirm_trd", { pipelineId, skipped });
 }

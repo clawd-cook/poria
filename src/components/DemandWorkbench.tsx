@@ -90,6 +90,7 @@ function WorkbenchTrajectory() {
 }
 
 function WorkbenchConfirm() {
+  const { state } = useStore();
   const { detail, humanRequest } = usePipeline();
 
   if (!detail) {
@@ -109,6 +110,24 @@ function WorkbenchConfirm() {
         issueClass={humanRequest.issueClass}
         pipelineId={humanRequest.pipelineId}
         stage={humanRequest.stage}
+      />
+    );
+  }
+
+  const summary = state.pipelines.find((pipeline) => pipeline.id === detail.id);
+  if (summary?.issue_class === "awaiting_advance") {
+    const stage =
+      detail.stages.find((item) => item.issue?.includes("awaiting_advance"))?.name ??
+      summary.current_stage ??
+      "unknown";
+    return (
+      <HumanLoopCard
+        demandCode={detail.demand_code}
+        demandId={detail.demand_id}
+        detail={summary.issue_detail ?? "阶段已完成，请确认后继续下一阶段。"}
+        issueClass="awaiting_advance"
+        pipelineId={detail.id}
+        stage={stage}
       />
     );
   }
@@ -276,7 +295,7 @@ export function DemandWorkbench() {
           <TabsTrigger value="docs">文档</TabsTrigger>
           <TabsTrigger value="workspace">工作区</TabsTrigger>
           <TabsTrigger value="confirm">
-            确认
+            对话
             {vm.badges.hasActiveHitl ? (
               <span className="bg-primary ml-1 inline-block size-1.5 rounded-full" />
             ) : null}

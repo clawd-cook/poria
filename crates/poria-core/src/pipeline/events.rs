@@ -532,7 +532,7 @@ mod tests {
         let event = PipelineEvent::stage_started("pl-123", StageEnum::Dev);
         let json = serde_json::to_value(&event).unwrap();
         assert_eq!(json["kind"], "stage_started");
-        assert_eq!(json["stage"], "dev");
+        assert_eq!(json["stage"], "implement");
     }
 
     #[test]

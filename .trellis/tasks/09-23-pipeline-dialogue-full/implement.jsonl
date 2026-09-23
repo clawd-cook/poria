@@ -1,0 +1,4 @@
+{"file": "competitor/轻舟/examples/.workflow/profile/standard-openspec.json", "reason": "Full-chain profile reference"}
+{"file": "competitor/轻舟/examples/.workflow/workflow-map.md", "reason": "Delivery artifact layout"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Desktop HITL and workbench contracts"}
+{"file": "docs/versions/2.0.4/PRD.md", "reason": "Workbench IA already shipped"}

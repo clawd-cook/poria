@@ -445,7 +445,7 @@ mod tests {
 
         assert_eq!(loaded.id, "pl-test-001");
         assert_eq!(loaded.demand_code, "REQ-001");
-        assert_eq!(loaded.stages.len(), 6);
+        assert_eq!(loaded.stages.len(), STAGE_ORDER.len());
         assert_eq!(loaded.stages[0].name, StageEnum::Init);
     }
 

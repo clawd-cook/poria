@@ -16,9 +16,15 @@ pub const REGISTERED_ACTIONS: &[&str] = &[
     "skill:init",
     "skill:review-prd",
     "skill:gen-trd",
+    "skill:test-plan",
     "skill:gen-code",
+    "skill:lint",
     "skill:code-review",
+    "skill:test-cases",
+    "skill:run-autotest",
+    "skill:handoff-qa",
     "skill:deploy",
+    "skill:archive",
     "poria/dev-verify",
     "poria/post-cr-notes",
 ];
@@ -172,7 +178,7 @@ pub fn validate_workflow(doc: &WorkflowDocument) -> Result<(), WorkflowError> {
         }
         if StageEnum::from_job_id(&job.id).is_none() {
             return Err(WorkflowError::Invalid(format!(
-                "未知 Job id: {}（第一期仅允许 init/review_prd/design/dev/cr/deploy）",
+                "未知 Job id: {}（允许 STAGE_ORDER 全链路 id 及旧六阶段别名）",
                 job.id
             )));
         }
@@ -295,9 +301,15 @@ pub fn default_skill_uses(name: StageEnum) -> &'static str {
         StageEnum::Init => "skill:init",
         StageEnum::ReviewPrd => "skill:review-prd",
         StageEnum::Design => "skill:gen-trd",
+        StageEnum::TestPlan => "skill:test-plan",
         StageEnum::Dev => "skill:gen-code",
+        StageEnum::Lint => "skill:lint",
         StageEnum::Cr => "skill:code-review",
+        StageEnum::TestCases => "skill:test-cases",
+        StageEnum::RunAutotest => "skill:run-autotest",
+        StageEnum::HandoffQa => "skill:handoff-qa",
         StageEnum::Deploy => "skill:deploy",
+        StageEnum::Archive => "skill:archive",
     }
 }
 
@@ -498,7 +510,7 @@ jobs:
     fn bundled_dev_and_deploy_include_builtin_steps() {
         let doc = bundled_demand_to_mr();
         let dev_uses: Vec<_> = doc
-            .job("dev")
+            .job("implement")
             .unwrap()
             .steps
             .iter()
@@ -589,11 +601,25 @@ jobs:
     #[test]
     fn materialize_round_trips_job_ids() {
         let jobs = materialize(&bundled_demand_to_mr()).unwrap();
-        assert_eq!(jobs.len(), 6);
+        assert_eq!(jobs.len(), STAGE_ORDER.len());
         assert_eq!(jobs[0].id, StageEnum::Init);
-        assert_eq!(jobs[3].steps[1].uses, "poria/dev-verify");
+        let implement = jobs
+            .iter()
+            .find(|job| job.id == StageEnum::Dev)
+            .expect("implement job");
+        assert_eq!(implement.steps[1].uses, "poria/dev-verify");
+        let deploy = jobs
+            .iter()
+            .find(|job| job.id == StageEnum::Deploy)
+            .expect("deploy job");
+        assert_eq!(deploy.steps[1].uses, "poria/post-cr-notes");
         let restored = document_from_materialized("demand-to-mr", &jobs);
-        assert_eq!(restored.jobs[5].steps[1].uses, "poria/post-cr-notes");
+        let deploy_restored = restored
+            .jobs
+            .iter()
+            .find(|job| job.id == "deploy")
+            .expect("deploy");
+        assert_eq!(deploy_restored.steps[1].uses, "poria/post-cr-notes");
     }
 
     #[test]

@@ -96,7 +96,7 @@ export function derivePipelineViewModel(input: {
 
   switch (mode) {
     case "awaiting_human":
-      primaryCta = { action: "open_confirm", label: "去处理确认" };
+      primaryCta = { action: "open_confirm", label: "去对话确认" };
       suggestedTab = "confirm";
       break;
     case "waiting_merge":

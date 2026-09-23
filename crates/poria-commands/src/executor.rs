@@ -1,7 +1,8 @@
 use chrono::Utc;
 use poria_core::pipeline::{
-    evaluate_gates, jme_notify_target, stamp_human_loop_notified, transition_pipeline,
-    transition_stage, PipelineEvent, StageResult, DEFAULT_GATES,
+    enter_awaiting_advance, evaluate_gates, jme_notify_target, may_auto_chain_stages,
+    stamp_human_loop_notified, transition_pipeline, transition_stage, PipelineEvent, StageResult,
+    AWAITING_ADVANCE_ISSUE_CLASS, DEFAULT_GATES,
 };
 use poria_core::types::{
     GatePhase, Pipeline, PipelineStatus, RollbackCommand, RollbackCommandType, RollbackInstruction,
@@ -411,19 +412,31 @@ where
         self.store
             .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &events);
 
-        // Deploy complete -> waiting_merge
-        if stage_name == StageEnum::Deploy {
-            transition_pipeline(&mut pipeline.status, PipelineStatus::WaitingMerge)?;
-            let mr_urls = collect_mr_urls(pipeline);
-            self.store.save_stage_tx(
-                None,
-                pipeline,
-                &[PipelineEvent::pipeline_waiting_merge(&pipeline.id, mr_urls)],
-            );
-            return Ok(StageOutcome::Return);
+        // Deploy no longer jumps to waiting_merge — Archive + dialogue come after.
+        // Production: stop for stage-boundary dialogue (no silent cross-stage autopilot).
+        if may_auto_chain_stages() {
+            return Ok(StageOutcome::Continue);
         }
 
-        Ok(StageOutcome::Continue)
+        let dialogue = enter_awaiting_advance(pipeline, stage_idx);
+        events.push(PipelineEvent::stage_blocked(
+            &pipeline.id,
+            stage_name,
+            poria_core::types::IssueClass::from_key(AWAITING_ADVANCE_ISSUE_CLASS),
+        ));
+        self.store
+            .save_stage_tx(Some(&pipeline.stages[stage_idx]), pipeline, &events);
+        if let Some(hl) = self.human_loop.as_deref() {
+            let _ = hl
+                .notify(
+                    pipeline,
+                    &pipeline.stages[stage_idx],
+                    AWAITING_ADVANCE_ISSUE_CLASS,
+                )
+                .await;
+        }
+        let _ = &dialogue;
+        Ok(StageOutcome::Return)
     }
 
     fn handle_cr_gate(

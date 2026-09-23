@@ -57,24 +57,32 @@ Cargo workspace members are listed in root `Cargo.toml`. Shared Rust deps live i
 
 ### Pipeline stages → skills
 
-`STAGE_ORDER` is six stages. There is **no** `Workspace` stage. Init creates the workspace and both worktrees before ReviewPrd. `WorkspaceSkill` in `crates/poria-skills/src/workspace.rs` is leftover and is **not** in `STAGE_ORDER` — do not add it back.
+`STAGE_ORDER` is the full-chain profile (12 nodes). There is **no** `Workspace` stage. Init creates the workspace and both worktrees before Clarify. `WorkspaceSkill` in `crates/poria-skills/src/workspace.rs` is leftover and is **not** in `STAGE_ORDER` — do not add it back.
 
-| `StageEnum` | Skill id            | Implementation                                                                                                                                                                                            |
-| ----------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Init`      | `skill:init`        | Export JoySpace docs into `~/.poria/projects/<demand_code>/`, create `~/.poria/workspaces/<pipeline_id>/` (doc + skill symlinks, `CLAUDE.md`), then frontend feature worktree + backend detached worktree |
-| `ReviewPrd` | `skill:review-prd`  | Workspace-root `claude -p` short prompt naming `review-prd`; write `PRD_REVIEW.md` via symlink into projects                                                                                              |
-| `Design`    | `skill:gen-trd`     | Same cwd; write frontend `TRD.md` into the demand project dir via workspace symlink                                                                                                                       |
-| `Dev`       | `skill:gen-code`    | Same cwd; codegen + `TASK.md`; only the frontend worktree is modified                                                                                                                                     |
-| `Cr`        | `skill:code-review` | Same cwd; `CR.md` + gates                                                                                                                                                                                 |
-| `Deploy`    | `skill:deploy`      | Commit if dirty → **push** → EasyCI SELECT bind → find/create MR (frontend worktree cwd)                                                                                                                  |
+After each successful node the executor stops with `awaiting_advance` until `pipeline_advance` (`continue` / `redo` / `skip` / `annotate`). Production never silently auto-chains; only `PORIA_PIPELINE_FIXTURE=1` may chain.
+
+| Rust variant | JSON id | Skill id | Notes |
+| ------------ | ------------------- | ------------------- | ----- |
+| `Init` | `init` | `skill:init` | Docs + workspace + worktrees |
+| `ReviewPrd` | `clarify` (alias `review_prd`) | `skill:review-prd` | `PRD_REVIEW.md` |
+| `Design` | `propose` (alias `design`) | `skill:gen-trd` | frontend `TRD.md` |
+| `TestPlan` | `test_plan` | `skill:test-plan` | thin `test-plan.md` |
+| `Dev` | `implement` (alias `dev`) | `skill:gen-code` | codegen + `TASK.md` |
+| `Lint` | `lint` | `skill:lint` | worktree verify; fail stays in dialogue |
+| `Cr` | `code_review` (alias `cr`) | `skill:code-review` | `CR.md` + gates |
+| `TestCases` | `test_cases` | `skill:test-cases` | thin `test-cases.md` |
+| `RunAutotest` | `run_autotest` | `skill:run-autotest` | thin `test-report.md` |
+| `HandoffQa` | `handoff_qa` | `skill:handoff-qa` | thin `handoff-report.md` |
+| `Deploy` | `deploy` | `skill:deploy` | push → EasyCI SELECT → MR |
+| `Archive` | `archive` | `skill:archive` | thin `archive.md`; then `waiting_merge` if MR exists |
 
 Map source of truth: `crates/poria-skills/src/stage_skill_map.rs` and `crates/poria-commands/src/traits.rs` (`stage_skill_id`). Keep both in sync with `STAGE_ORDER` in `crates/poria-core/src/types/pipeline_types.rs` and `src/lib/types.ts`.
 
-JSON / TS stage names are snake_case: `init`, `review_prd`, `design`, `dev`, `cr`, `deploy`.
+JSON / TS stage names are full-profile snake_case (`clarify`, `propose`, `implement`, `code_review`, …). Legacy six-stage ids still deserialize.
 
-Artifacts (`poria-core` `feature_context`): `PRD.md`, `PRD_REVIEW.md`, `TRD.md`, `BACKEND_TRD.md`, `TASK.md`, `CR.md`. Production Init uses `FeatureContext::create_at` on `~/.poria/projects/<demand_code>/`. Frontend TRD and backend TRD are different files — do not collapse them. Do not commit these files into the git worktree.
+Artifacts (`poria-core` `feature_context`): `PRD.md`, `PRD_REVIEW.md`, `TRD.md`, `BACKEND_TRD.md`, `TASK.md`, `CR.md` (+ thin test/handoff/archive markdown). Production Init uses `FeatureContext::create_at` on `~/.poria/projects/<demand_code>/`. Frontend TRD and backend TRD are different files — do not collapse them. Do not commit these files into the git worktree.
 
-Desktop agent stages (ReviewPrd / Design / Dev / Cr) must stay non-interactive (`claude -p`). Do not add HITL prompts inside those skills. Desktop HITL is `HumanLoopCard` → `human_loop_respond` with `resume` / `skip` / `cancel`.
+Desktop agent stages (Clarify / Propose / Implement / CodeReview) must stay non-interactive (`claude -p`). Do not add HITL prompts inside those skills. Desktop HITL is `HumanLoopCard` → `human_loop_respond` / `pipeline_advance`.
 
 Bundled Claude skills (sidebar 技能 + Init symlinks): repo `skills/{review-prd,gen-trd,gen-code,code-review}/SKILL.md`. Init and Deploy are Rust pipeline skills, **not** bundled `SKILL.md`. `list_skills` / `get_skill` scan bundled markdown only. Keep `--system-prompt` short; procedure lives in `SKILL.md`.
 

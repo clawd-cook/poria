@@ -17,7 +17,7 @@ poria/
 ├── crates/
 │   ├── poria-core            # 领域类型、状态机、门禁、风险分级
 │   ├── poria-commands        # 流水线执行、错误分类、回滚
-│   ├── poria-skills          # 六阶段内置 Skill
+│   ├── poria-skills          # 全链路内置 Skill（Init…Archive）
 │   ├── poria-resources       # 终端、worktree、Claude Agent 池
 │   ├── poria-channels        # Coding、JoySpace、行云、JME、缺陷
 │   └── poria-infrastructure  # SQLite、鉴权、配置、日志、指标
@@ -44,7 +44,7 @@ src-tauri (poria-desktop)
 | ---------------------- | --------------------------------------------------------- |
 | `poria-core`           | 领域类型、状态机、门禁、风险分级、多仓拓扑                |
 | `poria-commands`       | 流水线执行器、错误分类、回滚（**不是** IPC 层）           |
-| `poria-skills`         | Init / ReviewPrd / GenTrd / GenCode / CodeReview / Deploy |
+| `poria-skills`         | Init / Clarify / Propose / TestPlan / Implement / Lint / CodeReview / TestCases / RunAutotest / HandoffQa / Deploy / Archive |
 | `poria-resources`      | 终端、worktree、Claude Agent 池、输出护栏                 |
 | `poria-channels`       | Coding、JoySpace、行云、JME、缺陷                         |
 | `poria-infrastructure` | SQLite、鉴权、配置、日志、指标                            |

@@ -10,6 +10,7 @@ mod post_cr_notes;
 pub mod prompt_templates;
 mod quality_gates;
 mod stage_skill_map;
+mod thin_docs;
 mod workspace_layout;
 
 mod code_review;
@@ -26,8 +27,9 @@ pub use crate::backend_aid::insert_backend_coding_aid_vars;
 pub use crate::dev_verify::run_frontend_verify;
 pub use crate::post_cr_notes::post_cr_blocking_notes;
 pub use claude_prompt::{
-    build_claude_skill_prompt, bundled_skill_dir_name, BUNDLED_SKILL_DIRS, SKILL_CODE_REVIEW,
-    SKILL_GEN_CODE, SKILL_GEN_TRD, SKILL_REVIEW_PRD,
+    advance_note_from_input, build_claude_skill_prompt, build_claude_skill_prompt_with_note,
+    bundled_skill_dir_name, BUNDLED_SKILL_DIRS, SKILL_CODE_REVIEW, SKILL_GEN_CODE, SKILL_GEN_TRD,
+    SKILL_REVIEW_PRD,
 };
 pub use error::SkillError;
 pub use fixture::is_fixture_mode;
@@ -50,4 +52,7 @@ pub use gen_code::GenCodeSkill;
 pub use gen_trd::GenTrdSkill;
 pub use init::InitSkill;
 pub use review_prd::ReviewPrdSkill;
+pub use thin_docs::{
+    ArchiveSkill, HandoffQaSkill, LintSkill, RunAutotestSkill, TestCasesSkill, TestPlanSkill,
+};
 pub use workspace::WorkspaceSkill;

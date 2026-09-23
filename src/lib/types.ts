@@ -23,21 +23,61 @@ export type PipelineStatus =
 
 export type StageStatus = "pending" | "running" | "completed" | "failed" | "blocked" | "skipped";
 
-export type StageEnum = "init" | "review_prd" | "design" | "dev" | "cr" | "deploy";
+export type StageEnum =
+  | "init"
+  | "clarify"
+  | "propose"
+  | "test_plan"
+  | "implement"
+  | "lint"
+  | "code_review"
+  | "test_cases"
+  | "run_autotest"
+  | "handoff_qa"
+  | "deploy"
+  | "archive"
+  /** @deprecated legacy aliases still accepted from older pipelines */
+  | "review_prd"
+  | "design"
+  | "dev"
+  | "cr";
 
-export const STAGE_ORDER: StageEnum[] = ["init", "review_prd", "design", "dev", "cr", "deploy"];
+export const STAGE_ORDER: StageEnum[] = [
+  "init",
+  "clarify",
+  "propose",
+  "test_plan",
+  "implement",
+  "lint",
+  "code_review",
+  "test_cases",
+  "run_autotest",
+  "handoff_qa",
+  "deploy",
+  "archive",
+];
 
-export const STAGE_LABELS: Record<StageEnum, string> = {
+export const STAGE_LABELS: Record<string, string> = {
+  archive: "归档",
+  clarify: "需求澄清",
+  code_review: "代码审查",
   cr: "代码审查",
-  deploy: "部署",
-  design: "技术设计",
-  dev: "开发",
+  deploy: "部署推送",
+  design: "技术方案",
+  dev: "编码实现",
+  handoff_qa: "转测交接",
+  implement: "编码实现",
   init: "初始化",
-  review_prd: "需求评审",
+  lint: "静态检查",
+  propose: "技术方案",
+  review_prd: "需求澄清",
+  run_autotest: "自动化测试",
+  test_cases: "测试用例",
+  test_plan: "测试计划",
 };
 
 export function stageLabel(name: string): string {
-  return STAGE_LABELS[name as StageEnum] ?? name;
+  return STAGE_LABELS[name] ?? name;
 }
 
 export interface StageDetail {

@@ -19,10 +19,12 @@ use poria_commands::{
 };
 use poria_core::contracts::{Skill, SkillContext};
 use poria_core::pipeline::{
-    blocked_stage_index, create_pipeline_id, escalate_after, evaluate_gates, jme_notify_target,
-    parse_prd_review, parse_trd_scope, read_human_loop_state, rfc3339_elapsed,
-    stamp_human_loop_notified, try_consume_human_reply, write_human_loop_state,
-    PipelineEvent as CorePipelineEvent, StageResult, DEFAULT_GATES,
+    advance_request_detail, awaiting_advance_stage_index, blocked_stage_index, clear_awaiting_advance,
+    create_pipeline_id, enter_awaiting_advance, escalate_after, evaluate_gates, gate_level_for,
+    jme_notify_target, may_auto_chain_stages, parse_prd_review, parse_trd_scope,
+    read_human_loop_state, rfc3339_elapsed, stamp_human_loop_notified, try_consume_human_reply,
+    write_human_loop_state, AdvanceAction, GateLevel, PipelineEvent as CorePipelineEvent,
+    StageResult, AWAITING_ADVANCE_ISSUE_CLASS, DEFAULT_GATES,
 };
 use poria_core::types::{
     BackendContext, GateEvaluation, GatePhase, IssueClass, Pipeline, PipelineConfig,
@@ -46,9 +48,10 @@ use poria_infrastructure::store::{
 };
 use poria_resources::WorktreeResource;
 use poria_skills::{
-    post_cr_blocking_notes, prepare_pipeline_workspace, run_frontend_verify, CodeReviewSkill,
-    DeploySkill, GenCodeSkill, GenTrdSkill, HumanLoop, HumanLoopCoordinator, InitSkill,
-    ReviewPrdSkill,
+    post_cr_blocking_notes, prepare_pipeline_workspace, run_frontend_verify, ArchiveSkill,
+    CodeReviewSkill, DeploySkill, GenCodeSkill, GenTrdSkill, HandoffQaSkill, HumanLoop,
+    HumanLoopCoordinator, InitSkill, LintSkill, ReviewPrdSkill, RunAutotestSkill, TestCasesSkill,
+    TestPlanSkill,
 };
 
 use crate::AppState;
@@ -466,6 +469,7 @@ pub async fn submit_pipeline(
         trd_confirmed: false,
         workflow_id: None,
         jobs: Vec::new(),
+        advance_note: None,
     };
     if config.repos.len() != 1 {
         return Err("流水线只能包含前端仓库".into());
@@ -608,6 +612,7 @@ async fn cancel_pipeline_inner(id: &str, app: &AppHandle, state: &AppState) -> R
 
 /// Respond to a human-loop request.
 /// `action` is one of: "resume", "skip", "cancel"
+/// For stage-boundary dialogue (`awaiting_advance`), prefer `pipeline_advance`.
 #[tauri::command]
 pub async fn human_loop_respond(
     pipeline_id: String,
@@ -615,7 +620,181 @@ pub async fn human_loop_respond(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Map legacy resume onto advance continue when waiting on dialogue.
+    if let Ok(Some(pipeline)) = state.store.load(&pipeline_id) {
+        if awaiting_advance_stage_index(&pipeline).is_some() {
+            let advance = match action.as_str() {
+                "resume" => "continue",
+                "skip" => "skip",
+                "cancel" => {
+                    return apply_human_loop_action(&pipeline_id, "cancel", &app, &state).await;
+                }
+                other => other,
+            };
+            return pipeline_advance(pipeline_id, advance.to_string(), None, false, app, state)
+                .await;
+        }
+    }
     apply_human_loop_action(&pipeline_id, &action, &app, &state).await
+}
+
+/// Stage-boundary dialogue decision: continue | redo | skip | annotate.
+#[tauri::command]
+pub async fn pipeline_advance(
+    pipeline_id: String,
+    action: String,
+    note: Option<String>,
+    force: bool,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    apply_pipeline_advance(&pipeline_id, &action, note.as_deref(), force, &app, &state).await
+}
+
+async fn apply_pipeline_advance(
+    pipeline_id: &str,
+    action_raw: &str,
+    note: Option<&str>,
+    force: bool,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<(), String> {
+    let action = AdvanceAction::parse(action_raw)
+        .ok_or_else(|| format!("Invalid advance action '{action_raw}'"))?;
+
+    let mut pipeline = state
+        .store
+        .load(pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+    let Some(idx) = awaiting_advance_stage_index(&pipeline) else {
+        return Err("当前没有待确认的阶段推进".into());
+    };
+    if !try_consume_human_reply(&mut pipeline.stages[idx]) {
+        // Allow annotate without consuming if already consumed? Prefer fresh stamp.
+        // Re-open: clear reply_consumed for annotate-only? Keep strict once.
+        if action != AdvanceAction::Annotate {
+            return Ok(());
+        }
+    }
+
+    match action {
+        AdvanceAction::Annotate => {
+            let text = note.map(str::trim).filter(|s| !s.is_empty()).ok_or("补充上下文不能为空")?;
+            pipeline.config.advance_note = Some(text.to_string());
+            // Stay blocked; reset reply_consumed so continue can still fire.
+            if let Some(hl) = pipeline.stages[idx].output.as_mut() {
+                if let Some(obj) = hl.as_object_mut() {
+                    if let Some(loop_val) = obj.get_mut("humanLoop") {
+                        if let Some(loop_obj) = loop_val.as_object_mut() {
+                            loop_obj.insert("replyConsumed".into(), serde_json::json!(false));
+                        }
+                    }
+                }
+            }
+            pipeline.updated_at = Utc::now();
+            state
+                .store
+                .save_stage_tx(Some(&pipeline.stages[idx]), &pipeline, &[])
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, &pipeline)?;
+            return Ok(());
+        }
+        AdvanceAction::Continue => {
+            clear_awaiting_advance(&mut pipeline.stages[idx]);
+            // Keep `advance_note` for the next stage prompt (cleared after that stage completes).
+            pipeline.status = PipelineStatus::Running;
+            pipeline.updated_at = Utc::now();
+            state
+                .store
+                .save_stage_tx(Some(&pipeline.stages[idx]), &pipeline, &[])
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, &pipeline)?;
+            // If no further jobs, park on waiting_merge / completed.
+            let workflow = fallback_workflow(&pipeline.config.jobs);
+            if next_ready_stage_index(&pipeline.stages, &workflow).is_none() {
+                pipeline.config.advance_note = None;
+                finish_pipeline_after_last_stage(&mut pipeline, app, &state.store)?;
+                return Ok(());
+            }
+            enqueue_auto_run(app.clone(), state, pipeline_id.to_string());
+            Ok(())
+        }
+        AdvanceAction::Redo => {
+            clear_awaiting_advance(&mut pipeline.stages[idx]);
+            pipeline.stages[idx].status = StageStatus::Pending;
+            pipeline.stages[idx].output = None;
+            pipeline.stages[idx].issue = None;
+            pipeline.stages[idx].completed_at = None;
+            pipeline.stages[idx].started_at = None;
+            pipeline.status = PipelineStatus::Running;
+            pipeline.updated_at = Utc::now();
+            state
+                .store
+                .save_stage_tx(Some(&pipeline.stages[idx]), &pipeline, &[])
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, &pipeline)?;
+            enqueue_auto_run(app.clone(), state, pipeline_id.to_string());
+            Ok(())
+        }
+        AdvanceAction::Skip => {
+            let completed_name = pipeline.stages[idx].name;
+            let gate = gate_level_for(completed_name);
+            if gate == GateLevel::Locked && !force {
+                return Err("该阶段为确认锁闸，跳过需二次确认（force）".into());
+            }
+            clear_awaiting_advance(&mut pipeline.stages[idx]);
+            // Skip the *next* pending stage when present.
+            let workflow = fallback_workflow(&pipeline.config.jobs);
+            if let Some(next_idx) = next_ready_stage_index(&pipeline.stages, &workflow) {
+                let next_gate = gate_level_for(pipeline.stages[next_idx].name);
+                if next_gate == GateLevel::Locked && !force {
+                    return Err("下一阶段为确认锁闸，跳过需二次确认（force）".into());
+                }
+                pipeline.stages[next_idx].status = StageStatus::Skipped;
+            }
+            pipeline.status = PipelineStatus::Running;
+            pipeline.updated_at = Utc::now();
+            state
+                .store
+                .save_stage_tx(None, &pipeline, &[])
+                .map_err(|e| e.to_string())?;
+            emit_pipeline_updated(app, &pipeline)?;
+            let workflow = fallback_workflow(&pipeline.config.jobs);
+            if next_ready_stage_index(&pipeline.stages, &workflow).is_none() {
+                finish_pipeline_after_last_stage(&mut pipeline, app, &state.store)?;
+                return Ok(());
+            }
+            enqueue_auto_run(app.clone(), state, pipeline_id.to_string());
+            Ok(())
+        }
+    }
+}
+
+fn finish_pipeline_after_last_stage(
+    pipeline: &mut Pipeline,
+    app: &AppHandle,
+    store: &SqlitePipelineStore,
+) -> Result<(), String> {
+    let mr_urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
+    if mr_urls.is_empty() {
+        pipeline.status = PipelineStatus::Completed;
+    } else {
+        pipeline.status = PipelineStatus::WaitingMerge;
+    }
+    pipeline.updated_at = Utc::now();
+    let events = if pipeline.status == PipelineStatus::WaitingMerge {
+        vec![CorePipelineEvent::pipeline_waiting_merge(
+            &pipeline.id,
+            mr_urls,
+        )]
+    } else {
+        vec![CorePipelineEvent::pipeline_completed(&pipeline.id)]
+    };
+    store
+        .save_stage_tx(None, pipeline, &events)
+        .map_err(|e| e.to_string())?;
+    emit_pipeline_updated(app, pipeline)?;
+    Ok(())
 }
 
 async fn apply_human_loop_action(
@@ -1458,11 +1637,16 @@ async fn execute_next_stage(
         PipelineStatus::Cancelled | PipelineStatus::Completed | PipelineStatus::WaitingMerge => {
             return Ok(false);
         }
+        PipelineStatus::Blocked => {
+            // Stage-boundary dialogue or HITL — do not auto-chain.
+            return Ok(false);
+        }
         _ => {}
     }
 
     let workflow = fallback_workflow(&pipeline.config.jobs);
     let Some(stage_idx) = next_ready_stage_index(&pipeline.stages, &workflow) else {
+        finish_pipeline_after_last_stage(&mut pipeline, app, &store)?;
         return Ok(false);
     };
 
@@ -1471,7 +1655,16 @@ async fn execute_next_stage(
     }
 
     run_ready_job(&mut pipeline, stage_idx, app, runtime).await?;
-    Ok(true)
+
+    // Reload — job finish may have blocked for awaiting_advance.
+    let pipeline = store
+        .load(pipeline_id)?
+        .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
+    if pipeline.status != PipelineStatus::Running {
+        return Ok(false);
+    }
+    // Fixture-only silent chain; production always stops after each node.
+    Ok(may_auto_chain_stages())
 }
 
 fn stages_from_jobs(
@@ -1601,13 +1794,64 @@ async fn run_registered_action(
         "skill:init" => execute_init_action(pipeline, stage_idx, app, runtime).await,
         "skill:review-prd" => execute_review_prd_action(pipeline, stage_idx, app, runtime).await,
         "skill:gen-trd" => execute_design_action(pipeline, stage_idx, app, runtime).await,
+        "skill:test-plan" => {
+            execute_thin_skill(pipeline, stage_idx, TestPlanSkill::new()).await
+        }
         "skill:gen-code" => execute_dev_action(pipeline, stage_idx, app, runtime).await,
+        "skill:lint" => execute_thin_skill(pipeline, stage_idx, LintSkill::new()).await,
         "skill:code-review" => execute_cr_action(pipeline, stage_idx, app, runtime).await,
+        "skill:test-cases" => {
+            execute_thin_skill(pipeline, stage_idx, TestCasesSkill::new()).await
+        }
+        "skill:run-autotest" => {
+            execute_thin_skill(pipeline, stage_idx, RunAutotestSkill::new()).await
+        }
+        "skill:handoff-qa" => {
+            execute_thin_skill(pipeline, stage_idx, HandoffQaSkill::new()).await
+        }
         "skill:deploy" => execute_deploy_action(pipeline, stage_idx, app, runtime).await,
+        "skill:archive" => execute_thin_skill(pipeline, stage_idx, ArchiveSkill::new()).await,
         "poria/dev-verify" => execute_dev_verify_action(pipeline).await,
         "poria/post-cr-notes" => execute_post_cr_notes_action(pipeline, stage_idx).await,
         other => Err(format!("未知 Action: {other}")),
     }
+}
+
+async fn execute_thin_skill(
+    pipeline: &mut Pipeline,
+    stage_idx: usize,
+    skill: impl Skill,
+) -> Result<serde_json::Value, String> {
+    let project_dir = pipeline
+        .config
+        .project_dir
+        .clone()
+        .or_else(|| {
+            pipeline.stages.iter().find_map(|stage| {
+                stage.output.as_ref().and_then(|output| {
+                    output
+                        .get("projectDir")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                })
+            })
+        })
+        .unwrap_or_default();
+    let ctx = SkillContext {
+        pipeline_id: pipeline.id.clone(),
+        workdir: project_dir,
+        credentials: serde_json::json!({}),
+    };
+    let input = SkillInput {
+        stage: pipeline.stages[stage_idx].clone(),
+        pipeline: pipeline.clone(),
+        extra: serde_json::Map::new(),
+    };
+    skill
+        .execute(input, ctx)
+        .await
+        .map(|out| out.output)
+        .map_err(|err| err.to_string())
 }
 
 async fn fail_job(
@@ -1623,11 +1867,17 @@ async fn fail_job(
     }
     let class = match job_name {
         StageEnum::Init => "init_failed",
-        StageEnum::ReviewPrd => "review_prd_failed",
-        StageEnum::Design => "design_failed",
-        StageEnum::Dev => "dev_failed",
-        StageEnum::Cr => "cr_failed",
+        StageEnum::ReviewPrd => "clarify_failed",
+        StageEnum::Design => "propose_failed",
+        StageEnum::TestPlan => "test_plan_failed",
+        StageEnum::Dev => "implement_failed",
+        StageEnum::Lint => "lint_failed",
+        StageEnum::Cr => "code_review_failed",
+        StageEnum::TestCases => "test_cases_failed",
+        StageEnum::RunAutotest => "run_autotest_failed",
+        StageEnum::HandoffQa => "handoff_qa_failed",
         StageEnum::Deploy => "deploy_failed",
+        StageEnum::Archive => "archive_failed",
     };
     if job_name == StageEnum::Dev && (is_out_of_scope(&message) || is_security_violation(&message))
     {
@@ -1693,10 +1943,14 @@ fn emit_human_request(
     let pipeline = store
         .load(pipeline_id)?
         .ok_or_else(|| format!("Pipeline not found: {pipeline_id}"))?;
-    let stage = pipeline
-        .stages
-        .iter()
-        .find(|s| s.status == StageStatus::Failed || s.status == StageStatus::Blocked)
+    let stage = awaiting_advance_stage_index(&pipeline)
+        .map(|idx| &pipeline.stages[idx])
+        .or_else(|| {
+            pipeline
+                .stages
+                .iter()
+                .find(|s| s.status == StageStatus::Failed || s.status == StageStatus::Blocked)
+        })
         .or_else(|| {
             pipeline
                 .stages
@@ -1704,12 +1958,7 @@ fn emit_human_request(
                 .find(|s| s.status != StageStatus::Completed && s.status != StageStatus::Skipped)
         });
     let stage_name = stage
-        .map(|s| {
-            serde_json::to_string(&s.name)
-                .unwrap_or_default()
-                .trim_matches('"')
-                .to_string()
-        })
+        .map(|s| s.name.as_str().to_string())
         .unwrap_or_default();
     let issue_class = stage
         .and_then(|s| s.issue.as_ref())
@@ -1725,6 +1974,11 @@ fn emit_human_request(
                 OUT_OF_SCOPE_ISSUE_CLASS.to_string()
             } else if is_security_violation(detail) {
                 SECURITY_VIOLATION_ISSUE_CLASS.to_string()
+            } else if detail.contains("awaiting_advance")
+                || detail.contains("请确认后继续")
+                || detail.contains("已完成")
+            {
+                AWAITING_ADVANCE_ISSUE_CLASS.to_string()
             } else if is_quality_gate_block(detail) {
                 if detail.to_ascii_lowercase().contains("test_coverage")
                     || detail.to_ascii_lowercase().contains("coverage missing")
@@ -2893,7 +3147,33 @@ async fn complete_job(
             )],
         )
         .map_err(|e| e.to_string())?;
+
+    if may_auto_chain_stages() {
+        emit_pipeline_updated(app, pipeline)?;
+        return Ok(());
+    }
+
+    let dialogue = enter_awaiting_advance(pipeline, stage_idx);
+    let notify_target = jme_notify_target(pipeline, AWAITING_ADVANCE_ISSUE_CLASS);
+    stamp_human_loop_notified(
+        &mut pipeline.stages[stage_idx],
+        &notify_target,
+        Utc::now(),
+    );
+    store
+        .save_stage_tx(
+            Some(&pipeline.stages[stage_idx]),
+            pipeline,
+            &[CorePipelineEvent::stage_blocked(
+                &pipeline.id,
+                job_name,
+                IssueClass::from_key(AWAITING_ADVANCE_ISSUE_CLASS),
+            )],
+        )
+        .map_err(|e| e.to_string())?;
     emit_pipeline_updated(app, pipeline)?;
+    let detail = advance_request_detail(&dialogue);
+    let _ = emit_human_request(app, store, &pipeline.id, &detail);
     Ok(())
 }
 
@@ -3025,10 +3305,6 @@ async fn finish_deploy_job(
         return fail_or_block_stage(pipeline, stage_idx, app, store, message, "deploy_failed")
             .await;
     }
-    pipeline.status = PipelineStatus::WaitingMerge;
-    pipeline.stages[stage_idx].status = StageStatus::Completed;
-    pipeline.stages[stage_idx].completed_at = Some(Utc::now());
-    pipeline.updated_at = Utc::now();
     let mut output_value = output;
     if let Some(obj) = output_value.as_object_mut() {
         if !obj.contains_key("mrUrls") {
@@ -3037,8 +3313,10 @@ async fn finish_deploy_job(
             }
         }
     }
-    pipeline.stages[stage_idx].output = Some(output_value.clone());
-    let mr_urls = poria_core::pipeline::collect_deploy_mr_urls(pipeline);
+    let mr_urls = {
+        pipeline.stages[stage_idx].output = Some(output_value.clone());
+        poria_core::pipeline::collect_deploy_mr_urls(pipeline)
+    };
     let mut rollback_cmds = Vec::new();
     for url in &mr_urls {
         rollback_cmds.push(poria_core::types::RollbackCommand {
@@ -3065,34 +3343,10 @@ async fn finish_deploy_job(
             commands: rollback_cmds,
         });
     }
-    store
-        .save_stage_tx(
-            Some(&pipeline.stages[stage_idx]),
-            pipeline,
-            &[
-                CorePipelineEvent::stage_completed(&pipeline.id, StageEnum::Deploy, output_value),
-                CorePipelineEvent::pipeline_waiting_merge(&pipeline.id, mr_urls.clone()),
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-    emit_pipeline_updated(app, pipeline)?;
-    let _ = app.emit(
-        "human:request",
-        serde_json::json!({
-            "pipelineId": pipeline.id,
-            "stage": "deploy",
-            "issueClass": "waiting_merge",
-            "detail": format!(
-                "MR 已创建，等待审查人确认后在 Coding 合入（Poria 不会自动点合并）。{}",
-                mr_urls.join(" ")
-            ),
-        }),
-    );
-    spawn_delivery_side_effects(pipeline.clone(), false, None, None);
-    Ok(())
+    // Do not jump to waiting_merge here — Archive + stage-boundary dialogue follow.
+    complete_job(pipeline, stage_idx, app, store, output_value, StageEnum::Deploy).await
 }
 
-/// Skip a pending, failed, or blocked stage in a pipeline.
 #[tauri::command]
 pub async fn skip_stage(
     pipeline_id: String,
@@ -3257,10 +3511,20 @@ mod tests {
         let jobs = poria_core::workflow::materialize(&poria_core::workflow::bundled_demand_to_mr())
             .unwrap();
         let stages = stages_from_jobs("p1", &jobs);
-        assert_eq!(stages.len(), 6);
+        assert_eq!(stages.len(), poria_core::types::STAGE_ORDER.len());
         assert_eq!(stages[0].name, StageEnum::Init);
-        assert_eq!(stages[3].name, StageEnum::Dev);
-        assert_eq!(stages[5].name, StageEnum::Deploy);
+        assert_eq!(
+            stages.iter().find(|s| s.name == StageEnum::Dev).map(|s| s.name),
+            Some(StageEnum::Dev)
+        );
+        assert_eq!(
+            stages
+                .iter()
+                .find(|s| s.name == StageEnum::Deploy)
+                .map(|s| s.name),
+            Some(StageEnum::Deploy)
+        );
+        assert_eq!(stages.last().map(|s| s.name), Some(StageEnum::Archive));
         let omitted = stages_from_jobs(
             "p2",
             &[poria_core::workflow::MaterializedJob {

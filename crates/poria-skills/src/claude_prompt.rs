@@ -34,6 +34,29 @@ pub fn build_claude_skill_prompt(
     backend_trd_url: &str,
     base_branch: &str,
 ) -> String {
+    build_claude_skill_prompt_with_note(
+        skill_dir,
+        demand_code,
+        workspace_path,
+        frontend_dir,
+        backend_dir,
+        backend_trd_url,
+        base_branch,
+        None,
+    )
+}
+
+/// Same as [`build_claude_skill_prompt`], plus optional stage-boundary annotate note (R8).
+pub fn build_claude_skill_prompt_with_note(
+    skill_dir: &str,
+    demand_code: &str,
+    workspace_path: &str,
+    frontend_dir: &str,
+    backend_dir: &str,
+    backend_trd_url: &str,
+    base_branch: &str,
+    advance_note: Option<&str>,
+) -> String {
     let mut prompt = format!(
         "使用 {skill_dir} skill。需求号 {demand_code}。工作区根 `{workspace_path}`。前端目录 `{frontend_dir}`。后端只读目录 `{backend_dir}`。按 SKILL.md 非交互完成，不要提问。"
     );
@@ -48,7 +71,21 @@ pub fn build_claude_skill_prompt(
     if !base.is_empty() {
         prompt.push_str(&format!(" 前端基准分支 `{base}`。"));
     }
+    if let Some(note) = advance_note.map(str::trim).filter(|s| !s.is_empty()) {
+        prompt.push_str(&format!(" 补充上下文：{note}。"));
+    }
     prompt
+}
+
+/// Read pipeline `advance_note` for injection into the next stage prompt.
+pub fn advance_note_from_input(input: &SkillInput) -> Option<&str> {
+    input
+        .pipeline
+        .config
+        .advance_note
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
 }
 
 pub fn extra_nonempty<'a>(input: &'a SkillInput, key: &str) -> Option<&'a str> {
@@ -232,5 +269,30 @@ mod tests {
                 assert!(body.contains("独立评审者"));
             }
         }
+    }
+
+    #[test]
+    fn prompt_includes_advance_note_when_present() {
+        let prompt = build_claude_skill_prompt_with_note(
+            SKILL_GEN_CODE,
+            "R1",
+            "/tmp/ws",
+            "/tmp/ws/fe",
+            "/tmp/ws/be",
+            "",
+            "master",
+            Some("优先改 Button 组件"),
+        );
+        assert!(prompt.contains("补充上下文：优先改 Button 组件"));
+        let plain = build_claude_skill_prompt(
+            SKILL_GEN_CODE,
+            "R1",
+            "/tmp/ws",
+            "/tmp/ws/fe",
+            "/tmp/ws/be",
+            "",
+            "master",
+        );
+        assert!(!plain.contains("补充上下文"));
     }
 }
