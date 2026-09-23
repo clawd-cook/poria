@@ -3,25 +3,49 @@ jobs:
   init:
     steps:
       - uses: skill:init
-  review_prd:
+  clarify:
     needs: [init]
     steps:
       - uses: skill:review-prd
-  design:
-    needs: [review_prd]
+  propose:
+    needs: [clarify]
     steps:
       - uses: skill:gen-trd
-  dev:
-    needs: [design]
+  test_plan:
+    needs: [propose]
+    steps:
+      - uses: skill:test-plan
+  implement:
+    needs: [test_plan]
     steps:
       - uses: skill:gen-code
       - uses: poria/dev-verify
-  cr:
-    needs: [dev]
+  lint:
+    needs: [implement]
+    steps:
+      - uses: skill:lint
+  code_review:
+    needs: [lint]
     steps:
       - uses: skill:code-review
+  test_cases:
+    needs: [code_review]
+    steps:
+      - uses: skill:test-cases
+  run_autotest:
+    needs: [test_cases]
+    steps:
+      - uses: skill:run-autotest
+  handoff_qa:
+    needs: [run_autotest]
+    steps:
+      - uses: skill:handoff-qa
   deploy:
-    needs: [cr]
+    needs: [handoff_qa]
     steps:
       - uses: skill:deploy
       - uses: poria/post-cr-notes
+  archive:
+    needs: [deploy]
+    steps:
+      - uses: skill:archive

@@ -1,0 +1,265 @@
+{
+  "task": "mission-system-uat-fix",
+  "created_at": "2026-09-19 14:13:04",
+  "init_ts": "2026-09-19 14:13:04",
+  "profile": "develop-mode-openspec",
+  "start_node": "workflow-explore",
+  "npm_lb_version": "1.3.1",
+  "npm_lbcli_version": "1.3.1",
+  "lb_version": "1.3.1",
+  "identity": {
+    "git_user": "heyongqi10",
+    "git_email": "heyongqi10@jd.com",
+    "git_remote": "git@coding.jd.com:LT_H5/fragment-clean.git",
+    "git_branch": "feature_20260812_mission_system_uat"
+  },
+  "telemetry": {
+    "is_report": true,
+    "report_url": "http://light-data-server.jd.local/lightboat/reports/observation",
+    "auto_upgrade_remote": true
+  },
+  "env": {
+    "target": "local",
+    "scope": [
+      "http"
+    ],
+    "http_domain": null,
+    "jsf_alias": null,
+    "eone_feature_env": null
+  },
+  "pipeline": [
+    {
+      "node": "workflow-propose",
+      "skill": [
+        "workflow-propose"
+      ],
+      "exit_gate": "confirm-locked",
+      "entry_gate": "auto",
+      "autopilot": false,
+      "execution": "inline",
+      "hooks": {},
+      "feedback": {
+        "can_report": false,
+        "reroute_options": [],
+        "rerouteable": true
+      }
+    },
+    {
+      "node": "workflow-implement",
+      "skill": [
+        "workflow-implement"
+      ],
+      "exit_gate": "auto",
+      "entry_gate": "auto",
+      "autopilot": true,
+      "execution": "inline",
+      "hooks": {},
+      "feedback": {
+        "can_report": false,
+        "reroute_options": [],
+        "rerouteable": true
+      }
+    },
+    {
+      "node": "workflow-lint",
+      "skill": [
+        "workflow-lint"
+      ],
+      "exit_gate": "auto",
+      "entry_gate": "auto",
+      "autopilot": true,
+      "execution": "inline",
+      "hooks": {},
+      "feedback": {
+        "can_report": false,
+        "reroute_options": [],
+        "rerouteable": true
+      }
+    },
+    {
+      "node": "workflow-code-review",
+      "skill": [
+        "workflow-code-review"
+      ],
+      "exit_gate": "auto",
+      "entry_gate": "auto",
+      "autopilot": true,
+      "execution": "subagent",
+      "hooks": {},
+      "feedback": {
+        "can_report": true,
+        "reroute_options": [
+          "workflow-implement"
+        ],
+        "rerouteable": true
+      }
+    },
+    {
+      "node": "workflow-archive",
+      "skill": [
+        "workflow-archive"
+      ],
+      "exit_gate": "confirm-locked",
+      "entry_gate": "confirm-locked",
+      "autopilot": false,
+      "execution": "inline",
+      "hooks": {},
+      "feedback": {
+        "can_report": false,
+        "reroute_options": [],
+        "rerouteable": false
+      }
+    }
+  ],
+  "roles": {
+    "trd": "openspec/changes/mission-system-uat-fix/",
+    "schema-draft": "delivery/mission-system-uat-fix/schema/"
+  },
+  "main": {
+    "current_step": "done",
+    "history": [
+      {
+        "step": "workflow-propose",
+        "ended_at": "2026-09-19 14:20:06",
+        "outcome": "ok",
+        "entered_at": "2026-09-19 14:16:17",
+        "entered_context_used": 175562,
+        "entered_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "entered_model": "claude-opus-4-8",
+        "entered_turns": 4,
+        "ended_context_used": 200631,
+        "ended_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "ended_model": "claude-opus-4-8",
+        "ended_turns": 4
+      },
+      {
+        "step": "workflow-implement",
+        "ended_at": "2026-09-19 14:41:57",
+        "outcome": "ok",
+        "entered_at": "2026-09-19 14:33:56",
+        "entered_context_used": 205195,
+        "entered_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "entered_model": "claude-opus-4-8",
+        "entered_turns": 5,
+        "ended_context_used": 241954,
+        "ended_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "ended_model": "claude-opus-4-8",
+        "ended_turns": 5
+      },
+      {
+        "step": "workflow-lint",
+        "ended_at": "2026-09-19 14:59:58",
+        "outcome": "ok",
+        "entered_at": "2026-09-19 14:42:10",
+        "entered_context_used": 242883,
+        "entered_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "entered_model": "claude-opus-4-8",
+        "entered_turns": 5,
+        "ended_context_used": 247742,
+        "ended_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "ended_model": "claude-opus-4-8",
+        "ended_turns": 5
+      },
+      {
+        "step": "workflow-code-review",
+        "ended_at": "2026-09-19 15:09:45",
+        "outcome": "ok",
+        "entered_at": "2026-09-19 15:09:34",
+        "entered_context_used": 271685,
+        "entered_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "entered_model": "claude-opus-4-8",
+        "entered_turns": 5,
+        "ended_context_used": 272152,
+        "ended_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "ended_model": "claude-opus-4-8",
+        "ended_turns": 5
+      },
+      {
+        "step": "workflow-archive",
+        "ended_at": "2026-09-19 17:26:43",
+        "outcome": "ok",
+        "entered_at": "2026-09-19 17:14:24",
+        "entered_context_used": 281489,
+        "entered_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "entered_model": "claude-opus-4-8",
+        "entered_turns": 6,
+        "ended_context_used": 297953,
+        "ended_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+        "ended_model": "claude-opus-4-8",
+        "ended_turns": 6
+      }
+    ],
+    "pending_gate": null
+  },
+  "feedback": {
+    "next_id": 3,
+    "open": [],
+    "resolved": [
+      {
+        "id": "issue-1",
+        "from": "workflow-code-review",
+        "category": "code",
+        "reroute_target": null,
+        "severity": "normal",
+        "reroute_count": 0,
+        "created_at": "2026-09-19 15:06:46",
+        "resolved_at": "2026-09-19 15:09:01",
+        "resolved_mode": "auto"
+      },
+      {
+        "id": "issue-2",
+        "from": "workflow-code-review",
+        "category": "code",
+        "reroute_target": null,
+        "severity": "normal",
+        "reroute_count": 0,
+        "created_at": "2026-09-19 15:06:46",
+        "resolved_at": "2026-09-19 15:09:01",
+        "resolved_mode": "auto"
+      }
+    ]
+  },
+  "init_context_used": 168209,
+  "init_session_id": "27ac6b11-3f4d-4c23-86ef-3beaaf716857",
+  "init_model": "claude-opus-4-8",
+  "init_turns": 3,
+  "baseline_context_used": 54382,
+  "token_usage": {
+    "by_session": {
+      "27ac6b11-3f4d-4c23-86ef-3beaaf716857": {
+        "summary": {
+          "input_tokens": 338,
+          "output_tokens": 99925,
+          "cache_creation_input_tokens": 2411847,
+          "cache_read_input_tokens": 31634418,
+          "total_tokens": 34146528
+        },
+        "models": {
+          "claude-opus-4-8": {
+            "input_tokens": 338,
+            "output_tokens": 99925,
+            "cache_creation_input_tokens": 2411847,
+            "cache_read_input_tokens": 31634418,
+            "total_tokens": 34146528
+          }
+        }
+      }
+    },
+    "summary": {
+      "input_tokens": 338,
+      "output_tokens": 99925,
+      "cache_creation_input_tokens": 2411847,
+      "cache_read_input_tokens": 31634418,
+      "total_tokens": 34146528
+    },
+    "models": {
+      "claude-opus-4-8": {
+        "input_tokens": 338,
+        "output_tokens": 99925,
+        "cache_creation_input_tokens": 2411847,
+        "cache_read_input_tokens": 31634418,
+        "total_tokens": 34146528
+      }
+    }
+  }
+}

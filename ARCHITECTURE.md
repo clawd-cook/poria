@@ -17,7 +17,7 @@ poria/
 ├── crates/
 │   ├── poria-core            # 领域类型、状态机、门禁、风险分级
 │   ├── poria-commands        # 流水线执行、错误分类、回滚
-│   ├── poria-skills          # 六阶段内置 Skill
+│   ├── poria-skills          # 全链路内置 Skill（Init…Archive）
 │   ├── poria-resources       # 终端、worktree、Claude Agent 池
 │   ├── poria-channels        # Coding、JoySpace、行云、JME、缺陷
 │   └── poria-infrastructure  # SQLite、鉴权、配置、日志、指标
@@ -44,7 +44,7 @@ src-tauri (poria-desktop)
 | ---------------------- | --------------------------------------------------------- |
 | `poria-core`           | 领域类型、状态机、门禁、风险分级、多仓拓扑                |
 | `poria-commands`       | 流水线执行器、错误分类、回滚（**不是** IPC 层）           |
-| `poria-skills`         | Init / ReviewPrd / GenTrd / GenCode / CodeReview / Deploy |
+| `poria-skills`         | Init / Clarify / Propose / TestPlan / Implement / Lint / CodeReview / TestCases / RunAutotest / HandoffQa / Deploy / Archive |
 | `poria-resources`      | 终端、worktree、Claude Agent 池、输出护栏                 |
 | `poria-channels`       | Coding、JoySpace、行云、JME、缺陷                         |
 | `poria-infrastructure` | SQLite、鉴权、配置、日志、指标                            |
@@ -54,7 +54,7 @@ src-tauri (poria-desktop)
 
 ## 前端与 IPC
 
-侧栏视图：看板 `home`、渠道 `channels`、技能 `skills`、仓库 `repos`、工作区 `workspace`、设置 `settings`。没有单独的需求页；未开始列就是行云任务。
+侧栏视图：需求 `home`（列表与需求工作台）、仓库 `repos`、设置 `settings`。没有单独的需求页；未开始列就是行云任务。工作区 / 文档 / HITL 确认是工作台切面，不是侧栏 Tab。
 
 - IPC 封装只放在 `src/lib/tauri.ts`。前端 camelCase（`pipelineId`、`backendTrdUrl`）对应 Rust snake_case。
 - `#[tauri::command]` 只写在 `src-tauri/src/commands/`，并在 `src-tauri/src/lib.rs` 注册。

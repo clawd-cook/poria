@@ -100,6 +100,20 @@ export function PipelineDetail() {
             stage={humanRequest.stage}
           />
         </div>
+      ) : detail.stages.some((stage) => stage.issue?.includes("awaiting_advance")) ? (
+        <div className="my-4">
+          <HumanLoopCard
+            demandCode={detail.demand_code}
+            demandId={detail.demand_id}
+            detail="阶段已完成，请确认后继续下一阶段。"
+            issueClass="awaiting_advance"
+            pipelineId={detail.id}
+            stage={
+              detail.stages.find((stage) => stage.issue?.includes("awaiting_advance"))?.name ??
+              "unknown"
+            }
+          />
+        </div>
       ) : detail.status === "waiting_merge" ? (
         <div className="my-4">
           <HumanLoopCard

@@ -60,12 +60,23 @@ const STAGE_TRANSITIONS: &[(StageStatus, &[StageStatus])] = &[
             StageStatus::Blocked,
         ],
     ),
-    (StageStatus::Completed, &[]),
+    (
+        StageStatus::Completed,
+        &[StageStatus::Pending], // redo after awaiting_advance
+    ),
     (
         StageStatus::Failed,
         &[StageStatus::Running, StageStatus::Blocked],
     ),
-    (StageStatus::Blocked, &[StageStatus::Running]),
+    (
+        StageStatus::Blocked,
+        &[
+            StageStatus::Running,
+            StageStatus::Completed,
+            StageStatus::Skipped,
+            StageStatus::Pending,
+        ],
+    ),
     (StageStatus::Skipped, &[]),
 ];
 

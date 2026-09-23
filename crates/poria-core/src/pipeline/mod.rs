@@ -1,3 +1,4 @@
+mod advance;
 mod events;
 mod gates;
 mod human_loop_state;
@@ -10,6 +11,7 @@ mod risk_classifier;
 mod state_machine;
 mod trd_scope;
 
+pub use advance::*;
 pub use events::*;
 pub use gates::*;
 pub use human_loop_state::*;

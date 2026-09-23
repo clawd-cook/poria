@@ -1,6 +1,7 @@
 export const ISSUE_CLASS_LABELS: Record<string, string> = {
   agent_timeout: "Agent 超时",
   auth_expired: "登录已过期",
+  awaiting_advance: "阶段完成待确认",
   ci_build: "CI 未通过",
   compilation_error: "编译失败",
   diff_too_large: "变更过大",
@@ -63,6 +64,8 @@ export function issueClassTitle(issueClass: string, message: string): string | n
       return "基础设施或 CI 失败，需要运维协助";
     case "waiting_merge":
       return "MR 待审查人确认后合入（不会自动点合并）";
+    case "awaiting_advance":
+      return "阶段已完成，请确认后继续下一节点";
     default:
       if (message.includes("链接无效") || message.toLowerCase().includes("invalid url")) {
         return "需求链接无效，需要产品处理";

@@ -2,13 +2,16 @@ import type {
   AppConfig,
   AuthStatus,
   ChannelInfo,
+  LegacyViewType,
   PipelineDetail,
   PipelineEvent,
   PipelineSummary,
   RegisteredRepo,
   SkillInfo,
   StreamChunk,
+  UiSurface,
   ViewType,
+  WorkbenchTab,
 } from "../lib/types";
 
 export type Action =
@@ -39,8 +42,15 @@ export type Action =
   | { type: "filterChanged"; filter: string | null }
   | { type: "skillsLoaded"; skills: SkillInfo[] }
   | { type: "channelsLoaded"; channels: ChannelInfo[] }
-  | { type: "viewChanged"; view: ViewType }
+  | { type: "viewChanged"; view: LegacyViewType | ViewType }
   | { type: "reposHydrated"; repos: RegisteredRepo[] }
   | { type: "streamChunkReceived"; pipelineId: string; chunk: StreamChunk }
   | { type: "streamCleared"; pipelineId: string }
-  | { type: "stageExecuteRequested"; pipelineId: string; stage: string };
+  | { type: "stageExecuteRequested"; pipelineId: string; stage: string }
+  | { type: "surfaceChanged"; surface: UiSurface }
+  | { type: "workbenchTabChanged"; tab: WorkbenchTab }
+  | { type: "hitlAutoNavigateChanged"; enabled: boolean }
+  | {
+      type: "openHitlWorkbench";
+      pipelineId: string;
+    };

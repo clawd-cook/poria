@@ -1,0 +1,1 @@
+通用技术文档位置，由bootstrap-module-knowledge引导生成。

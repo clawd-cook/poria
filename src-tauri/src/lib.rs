@@ -114,6 +114,7 @@ pub fn run() {
             commands::pipeline::submit_pipeline,
             commands::pipeline::cancel_pipeline,
             commands::pipeline::human_loop_respond,
+            commands::pipeline::pipeline_advance,
             commands::pipeline::confirm_trd,
             commands::pipeline::confirm_merge_ready,
             commands::pipeline::get_pipeline_events,

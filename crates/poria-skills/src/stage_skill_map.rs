@@ -1,13 +1,19 @@
 use poria_core::types::StageEnum;
 
-/// Static mapping from each pipeline stage to its corresponding skill identifier.
+/// Maps each [`StageEnum`] to its skill identifier string.
 pub const STAGE_SKILL_MAP: &[(StageEnum, &str)] = &[
     (StageEnum::Init, "skill:init"),
     (StageEnum::ReviewPrd, "skill:review-prd"),
     (StageEnum::Design, "skill:gen-trd"),
+    (StageEnum::TestPlan, "skill:test-plan"),
     (StageEnum::Dev, "skill:gen-code"),
+    (StageEnum::Lint, "skill:lint"),
     (StageEnum::Cr, "skill:code-review"),
+    (StageEnum::TestCases, "skill:test-cases"),
+    (StageEnum::RunAutotest, "skill:run-autotest"),
+    (StageEnum::HandoffQa, "skill:handoff-qa"),
     (StageEnum::Deploy, "skill:deploy"),
+    (StageEnum::Archive, "skill:archive"),
 ];
 
 /// Look up the skill identifier for a given [`StageEnum`].
@@ -16,46 +22,50 @@ pub fn stage_to_skill_id(stage: StageEnum) -> &'static str {
         StageEnum::Init => "skill:init",
         StageEnum::ReviewPrd => "skill:review-prd",
         StageEnum::Design => "skill:gen-trd",
+        StageEnum::TestPlan => "skill:test-plan",
         StageEnum::Dev => "skill:gen-code",
+        StageEnum::Lint => "skill:lint",
         StageEnum::Cr => "skill:code-review",
+        StageEnum::TestCases => "skill:test-cases",
+        StageEnum::RunAutotest => "skill:run-autotest",
+        StageEnum::HandoffQa => "skill:handoff-qa",
         StageEnum::Deploy => "skill:deploy",
+        StageEnum::Archive => "skill:archive",
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use poria_core::types::STAGE_ORDER;
 
     #[test]
-    fn test_map_covers_all_stages() {
-        let stages = [
-            StageEnum::Init,
-            StageEnum::ReviewPrd,
-            StageEnum::Design,
-            StageEnum::Dev,
-            StageEnum::Cr,
-            StageEnum::Deploy,
-        ];
-        for stage in stages {
-            let id = stage_to_skill_id(stage);
-            assert!(id.starts_with("skill:"), "stage {stage:?} has bad id: {id}");
-        }
+    fn map_covers_every_stage_in_order() {
+        let stages: Vec<_> = STAGE_SKILL_MAP.iter().map(|(s, _)| *s).collect();
+        assert_eq!(
+            stages,
+            vec![
+                StageEnum::Init,
+                StageEnum::ReviewPrd,
+                StageEnum::Design,
+                StageEnum::TestPlan,
+                StageEnum::Dev,
+                StageEnum::Lint,
+                StageEnum::Cr,
+                StageEnum::TestCases,
+                StageEnum::RunAutotest,
+                StageEnum::HandoffQa,
+                StageEnum::Deploy,
+                StageEnum::Archive,
+            ]
+        );
+        assert_eq!(stages.len(), STAGE_ORDER.len());
     }
 
     #[test]
-    fn test_map_array_matches_function() {
-        for (stage, expected_id) in STAGE_SKILL_MAP {
-            assert_eq!(stage_to_skill_id(*stage), *expected_id);
+    fn stage_to_skill_id_matches_map() {
+        for (stage, skill_id) in STAGE_SKILL_MAP {
+            assert_eq!(stage_to_skill_id(*stage), *skill_id);
         }
-    }
-
-    #[test]
-    fn test_specific_mappings() {
-        assert_eq!(stage_to_skill_id(StageEnum::Init), "skill:init");
-        assert_eq!(stage_to_skill_id(StageEnum::ReviewPrd), "skill:review-prd");
-        assert_eq!(stage_to_skill_id(StageEnum::Design), "skill:gen-trd");
-        assert_eq!(stage_to_skill_id(StageEnum::Dev), "skill:gen-code");
-        assert_eq!(stage_to_skill_id(StageEnum::Cr), "skill:code-review");
-        assert_eq!(stage_to_skill_id(StageEnum::Deploy), "skill:deploy");
     }
 }

@@ -1,0 +1,49 @@
+{
+  "desc": "【纯测试】只做自动化测试，不含代码实现与部署。被测代码由用户带来，测什么由用户决定——新功能验收、已有功能补测、回归资产沉淀均可。",
+  "enabled": true,
+  "start_node": "workflow-test-scope",
+  "has_e2etest": true,
+  "roles": {
+    "test-plan": "delivery/<task>/test/test-plan.md",
+    "materials": "delivery/<task>/test/materials.md"
+  },
+  "nodes": [
+    {
+      "node": "workflow-test-plan",
+      "exit_gate": "confirm-locked",
+      "feedback": {
+        "can_report": true,
+        "reroute_options": []
+      }
+    },
+    {
+      "node": "workflow-test-cases",
+      "exit_gate": "auto",
+      "autopilot": true,
+      "execution": "subagent",
+      "feedback": {
+        "can_report": true,
+        "reroute_options": []
+      }
+    },
+    {
+      "node": "workflow-run-autotest",
+      "exit_gate": "confirm-locked",
+      "autopilot": true,
+      "feedback": {
+        "can_report": true,
+        "reroute_options": [
+          "workflow-test-cases"
+        ]
+      }
+    },
+    {
+      "node": "workflow-archive",
+      "entry_gate": "confirm-locked",
+      "exit_gate": "confirm-locked",
+      "feedback": {
+        "rerouteable": false
+      }
+    }
+  ]
+}

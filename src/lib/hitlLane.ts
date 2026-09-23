@@ -30,7 +30,8 @@ export function hitlLane(input: {
     isP0UnansweredMessage(issueDetail) ||
     isTrdUnconfirmedIssue(issueClass) ||
     isTrdUnconfirmedMessage(issueDetail) ||
-    isPrdInvalidIssue(issueClass)
+    isPrdInvalidIssue(issueClass) ||
+    issueClassKey(issueClass) === "awaiting_advance"
   ) {
     return "confirm";
   }

@@ -99,6 +99,9 @@ pub fn hitl_escalate_message(pipeline: &Pipeline, detail: &str) -> String {
 }
 
 pub fn blocked_stage_index(pipeline: &Pipeline) -> Option<usize> {
+    if let Some(idx) = super::advance::awaiting_advance_stage_index(pipeline) {
+        return Some(idx);
+    }
     pipeline
         .stages
         .iter()

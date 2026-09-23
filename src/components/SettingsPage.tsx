@@ -1,17 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
+import { saveHitlAutoNavigate } from "@/lib/hitlPrefs";
+import { countAttentionPipelines } from "@/lib/pipelineViewModel";
 import { probeClaude, updateConfig } from "@/lib/tauri";
 import type { AppConfig, ClaudeProbeResult } from "@/lib/types";
 import { useStore } from "@/state/store";
 
-import { PageFrame } from "./PageFrame";
+import { PageFrame, PageSectionTitle } from "./PageFrame";
 import { PipelineStatsPanel } from "./PipelineStatsPanel";
 import { Spinner } from "./Spinner";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
-import { Field } from "./ui/label";
+import { Field, Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 
 function emptyToNull(value: string | null | undefined): string | null {
@@ -74,6 +77,11 @@ export function SettingsPage() {
   }
 
   const settings = form;
+  const attentionCount = countAttentionPipelines(
+    state.pipelines,
+    state.humanRequest?.pipelineId ?? null,
+  );
+  const hitlTargetId = state.humanRequest?.pipelineId ?? null;
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
@@ -99,6 +107,38 @@ export function SettingsPage() {
 
   return (
     <PageFrame title="设置">
+      <div className="mb-6 max-w-xl space-y-3">
+        <PageSectionTitle>交付体验</PageSectionTitle>
+        <div className="flex items-start gap-2">
+          <Checkbox
+            checked={state.ui.hitlAutoNavigate}
+            id="hitl-auto-nav"
+            onCheckedChange={(value) => {
+              const enabled = value === true;
+              saveHitlAutoNavigate(enabled);
+              dispatch({ enabled, type: "hitlAutoNavigateChanged" });
+            }}
+          />
+          <div className="grid gap-1">
+            <Label htmlFor="hitl-auto-nav">收到人工确认时自动打开工作台</Label>
+            <p className="text-muted-foreground text-xs">
+              关闭后仅更新侧栏角标与「待我处理」筛选，不强制跳转。
+            </p>
+          </div>
+        </div>
+        {attentionCount > 0 && hitlTargetId ? (
+          <Button
+            onClick={() => dispatch({ pipelineId: hitlTargetId, type: "openHitlWorkbench" })}
+            type="button"
+            variant="outline"
+          >
+            打开待确认工作台（{attentionCount}）
+          </Button>
+        ) : null}
+        <p className="text-muted-foreground text-xs">
+          渠道与随包技能已移出主航道；交付仍由六阶段流水线驱动。仓库登记请用侧栏「仓库」。
+        </p>
+      </div>
       <form className="grid max-w-xl gap-4" onSubmit={(event) => void handleSave(event)}>
         <Field label="CR 评分阈值">
           <Input
